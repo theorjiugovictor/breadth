@@ -157,6 +157,8 @@ const str = (v: unknown) => (v === undefined || v === null ? undefined : String(
 function jsonish(v: unknown): unknown {
   if (typeof v !== "string") return v;
   const t = v.trim();
+  if (t === "null") return null;
+  if (t === "true" || t === "false") return t === "true";
   if ((t.startsWith("{") && t.endsWith("}")) || (t.startsWith("[") && t.endsWith("]"))) {
     try {
       return JSON.parse(t);

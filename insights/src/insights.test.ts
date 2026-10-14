@@ -3,7 +3,7 @@ import path from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import { mergeGraphs, validateGraph, type FlowGraph } from "@noodles/schema";
 import { codeCollector, importOtlp, infraCollector, linkTracesToCode } from "@noodles/collectors";
-import { runInsights, sensitiveFields } from "./index.js";
+import { expectedKinds, runInsights, sensitiveFields } from "./index.js";
 
 const shop = path.resolve(__dirname, "../../examples/shop");
 
@@ -64,6 +64,37 @@ describe("insights on the shop demo", () => {
     expect(ids).toEqual(["tf:aws_s3_bucket.invoices_legacy", "tf:aws_sqs_queue.invoice_jobs"]);
   });
 
+  it("finds dead code but not entry points, callbacks or code reached at runtime", () => {
+    const names = find("dead-code").map((i) => i.title);
+    expect(names).toEqual(expect.arrayContaining(["legacy_discount is never called", "check_lines is never called"]));
+    expect(names.join()).not.toMatch(/create_order|record|handleOrderCreated|checkout/);
+  });
+
+  it("finds the getattr() call that only exists at runtime", () => {
+    const [i] = find("static-runtime-mismatch");
+    expect(i.nodes).toEqual(["code:fn:services/payments/app/main.py#charge", "code:fn:services/payments/app/audit.py#record"]);
+  });
+
+  it("traces the declined payment back to where it started", () => {
+    const [i] = find("unhandled-errors", "reached");
+    expect(i.title).toBe("Error in charge reached POST /checkout");
+    expect(i.nodes[0]).toBe("code:fn:services/payments/app/main.py#charge");
+    expect(i.steps!.length).toBeGreaterThan(5);
+    const unguarded = find("unhandled-errors", "no error handling").map((x) => x.nodes[1]);
+    expect(unguarded).toContain("ext:http:api.stripe.com");
+  });
+
+  it("suggests running the independent lookups concurrently, once", () => {
+    const r = find("missed-parallelism");
+    expect(r.map((i) => i.title)).toEqual(["fetch_customer and price_order could run concurrently"]);
+    expect(r[0].metadata?.savingMs).toBe(8);
+  });
+
+  it("catches the amount sent as a string", () => {
+    const [i] = find("contract-drift");
+    expect(i.title).toBe("risk_score received amount as string, declared float");
+  });
+
   it("does not report chatty services or long chains for a normal checkout", () => {
     expect(find("chatty-services")).toEqual([]);
     expect(find("long-hop-chain")).toEqual([]);
@@ -96,6 +127,16 @@ describe("runtime service rules", () => {
   });
   it("honours thresholds", () => {
     expect(runInsights(g, { rules: ["chatty-services"], thresholds: { "chatty-services": { minCalls: 8 } } })).toEqual([]);
+  });
+});
+
+describe("expectedKinds", () => {
+  it("maps common annotations and refuses to guess classes", () => {
+    expect([...expectedKinds("float")!]).toEqual(["number"]);
+    expect([...expectedKinds("str | None")!].sort()).toEqual(["null", "string"]);
+    expect([...expectedKinds("Optional[int]")!].sort()).toEqual(["null", "number"]);
+    expect([...expectedKinds("string[]")!]).toEqual(["array"]);
+    expect(expectedKinds("OrderRequest")).toBeUndefined();
   });
 });
 

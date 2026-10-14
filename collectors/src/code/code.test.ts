@@ -50,6 +50,11 @@ describe("code collector: python", async () => {
     expect(g.nodes.some((n) => n.name === "MAX_ROWS")).toBe(false);
   });
 
+  it("records visibility and whether remote calls are guarded", () => {
+    expect(g.nodes.find((n) => n.id === fn("db.py#get_user"))!.metadata?.visibility).toBe("public");
+    expect(edge(g, "call", fn("service.py#UserService.enrich"), "ext:http:orders")?.metadata?.guarded).toBe(false);
+  });
+
   it("turns HTTP client calls into external API nodes", () => {
     const e = edge(g, "call", fn("service.py#UserService.enrich"), "ext:http:orders");
     expect(e?.protocol).toBe("http");

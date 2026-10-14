@@ -19,6 +19,10 @@ export interface Def {
   /** Base classes, as written. */
   bases?: string[];
   decorators?: string[];
+  /** exported (TS export), public (Python public name / public method), internal (everything else). */
+  visibility?: "exported" | "public" | "internal";
+  /** Declared private/protected/#name (TS). */
+  private?: boolean;
 }
 
 /** One call expression, with the callee flattened into identifier parts. */
@@ -40,6 +44,8 @@ export interface CallSite {
   receiver?: string[];
   /** Plain identifiers passed as arguments (route handlers, callbacks). */
   argNames?: string[];
+  /** Inside a try block (or a promise chain ending in .catch). */
+  guarded?: boolean;
 }
 
 export interface ImportBinding {
@@ -82,9 +88,11 @@ export interface FileModel {
   exports: string[];
   /** Types of instance attributes: 'Class.attr' -> type callee parts (from self.x = Foo() / typed fields). */
   attrTypes: Record<string, string[]>;
+  /** Names used as values somewhere in the file (not as the callee of a call): handlers, callbacks, exports. */
+  valueRefs: string[];
   lines: number;
 }
 
 export function emptyModel(path: string, lang: Lang): FileModel {
-  return { path, lang, defs: [], calls: [], imports: [], globals: [], globalAccess: [], exports: [], attrTypes: {}, lines: 0 };
+  return { path, lang, defs: [], calls: [], imports: [], globals: [], globalAccess: [], exports: [], attrTypes: {}, valueRefs: [], lines: 0 };
 }

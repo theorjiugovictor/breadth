@@ -426,7 +426,8 @@
         }
        ],
        "status": {
-        "code": 1
+        "code": 2,
+        "message": "orders returned 402"
        }
       },
       {
@@ -502,7 +503,8 @@
         }
        ],
        "status": {
-        "code": 1
+        "code": 2,
+        "message": "HTTP 402"
        }
       }
      ]
@@ -1983,7 +1985,8 @@
         }
        ],
        "status": {
-        "code": 1
+        "code": 2,
+        "message": "payments returned 402"
        }
       },
       {
@@ -2021,7 +2024,8 @@
         }
        ],
        "status": {
-        "code": 1
+        "code": 2,
+        "message": "HTTP 402"
        }
       },
       {

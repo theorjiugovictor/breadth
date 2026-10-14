@@ -65,7 +65,7 @@ export function buildGraph(input: BuildInput): FlowGraph {
   const { rootName, files } = input;
   const includeExternal = input.includeExternal ?? true;
   const nodes = new Map<string, FlowNode>();
-  const edges = new Map<string, FlowEdge & { _lines?: number[]; _uncond?: boolean }>();
+  const edges = new Map<string, FlowEdge & { _lines?: number[]; _uncond?: boolean; _unguarded?: boolean }>();
   const byPath = new Map(files.map((f) => [f.path, f]));
   const defIndex = new Map<string, Map<string, Def>>(files.map((f) => [f.path, new Map(f.defs.map((d) => [d.qual, d]))]));
   const globalIndex = new Map(files.map((f) => [f.path, new Set(f.globals.map((g) => g.name))]));
@@ -382,13 +382,20 @@ export function buildGraph(input: BuildInput): FlowGraph {
   // ---------- edges ----------
   const fromNodeId = (f: FileModel, qual: string) => (qual ? ids.def(f.path, qual) : ids.file(f.path));
 
-  const addEdge = (kind: EdgeKind, from: string, to: string, site: { line: number; inLoop?: boolean; conditional?: boolean; file: string }, extra: Partial<FlowEdge> = {}) => {
+  const addEdge = (
+    kind: EdgeKind,
+    from: string,
+    to: string,
+    site: { line: number; inLoop?: boolean; conditional?: boolean; guarded?: boolean; file: string },
+    extra: Partial<FlowEdge> = {},
+  ) => {
     const id = edgeId(kind, { node: from }, { node: to });
     let e = edges.get(id);
     if (!e) {
-      e = { id, from: { node: from }, to: { node: to }, kind, count: 0, _lines: [], _uncond: false, ...extra };
+      e = { id, from: { node: from }, to: { node: to }, kind, count: 0, _lines: [], _uncond: false, _unguarded: false, ...extra };
       edges.set(id, e);
     }
+    if (!site.guarded) e._unguarded = true;
     e.count = (e.count ?? 0) + 1;
     if (site.inLoop) e.loop = true;
     if (!site.conditional) e._uncond = true;
@@ -647,6 +654,39 @@ export function buildGraph(input: BuildInput): FlowGraph {
     }
   }
 
+  // Functions passed as values (callbacks, handlers, executor.submit(fn)) are used even without a call edge.
+  const markReferenced = (t: Target | undefined) => {
+    if (t?.kind !== "def") return;
+    const n = nodes.get(ids.def(t.file, t.qual));
+    if (n) n.metadata = { ...(n.metadata ?? {}), referenced: true };
+  };
+  // Method names called anywhere (even on unknown receivers): overrides may be reached by dynamic dispatch.
+  const calledNames = new Set(files.flatMap((f) => f.calls.map((c) => c.parts[c.parts.length - 1])));
+  for (const f of files) {
+    for (const d of f.defs) {
+      if (d.type !== "method" || !calledNames.has(d.name)) continue;
+      const n = nodes.get(ids.def(f.path, d.qual));
+      if (n) n.metadata = { ...(n.metadata ?? {}), nameCalled: true };
+    }
+  }
+  for (const f of files) {
+    for (const name of f.valueRefs) {
+      const t = resolveName(f, name);
+      // only count references that resolve to a def in another file or a top-level def here
+      markReferenced(t);
+    }
+    for (const c of f.calls) {
+      for (const a of c.argNames ?? []) {
+        const t = resolveInScope(f, c.from, a.split(".")[0]);
+        const target = t && a.includes(".") ? descend(t, a.split(".").slice(1))?.target : t;
+        if (target?.kind === "def") {
+          const n = nodes.get(ids.def(target.file, target.qual));
+          if (n) n.metadata = { ...(n.metadata ?? {}), referenced: true };
+        }
+      }
+    }
+  }
+
   function queueCall(f: FileModel, c: CallSite, system: string, method: string, from: string, site: { line: number; file: string; inLoop?: boolean; conditional?: boolean }) {
     const topic = c.firstArg && /^[\w.\-/:]+$/.test(c.firstArg) ? c.firstArg : undefined;
     const q = queueNode(system, topic);
@@ -661,9 +701,10 @@ export function buildGraph(input: BuildInput): FlowGraph {
   // Finalise edges: conditional only if every call site was conditional; record source lines.
   const outEdges: FlowEdge[] = [];
   for (const e of edges.values()) {
-    const { _lines, _uncond, ...rest } = e;
+    const { _lines, _uncond, _unguarded, ...rest } = e;
     if (!_uncond) rest.conditional = true;
-    rest.metadata = { ...(rest.metadata ?? {}), lines: _lines };
+    // guarded: every call site sits in a try block / .catch chain
+    rest.metadata = { ...(rest.metadata ?? {}), lines: _lines, guarded: !_unguarded };
     outEdges.push(rest);
   }
 
@@ -707,7 +748,7 @@ function defNode(f: FileModel, d: Def): FlowNode {
     inputs: d.params,
     outputs,
     source: { file: f.path, line: d.line, endLine: d.endLine },
-    metadata: compact({ subkind: d.type, language: f.lang, async: d.isAsync || undefined, decorators: d.decorators, qualifiedName: d.qual }),
+    metadata: compact({ subkind: d.type, language: f.lang, async: d.isAsync || undefined, decorators: d.decorators, qualifiedName: d.qual, visibility: d.visibility }),
   };
 }
 

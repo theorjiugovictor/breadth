@@ -7,12 +7,31 @@ import { orphanInfra } from "./rules/orphan-infra.js";
 import { raceRisk } from "./rules/race-risk.js";
 import { repeatedWork } from "./rules/repeated-work.js";
 import { chattyServices, longHopChain } from "./rules/services.js";
+import { deadCode } from "./rules/dead-code.js";
+import { runtimeMismatch } from "./rules/runtime-mismatch.js";
+import { unhandledErrors } from "./rules/unhandled-errors.js";
+import { missedParallelism } from "./rules/missed-parallelism.js";
+import { contractDrift } from "./rules/contract-drift.js";
 
 export type { Rule, RuleOptions } from "./rule.js";
 export { Ctx } from "./context.js";
 export { sensitiveFields } from "./rules/data-exposure.js";
+export { expectedKinds } from "./rules/contract-drift.js";
 
-export const RULES: Rule[] = [nPlusOne, repeatedWork, chattyServices, longHopChain, raceRisk, dataExposure, orphanInfra];
+export const RULES: Rule[] = [
+  nPlusOne,
+  repeatedWork,
+  missedParallelism,
+  chattyServices,
+  longHopChain,
+  deadCode,
+  orphanInfra,
+  raceRisk,
+  dataExposure,
+  contractDrift,
+  unhandledErrors,
+  runtimeMismatch,
+];
 
 export const SEVERITY_RANK: Record<Severity, number> = { critical: 0, warning: 1, info: 2 };
 

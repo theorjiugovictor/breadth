@@ -16,7 +16,7 @@ export const MAX_SAMPLES_PER_EDGE = 20;
  * - scalar fields: the earlier graph wins, empty values are filled from later graphs
  * - ports are unioned by name, tags/aliases are unioned, metadata is shallow-merged
  * - edges are re-pointed to canonical ids and deduped (counts summed, samples concatenated)
- * - executions are deduped by id
+ * - executions are deduped by id; a later graph wins (re-importing a trace refreshes it)
  */
 export function mergeGraphs(...graphs: FlowGraph[]): FlowGraph {
   // 1. Group nodes whose identity keys (id + aliases) overlap, with union-find.
@@ -77,7 +77,6 @@ export function mergeGraphs(...graphs: FlowGraph[]): FlowGraph {
   const executions = new Map<string, Execution>();
   for (const [gi, g] of graphs.entries()) {
     for (const x of g.executions ?? []) {
-      if (executions.has(x.id)) continue;
       const steps = x.steps.map((s) => {
         const step = { ...s, node: canon(s.node) };
         if (s.via) step.via = edgeRemap[gi].get(s.via) ?? s.via;

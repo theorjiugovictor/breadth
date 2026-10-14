@@ -18,6 +18,7 @@ interface Ctx {
   cls?: string; // qual of enclosing class (for methods)
   inLoop: boolean;
   conditional: boolean;
+  guarded?: boolean;
   /** Names declared `global` in the current function. */
   globalsDeclared: Set<string>;
   /** Names bound locally in the current function (params + assignments). */
@@ -34,6 +35,7 @@ export function extractPython(path: string, root: Node): FileModel {
   const globalNames = new Set<string>();
   /** Names imported at module level: may refer to another module's shared state. */
   const importedNames = new Set<string>();
+  const valueRefs = new Set<string>();
   const tracked = (name: string, ctx: Ctx) => (globalNames.has(name) || importedNames.has(name)) && !ctx.locals.has(name);
 
   // Pass 1: module-level globals and imports (so function bodies can tell globals from locals).
@@ -117,6 +119,11 @@ export function extractPython(path: string, root: Node): FileModel {
         }
         break;
       }
+      case "try_statement": {
+        const body = node.childForFieldName("body");
+        for (const c of node.namedChildren) if (c) visit(c, c === body ? { ...ctx, guarded: true } : ctx);
+        return;
+      }
       case "global_statement":
         for (const c of node.namedChildren) if (c?.type === "identifier") ctx.globalsDeclared.add(c.text);
         return;
@@ -133,6 +140,7 @@ export function extractPython(path: string, root: Node): FileModel {
               line: node.startPosition.row + 1,
               inLoop: ctx.inLoop,
               conditional: ctx.conditional,
+              guarded: ctx.guarded || undefined,
               firstArg: first ? stringLiteral(first) : undefined,
               receiver: parts.length > 1 ? ctx.types.get(parts[0]) : undefined,
               argNames: argIdentifiers(args),
@@ -142,8 +150,11 @@ export function extractPython(path: string, root: Node): FileModel {
               m.globalAccess.push({ from: ctx.def, name: parts[0], mode: "write", line: node.startPosition.row + 1 });
             }
           }
+          // the callee itself is not a value reference; its receiver (obj in obj.f()) is
+          if (fn.type !== "identifier") visit(fn, ctx);
         }
-        break;
+        if (args) visit(args, ctx);
+        return;
       }
       case "assignment":
       case "augmented_assignment": {
@@ -183,6 +194,9 @@ export function extractPython(path: string, root: Node): FileModel {
         // Visit the right-hand side for calls / reads, but not the target identifier.
         const right = node.childForFieldName("right");
         if (right) visit(right, ctx);
+        // annotations reference things too: Annotated[str, AfterValidator(check)]
+        const annotation = node.childForFieldName("type");
+        if (annotation) visit(annotation, ctx);
         if (left && left.type !== "identifier") visitChildren(left, ctx);
         return;
       }
@@ -199,6 +213,7 @@ export function extractPython(path: string, root: Node): FileModel {
       }
       case "identifier": {
         const name = node.text;
+        valueRefs.add(name);
         if (ctx.def && tracked(name, ctx)) {
           m.globalAccess.push({ from: ctx.def, name, mode: "read", line: node.startPosition.row + 1 });
         }
@@ -261,7 +276,8 @@ export function extractPython(path: string, root: Node): FileModel {
     const locals = new Set(params.map((p) => p.name.replace(/^\*+/, "")));
     locals.add("self");
     locals.add("cls");
-    const types = new Map<string, string[]>();
+    // closures see the enclosing function's variables
+    const types = new Map<string, string[]>(ctx.def && !isMethod ? ctx.types : []);
     for (const p of params) {
       const t = typeParts(p.type);
       if (t) types.set(p.name, t);
@@ -272,6 +288,15 @@ export function extractPython(path: string, root: Node): FileModel {
   visitChildren(root, { def: "", inLoop: false, conditional: false, globalsDeclared: new Set(), locals: new Set(), types: new Map() });
 
   for (const d of m.defs) if (!d.parentQual && !d.name.startsWith("_")) m.exports.push(d.name);
+  m.valueRefs = [...valueRefs];
+  const byQual = new Map(m.defs.map((d) => [d.qual, d]));
+  for (const d of m.defs) {
+    const parent = d.parentQual ? byQual.get(d.parentQual) : undefined;
+    const privateName = d.name.startsWith("_") && !/^__\w+__$/.test(d.name);
+    if (privateName || (parent && parent.type !== "class")) d.visibility = "internal";
+    else if (parent?.visibility === "internal") d.visibility = "internal";
+    else d.visibility = "public";
+  }
   return m;
 }
 

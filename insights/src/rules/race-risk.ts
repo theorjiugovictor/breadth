@@ -1,6 +1,8 @@
 import type { Insight } from "@noodles/schema";
 import type { Rule } from "../rule.js";
 
+const TEST_FILE = /(^|\/)(tests?|__tests__|spec|e2e)\/|(\.|_)(test|spec)\.[jt]sx?$|(^|\/)test_[^/]+\.py$|_test\.py$|conftest\.py$/;
+
 /** Shared state with several writers. */
 export const raceRisk: Rule = {
   id: "race-risk",
@@ -12,11 +14,15 @@ export const raceRisk: Rule = {
     const out: Insight[] = [];
     for (const n of ctx.graph.nodes) {
       if (n.kind !== "datastore") continue;
-      const writes = (ctx.in.get(n.id) ?? []).filter((e) => e.kind === "write");
+      // test code resets shared state on purpose
+      const writes = (ctx.in.get(n.id) ?? []).filter((e) => e.kind === "write" && !TEST_FILE.test(ctx.node(e.from.node)?.source?.file ?? ""));
       const writers = [...new Set(writes.map((e) => e.from.node))];
       if (n.metadata?.subkind === "global") {
         if (writers.length < minWriters) continue;
         const asyncWriter = writers.some((w) => ctx.node(w)?.metadata?.async);
+        // JavaScript runs one task at a time: module state only interleaves across awaits
+        const js = /\.(m|c)?[jt]sx?$/.test(n.source?.file ?? "");
+        if (js && !asyncWriter) continue;
         out.push({
           id: `race-risk:${n.id}`,
           rule: "race-risk",

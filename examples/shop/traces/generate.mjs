@@ -72,7 +72,7 @@ function makeTrace(traceId, scenario) {
     "code.filepath": "src/clients/orders.ts",
     "noodles.input": { cart },
     "noodles.output": order,
-  });
+  }, declined ? "orders returned 402" : undefined);
   // seeded: the client validates the cart again (same input as in checkout)
   span("gateway", cc, "validateCart", "internal", 2.1, 0.3, {
     "code.function": "validateCart",
@@ -85,7 +85,7 @@ function makeTrace(traceId, scenario) {
     "url.full": "http://orders:8000/orders",
     "server.address": "orders",
     "http.response.status_code": declined ? 402 : 200,
-  });
+  }, declined ? "HTTP 402" : undefined);
 
   // orders
   const email = declined ? "mallory@example.net" : "ana@example.com";
@@ -170,13 +170,13 @@ function makeTrace(traceId, scenario) {
     "code.filepath": "app/payments.py",
     "noodles.input": { customer_id: cart.customerId, amount: total, email },
     "noodles.output": declined ? { status: "declined", reason: "risk" } : { status: "paid", chargeId: "ch_3PqL9x" },
-  });
+  }, declined ? "payments returned 402" : undefined);
   const hp = span("orders", ch, "POST", "client", 24.5, declined ? 24 : 80, {
     "http.request.method": "POST",
     "url.full": "http://payments:9000/charges",
     "server.address": "payments",
     "http.response.status_code": declined ? 402 : 200,
-  });
+  }, declined ? "HTTP 402" : undefined);
 
   // payments
   const ps = span("payments", hp, "POST /charges", "server", 26, declined ? 20 : 77, {

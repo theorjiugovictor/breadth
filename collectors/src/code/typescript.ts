@@ -15,6 +15,7 @@ interface Ctx {
   cls?: string;
   inLoop: boolean;
   conditional: boolean;
+  guarded?: boolean;
   locals: Set<string>;
   types: Map<string, string[]>;
   /** Decorators seen just before the next class member. */
@@ -27,6 +28,7 @@ export function extractTypeScript(path: string, root: Node, lang: Lang): FileMod
   const globalNames = new Set<string>();
   const exported = new Set<string>();
   const importedNames = new Set<string>();
+  const valueRefs = new Set<string>();
   const tracked = (name: string, ctx: Ctx) => (globalNames.has(name) || importedNames.has(name)) && !ctx.locals.has(name);
 
   // Pass 1: top-level mutable variables (shared module state).
@@ -98,6 +100,8 @@ export function extractTypeScript(path: string, root: Node, lang: Lang): FileMod
             const name = s.childForFieldName("name")?.text ?? "";
             const alias = s.childForFieldName("alias")?.text ?? name;
             exported.add(alias);
+            // export { local as publicName }: the local definition is exported too
+            if (!source) exported.add(name);
             if (source) {
               const src = stringLiteral(source);
               if (src) m.imports.push({ local: alias, module: src, imported: name, line: node.startPosition.row + 1 });
@@ -178,6 +182,7 @@ export function extractTypeScript(path: string, root: Node, lang: Lang): FileMod
           const decorators = [...(ctx.pendingDecorators ?? []), ...node.namedChildren.filter((c) => c?.type === "decorator").map((c) => c!.text.replace(/^@/, ""))];
           ctx.pendingDecorators = undefined;
           visitFunction(node, name, ctx, "method", undefined, decorators);
+          if (node.namedChildren.some((c) => c?.type === "accessibility_modifier" && c.text !== "public") || name.startsWith("#")) m.defs[m.defs.length - 1].private = true;
           return;
         }
         break;
@@ -209,6 +214,7 @@ export function extractTypeScript(path: string, root: Node, lang: Lang): FileMod
               line: node.startPosition.row + 1,
               inLoop: ctx.inLoop,
               conditional: ctx.conditional,
+              guarded: ctx.guarded || undefined,
               firstArg: first ? (stringLiteral(first) ?? objectTopic(first)) : undefined,
               receiver: parts.length > 1 ? ctx.types.get(parts[0]) : undefined,
               argNames: argIdentifiers(args),
@@ -217,7 +223,9 @@ export function extractTypeScript(path: string, root: Node, lang: Lang): FileMod
               m.globalAccess.push({ from: ctx.def, name: parts[0], mode: "write", line: node.startPosition.row + 1 });
             }
           }
-          visit(fn, ctx);
+          // promise.then(...).catch(...): everything in the chain is handled
+          const catches = fn.type === "member_expression" && fn.childForFieldName("property")?.text === "catch";
+          if (fn.type !== "identifier") visit(fn, catches ? { ...ctx, guarded: true } : ctx);
           // Callbacks passed to .map/.forEach/... run in a loop.
           const iterating = parts.length > 1 && ITERATING_METHODS.has(parts[parts.length - 1]);
           if (args) visitChildren(args, iterating ? { ...ctx, inLoop: true } : ctx);
@@ -232,6 +240,11 @@ export function extractTypeScript(path: string, root: Node, lang: Lang): FileMod
         }
         const args = node.childForFieldName("arguments");
         if (args) visitChildren(args, ctx);
+        return;
+      }
+      case "try_statement": {
+        const body = node.childForFieldName("body");
+        for (const c of node.namedChildren) if (c) visit(c, c === body ? { ...ctx, guarded: true } : ctx);
         return;
       }
       case "jsx_opening_element":
@@ -276,7 +289,11 @@ export function extractTypeScript(path: string, root: Node, lang: Lang): FileMod
         if (obj) visit(obj, ctx);
         return;
       }
+      case "shorthand_property_identifier":
+        valueRefs.add(node.text);
+        return;
       case "identifier": {
+        valueRefs.add(node.text);
         if (ctx.def && tracked(node.text, ctx)) {
           m.globalAccess.push({ from: ctx.def, name: node.text, mode: "read", line: node.startPosition.row + 1 });
         }
@@ -306,7 +323,8 @@ export function extractTypeScript(path: string, root: Node, lang: Lang): FileMod
     const qual = ctx.def ? `${ctx.def}.${name}` : name;
     const paramsNode = fn.childForFieldName("parameters") ?? fn.childForFieldName("parameter");
     const params = paramsNode ? parseParams(paramsNode) : [];
-    const types = new Map<string, string[]>();
+    // closures see the enclosing function's variables
+    const types = new Map<string, string[]>(ctx.def ? ctx.types : []);
     for (const p of params) {
       const t = typeParts(p.type);
       if (t) types.set(p.name, t);
@@ -374,6 +392,14 @@ export function extractTypeScript(path: string, root: Node, lang: Lang): FileMod
     if (ctor) d.params = ctor.params;
   }
   m.exports = [...exported];
+  m.valueRefs = [...valueRefs];
+  const byQual = new Map(m.defs.map((d) => [d.qual, d]));
+  for (const d of m.defs) {
+    const parent = d.parentQual ? byQual.get(d.parentQual) : undefined;
+    if (!parent) d.visibility = exported.has(d.name) ? "exported" : "internal";
+    else if (parent.type === "class") d.visibility = d.private || parent.visibility === "internal" ? "internal" : "public";
+    else d.visibility = "internal";
+  }
   return m;
 }
 
