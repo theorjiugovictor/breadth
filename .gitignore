@@ -7,3 +7,4 @@ coverage/
 /scratch/
 site-dist/
 examples/**/flowgraph.json
+examples/*.flowgraph.json
