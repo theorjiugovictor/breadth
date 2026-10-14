@@ -1,0 +1,105 @@
+name: breadth PR map
+description: "Comment on pull requests with what the change does in behaviour (new database writes, external API calls, endpoints, removed paths, new loops doing I/O), with a picture."
+author: breadth
+branding:
+  icon: git-pull-request
+  color: orange
+
+inputs:
+  path:
+    description: "Folder to scan, relative to the repository root."
+    default: "."
+  base:
+    description: "Git ref to compare with. Default: the merge base with the pull request's base branch."
+    default: ""
+  comment:
+    description: "Post the summary as a pull request comment (updated in place on every push)."
+    default: "true"
+  fail-on:
+    description: "Fail the check when the change has a behaviour change of this severity or higher (high, medium or low). Empty never fails."
+    default: ""
+  github-token:
+    description: "Token used to comment."
+    default: ${{ github.token }}
+
+outputs:
+  markdown:
+    description: "Path of the markdown summary."
+    value: ${{ steps.map.outputs.markdown }}
+  graph:
+    description: "Path of the diff graph (open with `breadth serve`)."
+    value: ${{ steps.map.outputs.graph }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+
+    - name: Build breadth
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: |
+        if [ ! -f cli/dist/breadth.mjs ]; then
+          npm ci --no-audit --no-fund --loglevel=error
+          npm run build -w cli >/dev/null
+        fi
+
+    - name: Map the change
+      id: map
+      shell: bash
+      env:
+        INPUT_PATH: ${{ inputs.path }}
+        INPUT_BASE: ${{ inputs.base }}
+        INPUT_FAIL_ON: ${{ inputs['fail-on'] }}
+      run: |
+        base="$INPUT_BASE"
+        if [ -z "$base" ] && [ -n "$GITHUB_BASE_REF" ]; then
+          git fetch --no-tags origin "$GITHUB_BASE_REF" >/dev/null 2>&1 || true
+          base=$(git merge-base HEAD "origin/$GITHUB_BASE_REF" 2>/dev/null || echo "origin/$GITHUB_BASE_REF")
+        fi
+        md="$RUNNER_TEMP/breadth-diff.md"
+        graph="$RUNNER_TEMP/breadth-diff.flowgraph.json"
+        set +e
+        node "$GITHUB_ACTION_PATH/cli/dist/breadth.mjs" diff "$INPUT_PATH" ${base:+--base "$base"} \
+          --markdown "$md" -o "$graph" ${INPUT_FAIL_ON:+--fail-on "$INPUT_FAIL_ON"}
+        code=$?
+        set -e
+        if [ "$code" != 0 ] && [ "$code" != 2 ]; then exit "$code"; fi
+        cat "$md" >> "$GITHUB_STEP_SUMMARY"
+        echo "markdown=$md" >> "$GITHUB_OUTPUT"
+        echo "graph=$graph" >> "$GITHUB_OUTPUT"
+        echo "failed=$([ "$code" = 2 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+    - name: Comment on the pull request
+      if: inputs.comment == 'true' && github.event.pull_request
+      # Pull requests from forks get a read-only token: the job summary still has the map.
+      continue-on-error: true
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        PR: ${{ github.event.pull_request.number }}
+        MD: ${{ steps.map.outputs.markdown }}
+      run: |
+        id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+          --jq '.[] | select(.body | startswith("<!-- breadth-diff -->")) | .id' | head -n 1)
+        if [ -n "$id" ]; then
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F body=@"$MD" >/dev/null
+        else
+          gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -F body=@"$MD" >/dev/null
+        fi
+
+    - name: Keep the diff graph
+      uses: actions/upload-artifact@v4
+      with:
+        name: breadth-diff
+        path: ${{ steps.map.outputs.graph }}
+        if-no-files-found: ignore
+
+    - name: Fail on behaviour changes
+      if: steps.map.outputs.failed == 'true'
+      shell: bash
+      run: |
+        echo "::error::breadth found behaviour changes at or above '${{ inputs['fail-on'] }}' severity (see the PR comment or job summary)."
+        exit 1

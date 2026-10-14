@@ -1,4 +1,4 @@
-import type { Insight } from "@noodles/schema";
+import type { Insight } from "@breadth/schema";
 import type { Rule } from "../rule.js";
 
 const TEST_FILE = /(^|\/)(tests?|__tests__|spec|e2e)\/|(\.|_)(test|spec)\.[jt]sx?$|(^|\/)test_[^/]+\.py$|_test\.py$|conftest\.py$/;

@@ -1,4 +1,4 @@
-import type { EdgeKind, FlowEdge, FlowNode, Layer } from "@noodles/schema";
+import type { EdgeKind, FlowEdge, FlowNode, Layer } from "@breadth/schema";
 import { ancestors, childrenOf, ROOT, type GraphIndex } from "./model";
 
 export const MAX_NODES = 150;

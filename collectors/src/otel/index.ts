@@ -11,7 +11,7 @@ import {
   type Port,
   type Status,
   type Step,
-} from "@noodles/schema";
+} from "@breadth/schema";
 import type { Collector } from "../core/types.js";
 import { normRoute } from "../code/build.js";
 
@@ -182,10 +182,10 @@ const msgSystem = (a: Record<string, unknown>) => str(a["messaging.system"]);
 const msgDest = (a: Record<string, unknown>) => str(a["messaging.destination.name"] ?? a["messaging.destination"]);
 const dbStatement = (a: Record<string, unknown>) => str(a["db.query.text"] ?? a["db.statement"]);
 
-/** What went into a span: explicit noodles/OpenInference attributes, else protocol-specific request attributes. */
+/** What went into a span: explicit breadth/OpenInference attributes, else protocol-specific request attributes. */
 export function spanInput(s: Span): unknown {
   const a = s.attrs;
-  for (const k of ["noodles.input", "input.value", "code.input", "rpc.request.body"]) if (a[k] !== undefined) return jsonish(a[k]);
+  for (const k of ["breadth.input", "input.value", "code.input", "rpc.request.body"]) if (a[k] !== undefined) return jsonish(a[k]);
   const body = a["http.request.body"] ?? a["http.request.body.content"];
   if (httpMethod(a)) {
     return compact({
@@ -205,7 +205,7 @@ export function spanInput(s: Span): unknown {
 /** What came out of a span. */
 export function spanOutput(s: Span): unknown {
   const a = s.attrs;
-  for (const k of ["noodles.output", "output.value", "code.output", "rpc.response.body"]) if (a[k] !== undefined) return jsonish(a[k]);
+  for (const k of ["breadth.output", "output.value", "code.output", "rpc.response.body"]) if (a[k] !== undefined) return jsonish(a[k]);
   if (s.status === "error" && s.error) return { error: s.error };
   const status = a["http.response.status_code"] ?? a["http.status_code"];
   if (status !== undefined || a["http.response.body"] !== undefined) return compact({ status, body: jsonish(a["http.response.body"]) });

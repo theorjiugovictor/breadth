@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
-import { mergeGraphs, validateGraph, type FlowGraph } from "@noodles/schema";
-import { codeCollector, importOtlp, infraCollector, linkTracesToCode } from "@noodles/collectors";
+import { mergeGraphs, validateGraph, type FlowGraph } from "@breadth/schema";
+import { codeCollector, importOtlp, infraCollector, linkTracesToCode } from "@breadth/collectors";
 import { expectedKinds, runInsights, sensitiveFields } from "./index.js";
 
 const shop = path.resolve(__dirname, "../../examples/shop");

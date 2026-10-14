@@ -1,5 +1,5 @@
 import * as posix from "./posix.js";
-import { edgeId, SCHEMA_VERSION, type EdgeKind, type FlowEdge, type FlowGraph, type FlowNode, type Port } from "@noodles/schema";
+import { edgeId, SCHEMA_VERSION, type EdgeKind, type FlowEdge, type FlowGraph, type FlowNode, type Port } from "@breadth/schema";
 import type { CallSite, Def, FileModel, ImportBinding } from "./model.js";
 import {
   classifyPackage,

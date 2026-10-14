@@ -1,4 +1,4 @@
-import { EDGE_KINDS, type EdgeKind } from "@noodles/schema";
+import { EDGE_KINDS, type EdgeKind } from "@breadth/schema";
 import { EDGE_STYLE, edgeColor } from "../graph/visual";
 
 export function Legend({ kinds }: { kinds: Set<EdgeKind> }) {

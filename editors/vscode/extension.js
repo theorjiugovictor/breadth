@@ -1,6 +1,6 @@
-// noodles live: sends unsaved editor buffers to a local `noodles watch`, so the canvas
+// breadth live: sends unsaved editor buffers to a local `breadth watch`, so the canvas
 // follows edits before they are saved. Only talks to 127.0.0.1; does nothing when no
-// `noodles watch` is running.
+// `breadth watch` is running.
 const vscode = require("vscode");
 
 const DEBOUNCE_MS = 400;
@@ -8,7 +8,7 @@ const PROBE_MS = 10_000;
 
 function activate(context) {
   const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
-  status.command = "noodles.openCanvas";
+  status.command = "breadth.openCanvas";
   context.subscriptions.push(status);
 
   let up = false;
@@ -17,8 +17,8 @@ function activate(context) {
   /** Paths whose unsaved text the server currently holds. */
   const sent = new Set();
 
-  const port = () => vscode.workspace.getConfiguration("noodles").get("port", 4321);
-  const enabled = () => vscode.workspace.getConfiguration("noodles").get("streamUnsaved", true);
+  const port = () => vscode.workspace.getConfiguration("breadth").get("port", 4321);
+  const enabled = () => vscode.workspace.getConfiguration("breadth").get("streamUnsaved", true);
   const base = () => `http://127.0.0.1:${port()}`;
 
   async function probe() {
@@ -31,8 +31,8 @@ function activate(context) {
       up = false;
     }
     if (up) {
-      status.text = "$(pulse) noodles";
-      status.tooltip = "noodles watch is live: unsaved edits appear on the canvas. Click to open it.";
+      status.text = "$(pulse) breadth";
+      status.tooltip = "breadth watch is live: unsaved edits appear on the canvas. Click to open it.";
       status.show();
     } else {
       status.hide();
@@ -46,7 +46,7 @@ function activate(context) {
     try {
       await fetch(`${base()}/api/buffers`, {
         method: "POST",
-        headers: { "content-type": "application/json", "x-noodles": "1" },
+        headers: { "content-type": "application/json", "x-breadth": "1" },
         body: JSON.stringify({ files }),
         signal: AbortSignal.timeout(2000),
       });
@@ -81,7 +81,7 @@ function activate(context) {
     vscode.workspace.onDidChangeTextDocument((e) => e.contentChanges.length && push(e.document)),
     vscode.workspace.onDidSaveTextDocument((doc) => clear(doc.uri.fsPath)),
     vscode.workspace.onDidCloseTextDocument((doc) => clear(doc.uri.fsPath)),
-    vscode.commands.registerCommand("noodles.openCanvas", () => vscode.env.openExternal(vscode.Uri.parse(`${base()}/`))),
+    vscode.commands.registerCommand("breadth.openCanvas", () => vscode.env.openExternal(vscode.Uri.parse(`${base()}/`))),
   );
 
   probe();

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EDGE_KINDS, LAYERS, type FlowGraph } from "@noodles/schema";
+import { EDGE_KINDS, LAYERS, type FlowGraph } from "@breadth/schema";
 import { buildIndex, defaultFocus, ROOT } from "./model";
 import { computeView, MORE_ID } from "./view";
 

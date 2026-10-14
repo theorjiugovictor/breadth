@@ -20,7 +20,7 @@
    "scopeSpans": [
     {
      "scope": {
-      "name": "noodles-demo"
+      "name": "breadth-demo"
      },
      "spans": [
       {
@@ -57,13 +57,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"body\":{\"customerId\":\"cus_42\",\"items\":[{\"sku\":\"sku-1\",\"qty\":2},{\"sku\":\"sku-2\",\"qty\":1},{\"sku\":\"sku-3\",\"qty\":4}],\"coupon\":\"WELCOME10\"}}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "stringValue": "{\"status\":201,\"body\":{\"orderId\":\"5f3b2c1d\",\"status\":\"paid\",\"total\":53.1}}"
          }
@@ -95,13 +95,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"cart\":{\"customerId\":\"cus_42\",\"items\":[{\"sku\":\"sku-1\",\"qty\":2},{\"sku\":\"sku-2\",\"qty\":1},{\"sku\":\"sku-3\",\"qty\":4}],\"coupon\":\"WELCOME10\"}}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "stringValue": "{\"orderId\":\"5f3b2c1d\",\"status\":\"paid\",\"total\":53.1}"
          }
@@ -133,13 +133,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"cart\":{\"customerId\":\"cus_42\",\"items\":[{\"sku\":\"sku-1\",\"qty\":2},{\"sku\":\"sku-2\",\"qty\":1},{\"sku\":\"sku-3\",\"qty\":4}],\"coupon\":\"WELCOME10\"}}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "stringValue": "{\"customerId\":\"cus_42\",\"items\":[{\"sku\":\"sku-1\",\"qty\":2},{\"sku\":\"sku-2\",\"qty\":1},{\"sku\":\"sku-3\",\"qty\":4}],\"coupon\":\"WELCOME10\"}"
          }
@@ -171,13 +171,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"cart\":{\"customerId\":\"cus_42\",\"items\":[{\"sku\":\"sku-1\",\"qty\":2},{\"sku\":\"sku-2\",\"qty\":1},{\"sku\":\"sku-3\",\"qty\":4}],\"coupon\":\"WELCOME10\"}}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "stringValue": "{\"orderId\":\"5f3b2c1d\",\"status\":\"paid\",\"total\":53.1}"
          }
@@ -209,13 +209,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"cart\":{\"customerId\":\"cus_42\",\"items\":[{\"sku\":\"sku-1\",\"qty\":2},{\"sku\":\"sku-2\",\"qty\":1},{\"sku\":\"sku-3\",\"qty\":4}],\"coupon\":\"WELCOME10\"}}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "stringValue": "{\"customerId\":\"cus_42\",\"items\":[{\"sku\":\"sku-1\",\"qty\":2},{\"sku\":\"sku-2\",\"qty\":1},{\"sku\":\"sku-3\",\"qty\":4}],\"coupon\":\"WELCOME10\"}"
          }
@@ -297,13 +297,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"body\":{\"customerId\":\"cus_fraud\",\"items\":[{\"sku\":\"sku-2\",\"qty\":20}],\"coupon\":null}}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "stringValue": "{\"status\":402,\"body\":{\"orderId\":\"a71c09e2\",\"status\":\"declined\",\"total\":600}}"
          }
@@ -336,13 +336,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"cart\":{\"customerId\":\"cus_fraud\",\"items\":[{\"sku\":\"sku-2\",\"qty\":20}],\"coupon\":null}}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "stringValue": "{\"orderId\":\"a71c09e2\",\"status\":\"declined\",\"total\":600}"
          }
@@ -375,13 +375,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"cart\":{\"customerId\":\"cus_fraud\",\"items\":[{\"sku\":\"sku-2\",\"qty\":20}],\"coupon\":null}}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "stringValue": "{\"customerId\":\"cus_fraud\",\"items\":[{\"sku\":\"sku-2\",\"qty\":20}],\"coupon\":null}"
          }
@@ -413,13 +413,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"cart\":{\"customerId\":\"cus_fraud\",\"items\":[{\"sku\":\"sku-2\",\"qty\":20}],\"coupon\":null}}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "stringValue": "{\"orderId\":\"a71c09e2\",\"status\":\"declined\",\"total\":600}"
          }
@@ -452,13 +452,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"cart\":{\"customerId\":\"cus_fraud\",\"items\":[{\"sku\":\"sku-2\",\"qty\":20}],\"coupon\":null}}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "stringValue": "{\"customerId\":\"cus_fraud\",\"items\":[{\"sku\":\"sku-2\",\"qty\":20}],\"coupon\":null}"
          }
@@ -531,7 +531,7 @@
    "scopeSpans": [
     {
      "scope": {
-      "name": "noodles-demo"
+      "name": "breadth-demo"
      },
      "spans": [
       {
@@ -562,13 +562,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"customer_id\":\"cus_42\",\"items\":[{\"sku\":\"sku-1\",\"qty\":2},{\"sku\":\"sku-2\",\"qty\":1},{\"sku\":\"sku-3\",\"qty\":4}],\"coupon\":\"WELCOME10\"}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "stringValue": "{\"id\":\"5f3b2c1d\",\"status\":\"paid\",\"total\":53.1}"
          }
@@ -606,13 +606,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"req\":{\"customer_id\":\"cus_42\",\"items\":[{\"sku\":\"sku-1\",\"qty\":2},{\"sku\":\"sku-2\",\"qty\":1},{\"sku\":\"sku-3\",\"qty\":4}],\"coupon\":\"WELCOME10\"}}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "stringValue": "{\"id\":\"5f3b2c1d\",\"customer_id\":\"cus_42\",\"total\":53.1,\"status\":\"paid\"}"
          }
@@ -644,13 +644,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"customer_id\":\"cus_42\"}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "stringValue": "{\"id\":\"cus_42\",\"email\":\"ana@example.com\",\"tier\":\"gold\"}"
          }
@@ -706,13 +706,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"params\":[\"cus_42\"]}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "stringValue": "{\"rows\":1}"
          }
@@ -744,13 +744,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"items\":[{\"sku\":\"sku-1\",\"qty\":2},{\"sku\":\"sku-2\",\"qty\":1},{\"sku\":\"sku-3\",\"qty\":4}],\"coupon\":\"WELCOME10\"}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "doubleValue": 53.1
          }
@@ -782,13 +782,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"items\":[{\"sku\":\"sku-1\",\"qty\":2},{\"sku\":\"sku-2\",\"qty\":1},{\"sku\":\"sku-3\",\"qty\":4}]}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "stringValue": "[{\"sku\":\"sku-1\",\"qty\":2},{\"sku\":\"sku-2\",\"qty\":1},{\"sku\":\"sku-3\",\"qty\":4}]"
          }
@@ -820,13 +820,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"sku\":\"sku-1\"}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "doubleValue": 12.5
          }
@@ -858,13 +858,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"sku\":\"sku-1\"}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "doubleValue": 12.5
          }
@@ -920,13 +920,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"params\":[\"sku-1\"]}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "stringValue": "{\"rows\":1}"
          }
@@ -958,13 +958,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"sku\":\"sku-2\"}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "intValue": "30"
          }
@@ -996,13 +996,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"sku\":\"sku-2\"}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "intValue": "30"
          }
@@ -1058,13 +1058,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"params\":[\"sku-2\"]}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "stringValue": "{\"rows\":1}"
          }
@@ -1096,13 +1096,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"sku\":\"sku-3\"}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "doubleValue": 4.25
          }
@@ -1134,13 +1134,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"sku\":\"sku-3\"}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "doubleValue": 4.25
          }
@@ -1196,13 +1196,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"params\":[\"sku-3\"]}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "stringValue": "{\"rows\":1}"
          }
@@ -1234,13 +1234,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"total\":59,\"codes\":[\"WELCOME10\"]}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "doubleValue": 53.1
          }
@@ -1272,13 +1272,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"total\":53.1,\"codes\":[]}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "doubleValue": 53.1
          }
@@ -1310,13 +1310,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"customer_id\":\"cus_42\",\"amount\":53.1,\"email\":\"ana@example.com\"}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "stringValue": "{\"status\":\"paid\",\"chargeId\":\"ch_3PqL9x\"}"
          }
@@ -1386,13 +1386,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"order\":{\"id\":\"5f3b2c1d\",\"customer_id\":\"cus_42\",\"total\":53.1,\"status\":\"paid\"}}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "stringValue": "null"
          }
@@ -1448,13 +1448,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"params\":[\"5f3b2c1d\",\"cus_42\",53.1,\"paid\"]}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "stringValue": "{\"rowcount\":1}"
          }
@@ -1486,13 +1486,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"order\":{\"id\":\"5f3b2c1d\",\"customer_id\":\"cus_42\",\"total\":53.1,\"status\":\"paid\"}}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "stringValue": "null"
          }
@@ -1530,13 +1530,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"key\":\"5f3b2c1d\",\"value\":{\"id\":\"5f3b2c1d\",\"customer_id\":\"cus_42\",\"total\":53.1,\"status\":\"paid\"}}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "stringValue": "{\"partition\":2,\"offset\":18233}"
          }
@@ -1574,13 +1574,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"customer_id\":\"cus_fraud\",\"items\":[{\"sku\":\"sku-2\",\"qty\":20}],\"coupon\":null}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "stringValue": "{\"id\":\"a71c09e2\",\"status\":\"declined\",\"total\":600}"
          }
@@ -1619,13 +1619,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"req\":{\"customer_id\":\"cus_fraud\",\"items\":[{\"sku\":\"sku-2\",\"qty\":20}],\"coupon\":null}}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "stringValue": "{\"id\":\"a71c09e2\",\"customer_id\":\"cus_fraud\",\"total\":600,\"status\":\"declined\"}"
          }
@@ -1658,13 +1658,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"customer_id\":\"cus_fraud\"}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "stringValue": "{\"id\":\"cus_fraud\",\"email\":\"mallory@example.net\",\"tier\":\"new\"}"
          }
@@ -1720,13 +1720,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"params\":[\"cus_fraud\"]}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "stringValue": "{\"rows\":1}"
          }
@@ -1758,13 +1758,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"items\":[{\"sku\":\"sku-2\",\"qty\":20}],\"coupon\":null}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "intValue": "600"
          }
@@ -1796,13 +1796,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"items\":[{\"sku\":\"sku-2\",\"qty\":20}]}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "stringValue": "[{\"sku\":\"sku-2\",\"qty\":20}]"
          }
@@ -1834,13 +1834,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"sku\":\"sku-2\"}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "intValue": "30"
          }
@@ -1872,13 +1872,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"sku\":\"sku-2\"}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "intValue": "30"
          }
@@ -1934,13 +1934,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"params\":[\"sku-2\"]}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "stringValue": "{\"rows\":1}"
          }
@@ -1972,13 +1972,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"customer_id\":\"cus_fraud\",\"amount\":600,\"email\":\"mallory@example.net\"}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "stringValue": "{\"status\":\"declined\",\"reason\":\"risk\"}"
          }
@@ -2050,13 +2050,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"order\":{\"id\":\"a71c09e2\",\"customer_id\":\"cus_fraud\",\"total\":600,\"status\":\"declined\"}}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "stringValue": "null"
          }
@@ -2112,13 +2112,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"params\":[\"a71c09e2\",\"cus_fraud\",600,\"declined\"]}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "stringValue": "{\"rowcount\":1}"
          }
@@ -2152,7 +2152,7 @@
    "scopeSpans": [
     {
      "scope": {
-      "name": "noodles-demo"
+      "name": "breadth-demo"
      },
      "spans": [
       {
@@ -2183,13 +2183,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"customer\":\"cus_42\",\"amount\":53.1,\"email\":\"ana@example.com\"}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "stringValue": "{\"status\":\"paid\",\"chargeId\":\"ch_3PqL9x\"}"
          }
@@ -2221,13 +2221,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"customer\":\"cus_42\",\"amount\":53.1,\"email\":\"ana@example.com\"}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "stringValue": "{\"status\":\"paid\",\"chargeId\":\"ch_3PqL9x\"}"
          }
@@ -2259,13 +2259,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"event\":{\"event\":\"charge.requested\",\"customer\":\"cus_42\"}}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "stringValue": "null"
          }
@@ -2297,13 +2297,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"customer\":\"cus_42\",\"amount\":53.1}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "doubleValue": 0.0531
          }
@@ -2335,13 +2335,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"customer\":\"cus_42\",\"amount\":53.1,\"email\":\"ana@example.com\"}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "stringValue": "ch_3PqL9x"
          }
@@ -2385,13 +2385,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"customer\":\"cus_42\",\"amount\":5310,\"currency\":\"eur\",\"receipt_email\":\"ana@example.com\"}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "stringValue": "{\"id\":\"ch_3PqL9x\",\"object\":\"charge\",\"paid\":true,\"amount\":5310}"
          }
@@ -2429,13 +2429,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"customer\":\"cus_fraud\",\"amount\":600,\"email\":\"mallory@example.net\"}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "stringValue": "{\"status\":\"declined\",\"reason\":\"risk\"}"
          }
@@ -2468,13 +2468,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"customer\":\"cus_fraud\",\"amount\":600,\"email\":\"mallory@example.net\"}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "stringValue": "{\"status\":\"declined\",\"reason\":\"risk\"}"
          }
@@ -2507,13 +2507,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"event\":{\"event\":\"charge.requested\",\"customer\":\"cus_fraud\"}}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "stringValue": "null"
          }
@@ -2545,13 +2545,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"customer\":\"cus_fraud\",\"amount\":\"600.00\"}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "intValue": "1"
          }
@@ -2585,7 +2585,7 @@
    "scopeSpans": [
     {
      "scope": {
-      "name": "noodles-demo"
+      "name": "breadth-demo"
      },
      "spans": [
       {
@@ -2628,13 +2628,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"order\":{\"id\":\"5f3b2c1d\",\"customer_id\":\"cus_42\",\"total\":53.1}}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "stringValue": "{\"emailed\":true}"
          }
@@ -2666,13 +2666,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"customerId\":\"cus_42\",\"orderId\":\"5f3b2c1d\",\"total\":53.1}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "stringValue": "null"
          }
@@ -2716,13 +2716,13 @@
          }
         },
         {
-         "key": "noodles.input",
+         "key": "breadth.input",
          "value": {
           "stringValue": "{\"to\":\"ana@example.com\",\"subject\":\"Order 5f3b2c1d confirmed\"}"
          }
         },
         {
-         "key": "noodles.output",
+         "key": "breadth.output",
          "value": {
           "stringValue": "{\"status\":202}"
          }

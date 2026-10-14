@@ -1,5 +1,5 @@
 import { ChevronLeft, ChevronRight, Pause, Play, RotateCcw } from "lucide-react";
-import type { Execution } from "@noodles/schema";
+import type { Execution } from "@breadth/schema";
 import type { GraphIndex } from "../graph/model";
 
 interface Props {

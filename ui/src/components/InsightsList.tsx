@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { CircleAlert, Info, Play, TriangleAlert } from "lucide-react";
-import type { Insight, InsightCategory, Severity } from "@noodles/schema";
+import type { Insight, InsightCategory, Severity } from "@breadth/schema";
 import type { GraphIndex } from "../graph/model";
 import { nodeVisual } from "../graph/visual";
 

@@ -1,9 +1,9 @@
 {
-  "name": "noodles-live",
-  "displayName": "noodles live",
-  "description": "Streams unsaved edits (yours or your coding agent's) to `noodles watch`, so the live canvas updates as code is typed, not only when it is saved.",
+  "name": "breadth-live",
+  "displayName": "breadth live",
+  "description": "Streams unsaved edits (yours or your coding agent's) to `breadth watch`, so the live canvas updates as code is typed, not only when it is saved.",
   "version": "0.1.0",
-  "publisher": "noodles",
+  "publisher": "breadth",
   "license": "MIT",
   "repository": { "type": "git", "url": "https://github.com/theorjiugovictor/noodles" },
   "engines": { "vscode": "^1.80.0" },
@@ -11,12 +11,12 @@
   "main": "./extension.js",
   "activationEvents": ["onStartupFinished"],
   "contributes": {
-    "commands": [{ "command": "noodles.openCanvas", "title": "noodles: Open live canvas" }],
+    "commands": [{ "command": "breadth.openCanvas", "title": "breadth: Open live canvas" }],
     "configuration": {
-      "title": "noodles",
+      "title": "breadth",
       "properties": {
-        "noodles.port": { "type": "number", "default": 4321, "description": "Port of `noodles watch`." },
-        "noodles.streamUnsaved": { "type": "boolean", "default": true, "description": "Send unsaved editor contents to `noodles watch` (localhost only)." }
+        "breadth.port": { "type": "number", "default": 4321, "description": "Port of `breadth watch`." },
+        "breadth.streamUnsaved": { "type": "boolean", "default": true, "description": "Send unsaved editor contents to `breadth watch` (localhost only)." }
       }
     }
   }

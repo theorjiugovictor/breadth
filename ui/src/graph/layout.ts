@@ -1,5 +1,5 @@
 import ELK from "elkjs/lib/elk.bundled.js";
-import type { Port } from "@noodles/schema";
+import type { Port } from "@breadth/schema";
 import type { View, ViewNode } from "./view";
 
 export const CARD_WIDTH = 248;

@@ -1,7 +1,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import ignore, { type Ignore } from "ignore";
-import { normPath } from "@noodles/schema";
+import { normPath } from "@breadth/schema";
 
 import { DEFAULT_EXCLUDES } from "./excludes.js";
 

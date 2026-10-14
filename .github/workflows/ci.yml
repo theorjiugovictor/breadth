@@ -20,6 +20,6 @@ jobs:
       - run: npm run build
       - name: Smoke test the CLI on the demo
         run: |
-          node cli/dist/noodles.mjs scan examples/shop -o /tmp/shop.json
-          node cli/dist/noodles.mjs import-traces examples/shop/traces/checkout.otlp.json --merge /tmp/shop.json
-          node cli/dist/noodles.mjs validate /tmp/shop.json
+          node cli/dist/breadth.mjs scan examples/shop -o /tmp/shop.json
+          node cli/dist/breadth.mjs import-traces examples/shop/traces/checkout.otlp.json --merge /tmp/shop.json
+          node cli/dist/breadth.mjs validate /tmp/shop.json

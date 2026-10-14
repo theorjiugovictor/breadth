@@ -1,4 +1,4 @@
-import type { Insight } from "@noodles/schema";
+import type { Insight } from "@breadth/schema";
 import type { Rule } from "../rule.js";
 
 const CRITICAL = /^(pass(word)?|passwd|pwd|secret|client_secret|token|access_token|refresh_token|api_?key|authorization|card(_?number)?|cc_?num(ber)?|cvv|cvc|iban|ssn|social_security(_number)?)$/i;

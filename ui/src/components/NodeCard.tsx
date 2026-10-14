@@ -1,7 +1,7 @@
 import { memo } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { ChevronsDown, Repeat, TriangleAlert } from "lucide-react";
-import type { Port, Severity } from "@noodles/schema";
+import type { Port, Severity } from "@breadth/schema";
 import { nodeVisual } from "../graph/visual";
 import { visiblePorts } from "../graph/layout";
 import type { ViewNode } from "../graph/view";
@@ -20,7 +20,7 @@ export interface CardData extends Record<string, unknown> {
   /** Insight badge in map mode. */
   flag?: { count: number; severity: Severity };
   /** Live mode: appeared or changed in the latest update (a card holding changed nodes counts as edited). */
-  change?: "new" | "edited";
+  change?: "new" | "edited" | "removed";
 }
 
 function subtitle(v: ViewNode, label: string): string {

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, ArrowRight, ExternalLink, FolderOpen, Sparkles, X } from "lucide-react";
 import { explainNode } from "../live";
-import type { FlowEdge, FlowNode, Port, Step } from "@noodles/schema";
+import type { FlowEdge, FlowNode, Port, Step } from "@breadth/schema";
 import type { GraphIndex } from "../graph/model";
 import { ancestors } from "../graph/model";
 import { EDGE_STYLE, KIND_LABEL, LAYER_LABEL, edgeColor, nodeVisual } from "../graph/visual";
@@ -134,7 +134,7 @@ function Overview({ index, node, onSelect, onDrill }: { index: GraphIndex; node:
   const runs = index.stepsByNode.get(node.id);
   const stepCount = runs ? [...runs.values()].reduce((s, l) => s + l.length, 0) : 0;
   // internal bookkeeping used by collectors and rules, not useful to read
-  const HIDDEN = new Set(["lines", "shape", "size", "sig", "referenced", "nameCalled", "guarded"]);
+  const HIDDEN = new Set(["lines", "shape", "size", "sig", "referenced", "nameCalled", "guarded", "diff"]);
   const meta = Object.entries(node.metadata ?? {}).filter(([k, v]) => v !== undefined && !HIDDEN.has(k));
 
   return (
@@ -219,11 +219,17 @@ function EdgeList({ title, edges, index, dir, onSelect }: { title: string; edges
         if (!other) return null;
         const { Icon, color } = nodeVisual(other);
         return (
-          <button className="link-row" key={e.id} onClick={() => onSelect(other.id)} title={e.id}>
+          <button
+            className={`link-row${e.metadata?.diff === "removed" ? " removed" : ""}`}
+            key={e.id}
+            onClick={() => onSelect(other.id)}
+            title={e.metadata?.diff === "removed" ? "Removed by this change" : e.id}
+          >
             {dir === "in" ? <ArrowLeft size={13} color={edgeColor(e.kind)} /> : <ArrowRight size={13} color={edgeColor(e.kind)} />}
             <Icon size={14} color={color} />
             <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{other.name}</span>
             <span className="meta">
+              {e.metadata?.diff === "removed" ? <b className="c-del">removed · </b> : e.metadata?.diff === "added" ? <b className="c-add">new · </b> : null}
               {e.label ?? EDGE_STYLE[e.kind].label}
               {e.count && e.count > 1 ? ` ×${e.count}` : ""}
             </span>
@@ -338,7 +344,7 @@ function PortsTab({ index, node, side, execId, activeStep }: { index: GraphIndex
           </div>
         ))
       ) : (
-        <p className="empty-note">No runtime data yet. Import traces with <code>noodles import-traces</code> to see real values here.</p>
+        <p className="empty-note">No runtime data yet. Import traces with <code>breadth import-traces</code> to see real values here.</p>
       )}
     </>
   );
@@ -417,7 +423,7 @@ function SourceTab({ index, node }: { index: GraphIndex; node: FlowNode }) {
           })}
         </pre>
       )}
-      {!snippet && !loading && src.file && <p className="empty-note">Source preview is available when running <code>noodles serve</code> locally.</p>}
+      {!snippet && !loading && src.file && <p className="empty-note">Source preview is available when running <code>breadth serve</code> locally.</p>}
     </>
   );
 }

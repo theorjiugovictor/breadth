@@ -1,6 +1,6 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { mergeGraphs, SCHEMA_VERSION, type FlowGraph } from "@noodles/schema";
+import { mergeGraphs, SCHEMA_VERSION, type FlowGraph } from "@breadth/schema";
 import type { Collector, CollectorOptions } from "../core/types.js";
 import { walkFiles } from "../core/walk.js";
 import { k8sGraph, parseK8s, type K8sObject } from "./k8s.js";

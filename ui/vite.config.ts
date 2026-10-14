@@ -13,7 +13,7 @@ export default defineConfig(({ mode }) => ({
     chunkSizeWarningLimit: 2500,
   },
   define: {
-    __NOODLES_PAGES__: JSON.stringify(mode === "pages"),
+    __BREADTH_PAGES__: JSON.stringify(mode === "pages"),
   },
   server: { port: 5173 },
 }));

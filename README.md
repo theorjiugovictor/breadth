@@ -1,16 +1,20 @@
-# noodles
+# breadth
 
-**See how your system flows.** noodles turns any codebase, trace and infrastructure into an n8n-style canvas: nodes with input ports on the left and output ports on the right, connected left to right. Click a node to see what goes in and what comes out.
+**The understanding layer for AI-written systems.**
 
-![Replaying a checkout trace inside the orders service](docs/img/hero-light.png)
+Writing code used to be the slow part of software, so understanding kept pace. Now an agent writes 2,000 lines in minutes, and the team's mental model of the system falls further behind with every merge. That gap is **comprehension debt**: code that works and ships, but that nobody can explain. It grows like tech debt, and it stays invisible until an incident.
 
-- **Every kind of flow**, not just HTTP: function calls, shared state, database reads and writes, HTTP between services, Kafka topics, Kubernetes networking, Terraform dependencies and security group rules.
-- **One graph format.** Collectors write [`flowgraph.json`](schema/flowgraph.schema.json); the UI only reads it. A new collector never needs UI changes.
-- **Drill down any level**: system > service > module > file > class > function. Double-click to open a node, use the breadcrumbs to go back up.
-- **Replay real runs.** Import OpenTelemetry traces and step through a request like an n8n execution, with the real input and output at every node.
-- **Problems you can see.** Rules over the graph flag N+1 queries, repeated work, missed parallelism, dead code, duplicate logic, unused infrastructure, contract drift, unhandled errors and personal data sent to third parties, and highlight them on the canvas. See [Insights](#insights).
-- **Watch your coding agent build.** `noodles watch` keeps the canvas live while you or your agent edit: Claude Code, Copilot, Cursor, Gemini CLI, Windsurf, Antigravity, Codex or anything else. New and changed functions light up as they appear, even before they are saved, with a feed of what each task changed. An MCP server gives the agent the same graph as tools. See [Live mode](#live-mode-watch-a-coding-agent).
-- **Zero config, fully local.** Nothing leaves your machine. LLM features are optional, off by default, and work with any provider: Claude, OpenAI, Gemini, Ollama, or anything OpenAI-compatible.
+breadth keeps people in the loop. It maps what a system actually does (calls, data reads and writes, endpoints, messages, infrastructure, real traces) and shows every change as a change in behaviour, not in lines.
+
+![What an agent-written pull request changes, on the breadth canvas](docs/img/diff.png)
+
+- **Graph diffs on every pull request.** Instead of reading 40 changed files, the reviewer sees what the change *does*: "`mark_refunded` now writes to postgresql (UPDATE orders)", "`create_refund` now calls api.stripe.com", "`charge` no longer calls `risk_score`: a check was removed", "new loop doing a database read per order". A [GitHub Action](#graph-diffs-on-pull-requests) posts it as a PR comment with a picture. Review becomes judging intent instead of reading code.
+- **Ground truth for agents.** Through the [MCP server](#mcp-the-graph-as-tools-for-the-agent), an agent can ask "what depends on this?" before it edits, and "what did my change do?" before it says it is done, instead of guessing from a few files.
+- **Watch your coding agent build.** `breadth watch` keeps the canvas live while Claude Code, Copilot, Cursor, Gemini CLI, Windsurf, Antigravity, Codex or a person edits. New and changed functions light up as they are written, even before they are saved, next to the task that caused them. See [Live mode](#live-mode-watch-a-coding-agent).
+- **Every kind of flow**, not just HTTP: function calls, shared state, database reads and writes, HTTP between services, Kafka topics, Kubernetes networking, Terraform dependencies and security group rules. Drill down from system to service, module, file, class and function.
+- **Replay real runs.** Import OpenTelemetry traces and step through a request with the real input and output at every node.
+- **Problems you can see.** Rules flag N+1 queries, repeated work, missed parallelism, dead code, duplicate logic, unused infrastructure, contract drift, unhandled errors and personal data sent to third parties. See [Insights](#insights).
+- **One graph format, fully local.** Collectors write [`flowgraph.json`](schema/flowgraph.schema.json) and the UI only reads it. Zero config, and nothing leaves your machine. LLM features are optional and work with any provider.
 
 **Try it without installing anything:** the [landing page](https://theorjiugovictor.github.io/noodles/) has a box where you paste a public GitHub repository. It is scanned in your browser: files come straight from GitHub and are parsed in a Web Worker with tree-sitter compiled to WebAssembly. No server is involved and nothing is uploaded.
 
@@ -19,30 +23,30 @@
 Requires Node 20 or newer.
 
 ```sh
-git clone https://github.com/theorjiugovictor/noodles
-cd noodles
+git clone https://github.com/theorjiugovictor/noodles breadth
+cd breadth
 npm install
-npm run build          # builds the UI and bundles the CLI into cli/dist/noodles.mjs
-npm link -w cli        # puts `noodles` on your PATH (optional)
+npm run build          # builds the UI and bundles the CLI into cli/dist/breadth.mjs
+npm link -w cli        # puts `breadth` on your PATH (optional)
 ```
 
-Without `npm link`, run `node /path/to/noodles/cli/dist/noodles.mjs` instead of `noodles`.
+Without `npm link`, run `node /path/to/breadth/cli/dist/breadth.mjs` instead of `breadth`.
 
-> The npm package name `noodles` belongs to an unrelated project, so do not use `npx noodles`.
+> breadth is not on npm yet, and the npm name `breadth` belongs to someone else, so do not use `npx breadth`.
 
 ## Quick start
 
 ```sh
 cd ~/code/some-repo
-noodles scan .                 # writes flowgraph.json
-noodles serve                  # opens http://127.0.0.1:4321
+breadth scan .                 # writes flowgraph.json
+breadth serve                  # opens http://127.0.0.1:4321
 ```
 
 Add runtime data from OpenTelemetry:
 
 ```sh
-noodles import-traces traces.otlp.json --merge flowgraph.json
-noodles serve
+breadth import-traces traces.otlp.json --merge flowgraph.json
+breadth serve
 ```
 
 Then switch the top bar to **Trace**, pick an execution and press play (or use ← / →).
@@ -61,13 +65,55 @@ After the merge, each service is a single node across all layers:
 - **Infrastructure:** its Kubernetes Deployment.
 - **Runtime:** its OpenTelemetry service.
 
-Every trace step lands on the function that produced it. `npm run demo:build` also writes `examples/noodles.flowgraph.json`, which is noodles scanning itself.
+Every trace step lands on the function that produced it. `npm run demo:build` also writes `examples/breadth.flowgraph.json`, which is breadth scanning itself.
+
+## Graph diffs on pull requests
+
+```sh
+breadth diff                       # working tree vs the merge base with main
+breadth diff --base v1.4 --head v1.5 -o change.json   # two refs; open the result with `breadth serve change.json`
+breadth diff before.json after.json                   # two saved graphs
+```
+
+breadth scans both versions (the base is read with `git archive`, so your working tree is never touched), compares the graphs, and describes the difference as behaviour, most important first:
+
+| Severity | Examples |
+| --- | --- |
+| High | a call to a check removed (`auth`, `verify`, `risk`, `limit`, …), new writes to a datastore, new external API calls, a new loop calling something that does I/O, a changed signature with callers, new or removed endpoints and services, a removed function that unchanged code still calls |
+| Medium | new reads, new publishes and consumers, calls between services, removed call paths, shared state modified |
+| Low | new packages, new findings of low severity |
+
+New insights (an N+1 query, an unhandled external call) are listed as changes too. The output is a terminal summary, a PR-ready markdown comment with a Mermaid picture (`--markdown`), JSON (`--json`), or a diff graph (`-o`). In the canvas, a diff graph opens on a **Changes** tab: new nodes are green, removed ones red and dashed, edited ones amber, and clicking a change shows it in place. The [live demo](https://theorjiugovictor.github.io/noodles/app/?graph=graphs/shop-pr.json) has one: an agent-written "bulk refunds" PR that also quietly drops the fraud check.
+
+### In GitHub Actions
+
+```yaml
+# .github/workflows/breadth.yml
+name: breadth
+on: pull_request
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  map:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: theorjiugovictor/noodles@main
+        # with:
+        #   path: services        # scan a subfolder
+        #   fail-on: high         # fail the check on high-severity behaviour changes
+```
+
+The action posts one comment per pull request and updates it on every push, writes the same summary to the job page, and uploads the diff graph as an artifact. Pull requests from forks get a read-only token, so for those the summary is on the job page only.
 
 ## Live mode: watch a coding agent
 
 ```sh
 cd ~/code/some-repo
-noodles watch                  # scans, serves http://127.0.0.1:4321 and keeps watching
+breadth watch                  # scans, serves http://127.0.0.1:4321 and keeps watching
 ```
 
 Every save triggers an incremental rescan (unchanged files come from a cache), and the browser updates over Server-Sent Events without losing your place:
@@ -80,72 +126,75 @@ This works with any agent or editor, because it watches the files. Three optiona
 
 | | What it adds | Setup |
 | --- | --- | --- |
-| **Hooks** | The agent's task (your prompt) in the feed, and its edits credited to it | `noodles connect <agent> --write` |
-| **Editor extension** | Edits appear before they are saved (agents in the editor often leave files unsaved while you review) | `noodles editor install` |
-| **MCP server** | The agent can ask noodles about the code (callers, impact of a change, insights) and report what it is working on | written by `noodles connect` too |
+| **Hooks** | The agent's task (your prompt) in the feed, and its edits credited to it | `breadth connect <agent> --write` |
+| **Editor extension** | Edits appear before they are saved (agents in the editor often leave files unsaved while you review) | `breadth editor install` |
+| **MCP server** | The agent can ask breadth about the code (callers, impact of a change, insights) and report what it is working on | written by `breadth connect` too |
 
 ### Connect your agent
 
 Run this in your project. It merges into the agent's project config files and keeps your own entries; run it again at any time. Leave out `--write` to just print what to add.
 
 ```sh
-noodles connect claude --write        # or: copilot cursor gemini windsurf antigravity codex, or all
+breadth connect claude --write        # or: copilot cursor gemini windsurf antigravity codex, or all
 ```
 
 | Agent | Hooks file | Task (prompt) | Edits | MCP config |
 | --- | --- | --- | --- | --- |
 | Claude Code | `.claude/settings.json` | `UserPromptSubmit` | `PostToolUse` (Edit, Write, …) | `.mcp.json` |
-| GitHub Copilot (VS Code agent mode) | `.github/hooks/noodles.json` | `UserPromptSubmit` | `PostToolUse` | `.vscode/mcp.json` |
+| GitHub Copilot (VS Code agent mode) | `.github/hooks/breadth.json` | `UserPromptSubmit` | `PostToolUse` | `.vscode/mcp.json` |
 | Cursor | `.cursor/hooks.json` | `beforeSubmitPrompt` | `afterFileEdit` | `.cursor/mcp.json` |
 | Gemini CLI | `.gemini/settings.json` | `BeforeAgent` | `AfterTool` (write_file, replace) | `.gemini/settings.json` |
 | Windsurf (Cascade) | `.windsurf/hooks.json` | `pre_user_prompt` | `post_write_code` | `~/.codeium/windsurf/mcp_config.json` (printed, not written) |
-| Antigravity | `.agents/hooks.json` | via MCP `noodles_report_task` | `PostToolUse` (write_to_file, replace_file_content, …) | Agent panel › MCP servers › raw config (printed) |
+| Antigravity | `.agents/hooks.json` | via MCP `breadth_report_task` | `PostToolUse` (write_to_file, replace_file_content, …) | Agent panel › MCP servers › raw config (printed) |
 | Codex | `.codex/hooks.json` | `UserPromptSubmit` | `PostToolUse` (apply_patch) | `.codex/config.toml` |
 
 Notes:
-- Every hook runs `noodles hook`, which reads the event on stdin, recognises the agent from its format, forwards the event to `noodles watch` and exits 0 straight away. If `noodles watch` is not running it does nothing, so the agent is never blocked.
-- VS Code also runs the hooks in `.claude/settings.json`. When both are configured, noodles shows each prompt once.
+- Every hook runs `breadth hook`, which reads the event on stdin, recognises the agent from its format, forwards the event to `breadth watch` and exits 0 straight away. If `breadth watch` is not running it does nothing, so the agent is never blocked.
+- VS Code also runs the hooks in `.claude/settings.json`. When both are configured, breadth shows each prompt once.
 - Copilot hooks are a VS Code preview feature. Codex asks you to trust new hooks once (`/hooks`).
-- Any other tool can report too: pipe `{"files": [...], "prompt": "..."}` to `noodles hook --agent Name`, or POST it to `http://127.0.0.1:4321/api/activity` with the header `x-noodles: 1`. Endpoints that change state or call an LLM require that header, so other web pages cannot trigger them.
+- Any other tool can report too: pipe `{"files": [...], "prompt": "..."}` to `breadth hook --agent Name`, or POST it to `http://127.0.0.1:4321/api/activity` with the header `x-breadth: 1`. Endpoints that change state or call an LLM require that header, so other web pages cannot trigger them.
 
 ### See edits before they are saved
 
 ```sh
-noodles editor install                # VS Code, Cursor, Windsurf, Antigravity (whichever is on PATH)
+breadth editor install                # VS Code, Cursor, Windsurf, Antigravity (whichever is on PATH)
 ```
 
-The **noodles live** extension sends unsaved editor buffers to `noodles watch` (only to `127.0.0.1`, and only while it runs). The canvas then follows typing and agent edits that are still waiting for review. Changes scanned from unsaved text are tagged **unsaved** in the feed. When a buffer is saved or closed, the file on disk is used again. If your editor's command is not on PATH, use *Extensions › … › Install from VSIX* with the file from `noodles editor path`.
+The **breadth live** extension sends unsaved editor buffers to `breadth watch` (only to `127.0.0.1`, and only while it runs). The canvas then follows typing and agent edits that are still waiting for review. Changes scanned from unsaved text are tagged **unsaved** in the feed. When a buffer is saved or closed, the file on disk is used again. If your editor's command is not on PATH, use *Extensions › … › Install from VSIX* with the file from `breadth editor path`.
 
 ### MCP: the graph as tools for the agent
 
-`noodles mcp` is a Model Context Protocol server (stdio). Its tools work for any MCP-capable agent:
+`breadth mcp` is a Model Context Protocol server (stdio). Its tools work for any MCP-capable agent:
 
 | Tool | What the agent gets |
 | --- | --- |
-| `noodles_report_task` | Puts a one-line summary of the task in the live feed (the only way to get Antigravity's task in) |
-| `noodles_overview` | Top-level structure, counts and the main insights of the repository |
-| `noodles_find` | Functions, classes, files, endpoints and datastores by name or path |
-| `noodles_node` | Where a node lives, its inputs and outputs, callers, callees, data reads and writes, and insights |
-| `noodles_impact` | Everything that depends on a node, up to N hops, and the endpoints it is reachable from |
-| `noodles_insights` | Findings, optionally for one file or folder |
+| `breadth_changes` | What the agent's own change does in behaviour, compared with a git ref (see [Graph diffs](#graph-diffs-on-pull-requests)). The server's instructions ask the agent to check it before finishing |
+| `breadth_report_task` | Puts a one-line summary of the task in the live feed (the only way to get Antigravity's task in) |
+| `breadth_overview` | Top-level structure, counts and the main insights of the repository |
+| `breadth_find` | Functions, classes, files, endpoints and datastores by name or path |
+| `breadth_node` | Where a node lives, its inputs and outputs, callers, callees, data reads and writes, and insights |
+| `breadth_impact` | Everything that depends on a node, up to N hops, and the endpoints it is reachable from |
+| `breadth_insights` | Findings, optionally for one file or folder |
 
-MCP does not replace hooks. An MCP server hears from the agent only when the agent decides to call a tool, so it cannot observe edits; hooks and file watching capture those. What MCP adds is the other direction: the agent can use the graph instead of reading every file, and can say what it is doing. When `noodles watch` is running, the tools read its live graph. Otherwise they scan the project themselves.
+MCP does not replace hooks. An MCP server hears from the agent only when the agent decides to call a tool, so it cannot observe edits; hooks and file watching capture those. What MCP adds is the other direction: the agent can use the graph instead of reading every file, and can say what it is doing. When `breadth watch` is running, the tools read its live graph. Otherwise they scan the project themselves.
 
 ## CLI
 
 ```
-noodles scan <path> [--collector code,infra] [-o flowgraph.json] [--config file] [--exclude glob]... [--no-external] [--llm]
-noodles import-traces <otlp.json>... [--merge flowgraph.json] [-o out.json]
-noodles serve [flowgraph.json] [--port 4321] [--host 127.0.0.1] [--no-open]
-noodles watch [path] [--port 4321] [--traces otlp.json]... [-o flowgraph.json] [--llm]
-noodles connect <agent>... [--write] [--port 4321] [--no-mcp] [--no-hooks]
-noodles editor install [--editor code|cursor|windsurf|antigravity]
-noodles mcp [path] [--port 4321]
-noodles hook [--port 4321] [--agent name]
-noodles llm [providers|check]
-noodles insights <flowgraph.json> [--json] [--write] [--fail-on warning|critical] [--rules a,b] [--list]
-noodles validate <flowgraph.json>
-noodles collectors
+breadth scan <path> [--collector code,infra] [-o flowgraph.json] [--config file] [--exclude glob]... [--no-external] [--llm]
+breadth import-traces <otlp.json>... [--merge flowgraph.json] [-o out.json]
+breadth serve [flowgraph.json] [--port 4321] [--host 127.0.0.1] [--no-open]
+breadth diff [path] [--base ref] [--head ref] [-o diff.json] [--markdown pr.md] [--json] [--fail-on high|medium|low]
+breadth diff before.json after.json
+breadth watch [path] [--port 4321] [--traces otlp.json]... [-o flowgraph.json] [--llm]
+breadth connect <agent>... [--write] [--port 4321] [--no-mcp] [--no-hooks]
+breadth editor install [--editor code|cursor|windsurf|antigravity]
+breadth mcp [path] [--port 4321]
+breadth hook [--port 4321] [--agent name]
+breadth llm [providers|check]
+breadth insights <flowgraph.json> [--json] [--write] [--fail-on warning|critical] [--rules a,b] [--list]
+breadth validate <flowgraph.json>
+breadth collectors
 ```
 
 - **`scan`** runs every collector that recognises the target, unless you pass `--collector`. Their outputs are validated, merged on stable ids, and written as one graph.
@@ -160,7 +209,7 @@ noodles collectors
 
 ### Optional config
 
-Everything works without configuration. A `noodles.config.json` in the scanned directory, or one passed with `--config`, can set:
+Everything works without configuration. A `breadth.config.json` in the scanned directory, or one passed with `--config`, can set:
 
 ```json
 {
@@ -177,10 +226,10 @@ Everything works without configuration. A `noodles.config.json` in the scanned d
 Nothing is sent anywhere unless you configure a provider. With one configured you get:
 
 - **`scan --llm`**: one-sentence descriptions for the most connected functions and modules that have no docstring.
-- **Explain**: a button in the node panel of `noodles serve` / `noodles watch` that explains what a node does and how it connects.
+- **Explain**: a button in the node panel of `breadth serve` / `breadth watch` that explains what a node does and how it connects.
 - **`watch --llm`**: a one-line narration of each change in the live feed (sends names and file paths, not source).
 
-Remote providers are announced on the terminal before the first request. Pick one in `noodles.config.json`, with environment variables (`NOODLES_LLM_PROVIDER`, `NOODLES_LLM_MODEL`, `NOODLES_LLM_BASE_URL`), or with `--llm-provider`, `--llm-model` and `--llm-base-url`:
+Remote providers are announced on the terminal before the first request. Pick one in `breadth.config.json`, with environment variables (`BREADTH_LLM_PROVIDER`, `BREADTH_LLM_MODEL`, `BREADTH_LLM_BASE_URL`), or with `--llm-provider`, `--llm-model` and `--llm-base-url`:
 
 ```jsonc
 { "llm": { "provider": "anthropic" } }                                   // Claude, uses ANTHROPIC_API_KEY
@@ -191,7 +240,7 @@ Remote providers are announced on the terminal before the first request. Pick on
            "apiKeyEnv": "GATEWAY_KEY", "headers": { "x-team": "$TEAM_ID" } } }   // LiteLLM, Azure, any gateway
 ```
 
-Built-in presets: `anthropic`, `openai`, `gemini`, `ollama`, `openrouter`, `groq`, `together`, `mistral`, `deepseek`, `xai`, `fireworks`, `lmstudio`, `vllm`, `llamacpp` and `openai-compatible`. `noodles llm` lists them with the key each one reads, and `noodles llm check` sends a test prompt to the configured provider. Endpoints on `localhost` count as local and need no key.
+Built-in presets: `anthropic`, `openai`, `gemini`, `ollama`, `openrouter`, `groq`, `together`, `mistral`, `deepseek`, `xai`, `fireworks`, `lmstudio`, `vllm`, `llamacpp` and `openai-compatible`. `breadth llm` lists them with the key each one reads, and `breadth llm check` sends a test prompt to the configured provider. Endpoints on `localhost` count as local and need no key.
 
 ## Using the canvas
 
@@ -216,7 +265,7 @@ Recursion shows as a self-loop. Shared state (module globals, caches) and datast
 
 ![The N+1 finding highlighted on the canvas](docs/img/insights.png)
 
-When a graph is a graph, many problems stop hiding in code and become shapes. noodles runs a set of rules over any flowgraph. Each finding names the nodes, edges and (for runtime findings) the exact trace steps involved. Clicking it in the **Insights** tab opens the right level of the canvas, rings the nodes involved and dims everything else; runtime findings have a **Replay where it happens** button.
+When a graph is a graph, many problems stop hiding in code and become shapes. breadth runs a set of rules over any flowgraph. Each finding names the nodes, edges and (for runtime findings) the exact trace steps involved. Clicking it in the **Insights** tab opens the right level of the canvas, rings the nodes involved and dims everything else; runtime findings have a **Replay where it happens** button.
 
 | Rule | Category | What it looks for | Needs traces? |
 |---|---|---|---|
@@ -237,10 +286,10 @@ When a graph is a graph, many problems stop hiding in code and become shapes. no
 Findings are **signals, not verdicts**. Rules see structure and flow, not the logic inside a function, and "dead" code might be called by a cron job, reflection or another repository you have not collected. Every finding carries a `confidence`.
 
 ```sh
-noodles insights flowgraph.json                 # readable list
-noodles insights flowgraph.json --json          # for tooling
-noodles insights flowgraph.json --fail-on warning   # exit 1 in CI if any warning or critical finding
-noodles insights --list                         # the rules
+breadth insights flowgraph.json                 # readable list
+breadth insights flowgraph.json --json          # for tooling
+breadth insights flowgraph.json --fail-on warning   # exit 1 in CI if any warning or critical finding
+breadth insights --list                         # the rules
 ```
 
 `scan` and `import-traces` store findings in the graph (`insights` in the schema; `--no-insights` to skip). The UI always re-runs the built-in rules on load and keeps findings other tools wrote into the file, so you can add your own rule engines. A rule is a plain object with `run(ctx, thresholds) => Insight[]` in [`insights/src/rules`](insights/src/rules); thresholds can be tuned per rule.
@@ -255,7 +304,7 @@ insights/     rules over any flowgraph (pure TypeScript, runs in the CLI and the
 collectors/   core/ (interface, registry, file walker), code/, otel/, infra/
               browser.ts: the Node-free entry the in-browser repo scanner uses
               netflow/, messaging/, cicd/, org/   (stubs with a spec in their README)
-cli/          the `noodles` command and the local server
+cli/          the `breadth` command and the local server
 ui/           React + React Flow (xyflow) + ELK
 examples/     the shop demo
 site/         the GitHub Pages landing page
@@ -331,7 +380,7 @@ A collector is an object with a name and two functions. It reads something and r
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { parse } from "yaml";
-import { edgeId, SCHEMA_VERSION, type FlowGraph, type FlowNode, type FlowEdge } from "@noodles/schema";
+import { edgeId, SCHEMA_VERSION, type FlowGraph, type FlowNode, type FlowEdge } from "@breadth/schema";
 import type { Collector } from "../core/types.js";
 
 export const composeCollector: Collector = {
@@ -339,7 +388,7 @@ export const composeCollector: Collector = {
   description: "docker-compose services and their links",
   implemented: true,
 
-  // Cheap check so `noodles scan` can pick this collector with zero config.
+  // Cheap check so `breadth scan` can pick this collector with zero config.
   async detect(target) {
     return fs.access(path.join(target, "docker-compose.yml")).then(() => true, () => false);
   },
@@ -419,7 +468,7 @@ To build it locally: `npm run build && npm run demo:build && npm run pages`, the
 npm install
 npm test             # vitest: schema, collectors, view model
 npm run typecheck
-npm run noodles -- scan examples/shop -o /tmp/shop.json   # run the CLI from source (tsx)
+npm run breadth -- scan examples/shop -o /tmp/shop.json   # run the CLI from source (tsx)
 npm run dev -w ui    # UI dev server; put a flowgraph.json in ui/public/ to load it
 ```
 

@@ -1,4 +1,4 @@
-import type { Insight } from "@noodles/schema";
+import type { Insight } from "@breadth/schema";
 import type { Rule } from "../rule.js";
 
 const USE = new Set(["read", "write", "event", "call", "data", "network"]);

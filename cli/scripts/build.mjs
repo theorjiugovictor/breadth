@@ -11,7 +11,7 @@ rmSync(dist, { recursive: true, force: true });
 
 await build({
   entryPoints: [join(cli, "src/main.ts")],
-  outfile: join(dist, "noodles.mjs"),
+  outfile: join(dist, "breadth.mjs"),
   bundle: true,
   platform: "node",
   format: "esm",
@@ -26,8 +26,8 @@ await build({
 
 const ui = join(cli, "..", "ui", "dist");
 if (existsSync(ui)) cpSync(ui, join(dist, "ui"), { recursive: true });
-else console.warn("ui/dist not found: run `npm run build -w ui` first so `noodles serve` has a UI");
-// The editor extension (unsaved edits for live mode), installed by `noodles editor install`.
+else console.warn("ui/dist not found: run `npm run build -w ui` first so `breadth serve` has a UI");
+// The editor extension (unsaved edits for live mode), installed by `breadth editor install`.
 const { buildVsix } = await import("../../scripts/vsix.mjs");
-buildVsix(join(dist, "noodles-live.vsix"));
-console.log("built cli/dist/noodles.mjs and cli/dist/noodles-live.vsix");
+buildVsix(join(dist, "breadth-live.vsix"));
+console.log("built cli/dist/breadth.mjs and cli/dist/breadth-live.vsix");

@@ -1,4 +1,4 @@
-import type { Insight, Step } from "@noodles/schema";
+import type { Insight, Step } from "@breadth/schema";
 import { duration, stepChildren, type Ctx } from "../context.js";
 import type { Rule } from "../rule.js";
 

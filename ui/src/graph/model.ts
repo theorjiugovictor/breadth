@@ -1,4 +1,4 @@
-import type { Execution, FlowEdge, FlowGraph, FlowNode, Step } from "@noodles/schema";
+import type { Execution, FlowEdge, FlowGraph, FlowNode, Step } from "@breadth/schema";
 
 /** Read-only indexes over a flowgraph. Built once per loaded graph. */
 export interface GraphIndex {

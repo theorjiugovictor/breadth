@@ -7,6 +7,8 @@ import { createProvider, noneProvider, resolveSettings } from "./llm/provider.js
 import { hookPayload, hookReply } from "./hook.js";
 import { integrations, writeConfig } from "./connect.js";
 import { runMcp } from "./mcp.js";
+import { diffRefs, renderMarkdown, COMMENT_MARKER } from "./diff.js";
+import { execFileSync } from "node:child_process";
 import { LiveSession, type ActivityEntry } from "./live.js";
 
 let dir: string | undefined;
@@ -24,8 +26,8 @@ describe("LLM providers", () => {
   });
 
   it("layers config, environment and flags", () => {
-    vi.stubEnv("NOODLES_LLM_PROVIDER", "groq");
-    vi.stubEnv("NOODLES_LLM_MODEL", "env-model");
+    vi.stubEnv("BREADTH_LLM_PROVIDER", "groq");
+    vi.stubEnv("BREADTH_LLM_MODEL", "env-model");
     const s = resolveSettings({ provider: "openai", model: "cfg", limit: 5 }, { model: "flag-model" });
     expect(s).toMatchObject({ provider: "groq", model: "flag-model", limit: 5 });
   });
@@ -139,7 +141,7 @@ describe("hookPayload", () => {
 
 describe("connect", () => {
   it("merges hooks idempotently and keeps the user's own", () => {
-    dir = mkdtempSync(path.join(tmpdir(), "noodles-connect-"));
+    dir = mkdtempSync(path.join(tmpdir(), "breadth-connect-"));
     const claude = integrations().find((i) => i.id === "claude")!;
     mkdirSync(path.join(dir, ".claude"));
     writeFileSync(path.join(dir, ".claude/settings.json"), JSON.stringify({ hooks: { PostToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "lint" }] }] }, model: "x" }));
@@ -152,11 +154,11 @@ describe("connect", () => {
     const codex = integrations().find((i) => i.id === "codex")!;
     expect(writeConfig(dir, codex.mcp).status).toBe("written");
     expect(writeConfig(dir, codex.mcp).status).toBe("unchanged");
-    expect(readFileSync(path.join(dir, ".codex/config.toml"), "utf8")).toContain("[mcp_servers.noodles]");
+    expect(readFileSync(path.join(dir, ".codex/config.toml"), "utf8")).toContain("[mcp_servers.breadth]");
   });
 
   it("never writes user-level files or JSON with comments", () => {
-    dir = mkdtempSync(path.join(tmpdir(), "noodles-connect-"));
+    dir = mkdtempSync(path.join(tmpdir(), "breadth-connect-"));
     const windsurf = integrations().find((i) => i.id === "windsurf")!;
     expect(writeConfig(dir, windsurf.mcp).status).toBe("skipped");
     mkdirSync(path.join(dir, ".vscode"));
@@ -167,7 +169,7 @@ describe("connect", () => {
 
 describe("mcp", () => {
   it("answers initialize, lists tools and runs them on a scanned folder", async () => {
-    dir = mkdtempSync(path.join(tmpdir(), "noodles-mcp-"));
+    dir = mkdtempSync(path.join(tmpdir(), "breadth-mcp-"));
     writeFileSync(path.join(dir, "app.py"), "def load(x):\n    return parse(x)\n\ndef parse(x):\n    return x\n");
     const input = new PassThrough();
     const lines: any[] = [];
@@ -176,15 +178,15 @@ describe("mcp", () => {
     send({ id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", clientInfo: { name: "claude-code" } } });
     send({ method: "notifications/initialized" });
     send({ id: 2, method: "tools/list" });
-    send({ id: 3, method: "tools/call", params: { name: "noodles_impact", arguments: { node: "parse" } } });
-    send({ id: 4, method: "tools/call", params: { name: "noodles_report_task", arguments: { summary: "x" } } });
-    send({ id: 6, method: "tools/call", params: { name: "noodles_find", arguments: { query: "pars" } } });
+    send({ id: 3, method: "tools/call", params: { name: "breadth_impact", arguments: { node: "parse" } } });
+    send({ id: 4, method: "tools/call", params: { name: "breadth_report_task", arguments: { summary: "x" } } });
+    send({ id: 6, method: "tools/call", params: { name: "breadth_find", arguments: { query: "pars" } } });
     send({ id: 5, method: "nope" });
     input.end();
     await done;
     const byId = new Map(lines.map((l) => [l.id, l]));
-    expect(byId.get(1).result.serverInfo.name).toBe("noodles");
-    expect(byId.get(2).result.tools.map((t: any) => t.name)).toContain("noodles_report_task");
+    expect(byId.get(1).result.serverInfo.name).toBe("breadth");
+    expect(byId.get(2).result.tools.map((t: any) => t.name)).toContain("breadth_report_task");
     expect(byId.get(3).result.content[0].text).toContain("load");
     expect(byId.get(4).result.content[0].text).toMatch(/not running/);
     expect(byId.get(5).error.code).toBe(-32601);
@@ -196,7 +198,7 @@ describe("mcp", () => {
 describe("LiveSession", () => {
 
   it("rescans and reports what an agent changed", async () => {
-    dir = mkdtempSync(path.join(tmpdir(), "noodles-live-"));
+    dir = mkdtempSync(path.join(tmpdir(), "breadth-live-"));
     writeFileSync(path.join(dir, "app.py"), "def a():\n    return 1\n");
     const live = new LiveSession({ target: dir, collectorOptions: {} });
     await live.start();
@@ -240,5 +242,27 @@ describe("LiveSession", () => {
     } finally {
       live.stop();
     }
+  });
+});
+
+describe("diff", () => {
+  it("compares a git ref with the working tree and renders a PR comment", async () => {
+    dir = mkdtempSync(path.join(tmpdir(), "breadth-diff-"));
+    const git = (...a: string[]) => execFileSync("git", a, { cwd: dir, stdio: "pipe" });
+    git("init", "-q");
+    git("config", "user.email", "t@t");
+    git("config", "user.name", "t");
+    writeFileSync(path.join(dir, "app.py"), "import requests\n\ndef main():\n    return 1\n");
+    git("add", ".");
+    git("commit", "-qm", "base");
+    writeFileSync(path.join(dir, "app.py"), "import requests\n\ndef main():\n    return notify()\n\ndef notify():\n    return requests.post('https://hooks.slack.com/x')\n");
+    const { before, after, report } = await diffRefs({ target: dir, base: "HEAD", collectorOptions: {} });
+    expect(report.changes.map((c) => c.text)).toContain("notify now calls the external API hooks.slack.com (POST /x)");
+    const md = renderMarkdown(report, before, after);
+    expect(md.startsWith(COMMENT_MARKER)).toBe(true);
+    expect(md).toContain("```mermaid");
+    expect(md).toContain("hooks.slack.com");
+    // The base version was read from git, not from the working tree.
+    expect(before.nodes.some((n) => n.name === "notify")).toBe(false);
   });
 });

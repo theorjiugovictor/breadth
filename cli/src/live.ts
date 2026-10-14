@@ -2,9 +2,9 @@ import { watch, writeFileSync, readFileSync, existsSync, type FSWatcher } from "
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import ignore from "ignore";
-import { diffGraphs, isEmptyDiff, mergeGraphs, type FlowGraph, type GraphDiff } from "@noodles/schema";
-import { DEFAULT_EXCLUDES, importOtlp, linkTracesToCode, runCollectors, type CollectorOptions } from "@noodles/collectors";
-import { runInsights } from "@noodles/insights";
+import { diffGraphs, isEmptyDiff, mergeGraphs, type FlowGraph, type GraphDiff } from "@breadth/schema";
+import { DEFAULT_EXCLUDES, importOtlp, linkTracesToCode, runCollectors, type CollectorOptions } from "@breadth/collectors";
+import { runInsights } from "@breadth/insights";
 import { noneProvider, type LLMProvider } from "./llm/provider.js";
 
 type NodeRef = { id: string; name: string; kind: string; file?: string };
@@ -35,7 +35,7 @@ export interface ActivityEntry {
   unsaved?: boolean;
 }
 
-/** What coding-agent hooks send (Claude Code hook JSON is normalised into this by `noodles hook`). */
+/** What coding-agent hooks send (Claude Code hook JSON is normalised into this by `breadth hook`). */
 export interface AgentActivity {
   agent?: string;
   event?: string;

@@ -3,7 +3,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import type { FlowGraph } from "@noodles/schema";
+import type { FlowGraph } from "@breadth/schema";
 import { EXPLAIN_SYSTEM, explainPrompt, noneProvider, type LLMProvider } from "./llm/provider.js";
 import type { LiveSession } from "./live.js";
 
@@ -24,7 +24,7 @@ export function findUiDir(): string {
   const here = path.dirname(fileURLToPath(import.meta.url));
   const candidates = [path.join(here, "ui"), path.join(here, "..", "..", "ui", "dist"), path.join(here, "..", "ui", "dist")];
   const found = candidates.find((d) => existsSync(path.join(d, "index.html")));
-  if (!found) throw new Error("built UI not found. Run `npm run build` in the noodles repo first.");
+  if (!found) throw new Error("built UI not found. Run `npm run build` in the breadth repo first.");
   return found;
 }
 
@@ -43,7 +43,7 @@ export interface ServeOptions {
  * header. Browsers cannot add it cross-origin without a CORS preflight we never answer, so
  * other web pages cannot trigger them against the local server.
  */
-export const LOCAL_HEADER = "x-noodles";
+export const LOCAL_HEADER = "x-breadth";
 
 function json(res: ServerResponse, status: number, body: unknown) {
   res.writeHead(status, { "content-type": TYPES[".json"], "cache-control": "no-store" });
@@ -107,7 +107,7 @@ export async function serve(opts: ServeOptions): Promise<string> {
         }
         case "/api/explain": {
           if (req.headers[LOCAL_HEADER] !== "1") return json(res, 403, { error: `missing ${LOCAL_HEADER} header` });
-          if (llm === noneProvider) return json(res, 400, { error: "no LLM provider configured (see `noodles llm providers`)" });
+          if (llm === noneProvider) return json(res, 400, { error: "no LLM provider configured (see `breadth llm providers`)" });
           const graph = currentGraph();
           const node = graph.nodes.find((n) => n.id === url.searchParams.get("node"));
           if (!node) return json(res, 404, { error: "unknown node" });

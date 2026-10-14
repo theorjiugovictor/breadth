@@ -1,4 +1,4 @@
-import type { Insight, Port } from "@noodles/schema";
+import type { Insight, Port } from "@breadth/schema";
 import type { Rule } from "../rule.js";
 
 type Kind = "number" | "string" | "boolean" | "array" | "object" | "null";

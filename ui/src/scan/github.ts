@@ -1,5 +1,5 @@
 import ignore from "ignore";
-import { DEFAULT_EXCLUDES, langForFile, SERVICE_MANIFESTS } from "@noodles/collectors/browser";
+import { DEFAULT_EXCLUDES, langForFile, SERVICE_MANIFESTS } from "@breadth/collectors/browser";
 
 export interface RepoRef {
   owner: string;

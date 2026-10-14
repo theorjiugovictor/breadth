@@ -1,5 +1,5 @@
 import type { Node } from "web-tree-sitter";
-import type { Port } from "@noodles/schema";
+import type { Port } from "@breadth/schema";
 import { emptyModel, type Def, type FileModel, type Lang } from "./model.js";
 import { argIdentifiers, calleeParts, fingerprint, firstLine, stringLiteral, truncate, typeParts } from "./util.js";
 import { MIN_FINGERPRINT } from "./python.js";

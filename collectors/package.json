@@ -1,5 +1,5 @@
 {
-  "name": "@noodles/collectors",
+  "name": "@breadth/collectors",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -8,7 +8,7 @@
     "./browser": "./src/browser.ts"
   },
   "dependencies": {
-    "@noodles/schema": "*",
+    "@breadth/schema": "*",
     "ignore": "^7.0.5",
     "tree-sitter-wasms": "0.1.13",
     "web-tree-sitter": "0.25.10",

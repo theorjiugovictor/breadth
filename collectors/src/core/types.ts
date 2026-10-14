@@ -1,4 +1,4 @@
-import type { FlowGraph } from "@noodles/schema";
+import type { FlowGraph } from "@breadth/schema";
 
 export interface Logger {
   info(msg: string): void;

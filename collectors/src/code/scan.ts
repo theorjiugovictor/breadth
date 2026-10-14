@@ -1,4 +1,4 @@
-import type { FlowGraph } from "@noodles/schema";
+import type { FlowGraph } from "@breadth/schema";
 import { buildGraph } from "./build.js";
 import type { FileModel } from "./model.js";
 import { getParser, langForFile } from "./parser.js";

@@ -1,5 +1,5 @@
 {
-  "name": "noodles-monorepo",
+  "name": "breadth-monorepo",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -13,8 +13,8 @@
     "build": "npm run build -w ui && npm run build -w cli",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit && npm run typecheck -w ui",
-    "noodles": "tsx cli/src/main.ts",
-    "demo": "npm run demo:build && node cli/dist/noodles.mjs serve examples/shop/flowgraph.json",
+    "breadth": "tsx cli/src/main.ts",
+    "demo": "npm run demo:build && node cli/dist/breadth.mjs serve examples/shop/flowgraph.json",
     "demo:build": "node scripts/build-demo.mjs",
     "pages": "node scripts/build-pages.mjs",
     "screenshots": "node scripts/screenshots.mjs"

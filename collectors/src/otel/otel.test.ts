@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { mergeGraphs, validateGraph } from "@noodles/schema";
+import { mergeGraphs, validateGraph } from "@breadth/schema";
 import { codeCollector } from "../code/index.js";
 import { importOtlp, linkTracesToCode, parseOtlp } from "./index.js";
 

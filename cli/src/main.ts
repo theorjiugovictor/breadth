@@ -3,10 +3,10 @@ import path from "node:path";
 import { parseArgs } from "node:util";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { assertValidGraph, mergeGraphs, validateGraph, type FlowGraph } from "@noodles/schema";
-import { collectors, importOtlp, linkTracesToCode, runCollectors, type Logger } from "@noodles/collectors";
-import { RULES, runInsights } from "@noodles/insights";
-import type { Insight, Severity } from "@noodles/schema";
+import { assertValidGraph, mergeGraphs, validateGraph, type FlowGraph } from "@breadth/schema";
+import { collectors, importOtlp, linkTracesToCode, runCollectors, type Logger } from "@breadth/collectors";
+import { RULES, runInsights, describeChanges, diffGraph, withoutRemoved, type ChangeReport } from "@breadth/insights";
+import type { Insight, Severity } from "@breadth/schema";
 import { loadConfig } from "./config.js";
 import { createProvider, noneProvider, PRESETS, privacyNotice, resolveSettings, summarizeGraph, type LLMProvider } from "./llm/provider.js";
 import { LiveSession } from "./live.js";
@@ -14,33 +14,36 @@ import { LOCAL_HEADER, serve } from "./serve.js";
 import { hookPayload, hookReply } from "./hook.js";
 import { integrations, renderConfig, writeConfig } from "./connect.js";
 import { runMcp } from "./mcp.js";
+import { diffRefs, loadGraph, renderMarkdown, renderText } from "./diff.js";
 
 const VERSION = "0.1.0";
 
-const HELP = `noodles ${VERSION}: turn any codebase or system into an n8n-style canvas
+const HELP = `breadth ${VERSION}: turn any codebase or system into an n8n-style canvas
 
 Usage:
-  noodles scan <path> [--collector code,infra] [-o flowgraph.json] [--config file] [--exclude glob]...
-  noodles import-traces <otlp.json>... [--merge flowgraph.json] [-o out.json]
-  noodles serve [flowgraph.json] [--port 4321] [--host 127.0.0.1] [--no-open]
-  noodles watch [path] [--port 4321] [--traces otlp.json] [-o flowgraph.json] [--llm]   live canvas while you (or an agent) code
-  noodles connect <agent>... [--write]   hooks + MCP for claude, copilot, cursor, gemini, windsurf, antigravity, codex
-  noodles hook [--port 4321] [--agent name]   (run by agent hooks) forward an agent's prompt and edits to \`noodles watch\`
-  noodles mcp [path] [--port 4321]   MCP server (stdio): the graph as tools for any coding agent
-  noodles editor install             editor extension: show unsaved edits live (VS Code, Cursor, Windsurf, Antigravity)
-  noodles llm [check]                list LLM providers / test the configured one
-  noodles insights <flowgraph.json> [--json] [--write] [--fail-on warning|critical] [--rules a,b]
-  noodles validate <flowgraph.json>
-  noodles collectors
+  breadth scan <path> [--collector code,infra] [-o flowgraph.json] [--config file] [--exclude glob]...
+  breadth diff [path] [--base ref] [--head ref] [-o diff.json] [--markdown pr.md] [--fail-on high]   what a change does, in behaviour
+  breadth diff before.json after.json
+  breadth import-traces <otlp.json>... [--merge flowgraph.json] [-o out.json]
+  breadth serve [flowgraph.json] [--port 4321] [--host 127.0.0.1] [--no-open]
+  breadth watch [path] [--port 4321] [--traces otlp.json] [-o flowgraph.json] [--llm]   live canvas while you (or an agent) code
+  breadth connect <agent>... [--write]   hooks + MCP for claude, copilot, cursor, gemini, windsurf, antigravity, codex
+  breadth hook [--port 4321] [--agent name]   (run by agent hooks) forward an agent's prompt and edits to \`breadth watch\`
+  breadth mcp [path] [--port 4321]   MCP server (stdio): the graph as tools for any coding agent
+  breadth editor install             editor extension: show unsaved edits live (VS Code, Cursor, Windsurf, Antigravity)
+  breadth llm [check]                list LLM providers / test the configured one
+  breadth insights <flowgraph.json> [--json] [--write] [--fail-on warning|critical] [--rules a,b]
+  breadth validate <flowgraph.json>
+  breadth collectors
 
 Options:
   -o, --out         output file (scan: flowgraph.json; import-traces: the --merge file)
   -c, --collector   comma-separated collectors (default: auto-detect)
-      --config      config file (default: <path>/noodles.config.json if present)
+      --config      config file (default: <path>/breadth.config.json if present)
       --exclude     extra ignore pattern, gitignore syntax (repeatable)
       --no-external hide third-party packages
       --llm         use the configured LLM: node summaries (scan), narration of changes (watch)
-      --llm-provider, --llm-model, --llm-base-url   override the LLM settings (see \`noodles llm\`)
+      --llm-provider, --llm-model, --llm-base-url   override the LLM settings (see \`breadth llm\`)
       --no-insights do not store insights in the written graph
   -q, --quiet       less output
 `;
@@ -108,7 +111,7 @@ async function cmdScan(args: string[]) {
   if (values["no-external"]) settings.code = { ...(settings.code ?? {}), includeExternal: false };
 
   const start = Date.now();
-  process.stderr.write(`noodles: scanning ${target}\n`);
+  process.stderr.write(`breadth: scanning ${target}\n`);
   const graph = await runCollectors(target, names, {
     exclude: [...(config.exclude ?? []), ...(values.exclude ?? [])],
     include: config.include,
@@ -118,10 +121,10 @@ async function cmdScan(args: string[]) {
 
   if (values.llm) {
     const provider = llmFrom(config, values);
-    if (provider === noneProvider) log.warn("--llm given but no provider configured; see `noodles llm`");
+    if (provider === noneProvider) log.warn("--llm given but no provider configured; see `breadth llm`");
     else {
       const limit = config.llm?.limit ?? 50;
-      process.stderr.write(`noodles: ${privacyNotice(provider, `source excerpts of up to ${limit} functions`)}\n`);
+      process.stderr.write(`breadth: ${privacyNotice(provider, `source excerpts of up to ${limit} functions`)}\n`);
       const n = await summarizeGraph(graph, provider, (file, a, b) => readLines(path.join(target, file), a, b), limit);
       log.info(`llm: summarised ${n} nodes with ${provider.name}`);
     }
@@ -129,8 +132,8 @@ async function cmdScan(args: string[]) {
 
   if (!values["no-insights"]) attachInsights(graph);
   writeGraph(values.out!, graph);
-  process.stderr.write(`noodles: wrote ${values.out} (${graph.nodes.length} nodes, ${graph.edges.length} edges${insightSummary(graph)}) in ${((Date.now() - start) / 1000).toFixed(1)}s\n`);
-  process.stderr.write(`         view it with: noodles serve ${values.out}\n`);
+  process.stderr.write(`breadth: wrote ${values.out} (${graph.nodes.length} nodes, ${graph.edges.length} edges${insightSummary(graph)}) in ${((Date.now() - start) / 1000).toFixed(1)}s\n`);
+  process.stderr.write(`         view it with: breadth serve ${values.out}\n`);
 }
 
 function readLines(file: string, start: number, end: number): string | undefined {
@@ -152,7 +155,7 @@ async function cmdImportTraces(args: string[]) {
       quiet: { type: "boolean", short: "q" },
     },
   });
-  if (!positionals.length) throw new Error("usage: noodles import-traces <otlp.json>... [--merge flowgraph.json] [-o out.json]");
+  if (!positionals.length) throw new Error("usage: breadth import-traces <otlp.json>... [--merge flowgraph.json] [-o out.json]");
   const traces = importOtlp(positionals.map((f) => ({ name: f, text: readFileSync(f, "utf8") })));
   const out = values.out ?? values.merge ?? "flowgraph.json";
   let graph = traces;
@@ -164,7 +167,7 @@ async function cmdImportTraces(args: string[]) {
   assertValidGraph(graph, "merged graph");
   writeGraph(out, graph);
   process.stderr.write(
-    `noodles: imported ${traces.executions?.length ?? 0} traces (${traces.nodes.length} nodes, ${traces.edges.length} edges) into ${out}${insightSummary(graph, true)}\n`,
+    `breadth: imported ${traces.executions?.length ?? 0} traces (${traces.nodes.length} nodes, ${traces.edges.length} edges) into ${out}${insightSummary(graph, true)}\n`,
   );
 }
 
@@ -185,8 +188,8 @@ async function cmdServe(args: string[]) {
   const codeRoot = graph.sources?.find((s) => s.collector === "code" && s.target && existsSync(s.target))?.target ?? process.cwd();
   const llm = llmFrom(loadConfig(codeRoot), values);
   const url = await serve({ graphFile, port: Number(values.port), host: values.host!, open: !values["no-open"], llm });
-  process.stderr.write(`noodles: serving ${graphFile} at ${url}  (Ctrl+C to stop)\n`);
-  if (llm !== noneProvider) process.stderr.write(`noodles: "Explain" uses ${llm.name}${llm.remote ? " (remote: sends the node's source when you click it)" : " (local)"}\n`);
+  process.stderr.write(`breadth: serving ${graphFile} at ${url}  (Ctrl+C to stop)\n`);
+  if (llm !== noneProvider) process.stderr.write(`breadth: "Explain" uses ${llm.name}${llm.remote ? " (remote: sends the node's source when you click it)" : " (local)"}\n`);
 }
 
 async function cmdWatch(args: string[]) {
@@ -194,7 +197,7 @@ async function cmdWatch(args: string[]) {
     args,
     allowPositionals: true,
     options: {
-      port: { type: "string", short: "p", default: process.env.NOODLES_PORT ?? "4321" },
+      port: { type: "string", short: "p", default: process.env.BREADTH_PORT ?? "4321" },
       host: { type: "string", default: "127.0.0.1" },
       "no-open": { type: "boolean" },
       out: { type: "string", short: "o" },
@@ -212,7 +215,7 @@ async function cmdWatch(args: string[]) {
   const llm = llmFrom(config, values);
   const narrate = values.llm ? llm : noneProvider;
   const started = Date.now();
-  process.stderr.write(`noodles: watching ${target}\n`);
+  process.stderr.write(`breadth: watching ${target}\n`);
   const live = new LiveSession({
     target,
     collectors: values.collector?.split(",").map((x) => x.trim()).filter(Boolean) ?? config.collectors,
@@ -225,17 +228,17 @@ async function cmdWatch(args: string[]) {
   await live.start();
   const url = await serve({ live, port: Number(values.port), host: values.host!, open: !values["no-open"], llm });
   process.stderr.write(
-    `noodles: ${live.graph.nodes.length} nodes in ${((Date.now() - started) / 1000).toFixed(1)}s; live canvas at ${url}\n` +
-      `         edits appear as they happen. Coding agent hooks: noodles hook --print-config\n`,
+    `breadth: ${live.graph.nodes.length} nodes in ${((Date.now() - started) / 1000).toFixed(1)}s; live canvas at ${url}\n` +
+      `         edits appear as they happen. Coding agent hooks: breadth hook --print-config\n`,
   );
-  if (narrate !== noneProvider) process.stderr.write(`noodles: ${privacyNotice(narrate, "a structural summary of each change (names and files, no source)")}\n`);
+  if (narrate !== noneProvider) process.stderr.write(`breadth: ${privacyNotice(narrate, "a structural summary of each change (names and files, no source)")}\n`);
 }
 
 async function cmdHook(args: string[]) {
   const { values } = parseArgs({
     args,
     options: {
-      port: { type: "string", short: "p", default: process.env.NOODLES_PORT ?? "4321" },
+      port: { type: "string", short: "p", default: process.env.BREADTH_PORT ?? "4321" },
       agent: { type: "string" },
       file: { type: "string", multiple: true },
       "print-config": { type: "boolean" },
@@ -268,7 +271,7 @@ async function cmdHook(args: string[]) {
       signal: AbortSignal.timeout(1500),
     });
   } catch {
-    /* noodles watch is not running: nothing to do */
+    /* breadth watch is not running: nothing to do */
   }
   process.stdout.write(hookReply(raw, values.agent), () => process.exit(0));
 }
@@ -280,7 +283,7 @@ async function cmdConnect(args: string[]) {
     options: {
       write: { type: "boolean", short: "w" },
       dir: { type: "string", default: "." },
-      port: { type: "string", short: "p", default: process.env.NOODLES_PORT ?? "4321" },
+      port: { type: "string", short: "p", default: process.env.BREADTH_PORT ?? "4321" },
       "no-mcp": { type: "boolean" },
       "no-hooks": { type: "boolean" },
     },
@@ -290,10 +293,10 @@ async function cmdConnect(args: string[]) {
   const aliases: Record<string, string> = { claudecode: "claude", vscode: "copilot", githubcopilot: "copilot", geminicli: "gemini", cascade: "windsurf", openai: "codex" };
   if (!positionals.length) {
     process.stdout.write(
-      `Usage: noodles connect <agent>... [--write] [--port 4321] [--no-mcp] [--no-hooks]\n\n` +
+      `Usage: breadth connect <agent>... [--write] [--port 4321] [--no-mcp] [--no-hooks]\n\n` +
         `Agents: ${all.map((a) => a.id).join(", ")}, all\n\n` +
         `Without --write, prints what to add. With --write, merges it into the project's config files (run it in the project).\n` +
-        `Hooks report the agent's prompts and edits to \`noodles watch\`; the MCP server gives the agent the graph as tools.\n`,
+        `Hooks report the agent's prompts and edits to \`breadth watch\`; the MCP server gives the agent the graph as tools.\n`,
     );
     return;
   }
@@ -315,7 +318,7 @@ async function cmdConnect(args: string[]) {
     }
     for (const n of a.notes) process.stdout.write(`  note: ${n}\n`);
   }
-  process.stdout.write(`\nThen run \`noodles watch${values.port !== "4321" ? ` --port ${values.port}` : ""}\` in the project and let the agent work.\n`);
+  process.stdout.write(`\nThen run \`breadth watch${values.port !== "4321" ? ` --port ${values.port}` : ""}\` in the project and let the agent work.\n`);
 }
 
 const EDITORS = ["code", "code-insiders", "cursor", "windsurf", "antigravity", "codium"];
@@ -323,13 +326,13 @@ const EDITORS = ["code", "code-insiders", "cursor", "windsurf", "antigravity", "
 async function cmdEditor(args: string[]) {
   const { values, positionals } = parseArgs({ args, allowPositionals: true, options: { editor: { type: "string", multiple: true } } });
   const here = path.dirname(fileURLToPath(import.meta.url));
-  const vsix = [path.join(here, "noodles-live.vsix"), path.join(here, "..", "dist", "noodles-live.vsix")].find((f) => existsSync(f));
-  if (!vsix) throw new Error("noodles-live.vsix not found: run `npm run build` in the noodles repo first");
+  const vsix = [path.join(here, "breadth-live.vsix"), path.join(here, "..", "dist", "breadth-live.vsix")].find((f) => existsSync(f));
+  if (!vsix) throw new Error("breadth-live.vsix not found: run `npm run build` in the breadth repo first");
   if (positionals[0] === "path") return void process.stdout.write(`${vsix}\n`);
   if (positionals[0] !== "install") {
     process.stdout.write(
-      `Usage: noodles editor install [--editor code|cursor|windsurf|antigravity]...\n       noodles editor path\n\n` +
-        `Installs the noodles live extension, which sends unsaved edits to \`noodles watch\` so the canvas updates before files are saved.\n`,
+      `Usage: breadth editor install [--editor code|cursor|windsurf|antigravity]...\n       breadth editor path\n\n` +
+        `Installs the breadth live extension, which sends unsaved edits to \`breadth watch\` so the canvas updates before files are saved.\n`,
     );
     return;
   }
@@ -353,11 +356,11 @@ async function cmdMcp(args: string[]) {
     args,
     allowPositionals: true,
     options: {
-      port: { type: "string", short: "p", default: process.env.NOODLES_PORT ?? "4321" },
+      port: { type: "string", short: "p", default: process.env.BREADTH_PORT ?? "4321" },
       config: { type: "string" },
     },
   });
-  const root = path.resolve(positionals[0] ?? process.env.NOODLES_ROOT ?? ".");
+  const root = path.resolve(positionals[0] ?? process.env.BREADTH_ROOT ?? ".");
   const config = loadConfig(root, values.config);
   await runMcp({
     root,
@@ -373,8 +376,8 @@ async function cmdLlm(args: string[]) {
   const settings = resolveSettings(config.llm);
   if (sub === "check") {
     const p = createProvider(settings);
-    if (p === noneProvider) throw new Error("no LLM provider configured (set NOODLES_LLM_PROVIDER or \"llm\" in noodles.config.json)");
-    process.stderr.write(`noodles: ${privacyNotice(p, "a one-line test prompt")}\n`);
+    if (p === noneProvider) throw new Error("no LLM provider configured (set BREADTH_LLM_PROVIDER or \"llm\" in breadth.config.json)");
+    process.stderr.write(`breadth: ${privacyNotice(p, "a one-line test prompt")}\n`);
     const started = Date.now();
     const text = await p.complete({ system: "Reply with exactly: ok", prompt: "Say ok.", maxTokens: 20 });
     process.stdout.write(`${p.name}: ${JSON.stringify(text)} in ${Date.now() - started} ms\n`);
@@ -386,8 +389,8 @@ async function cmdLlm(args: string[]) {
     process.stdout.write(`  ${id.padEnd(18)} ${p.label.padEnd(44)} ${local ? "local " : "remote"}  ${p.keyEnv ? `$${p.keyEnv}` : ""}${p.defaultModel ? `  default model ${p.defaultModel}` : ""}\n`);
   }
   process.stdout.write(
-    `\nConfigure in noodles.config.json:  "llm": { "provider": "anthropic" }\n` +
-      `or per run:  NOODLES_LLM_PROVIDER=ollama NOODLES_LLM_MODEL=qwen2.5-coder noodles scan . --llm\n` +
+    `\nConfigure in breadth.config.json:  "llm": { "provider": "anthropic" }\n` +
+      `or per run:  BREADTH_LLM_PROVIDER=ollama BREADTH_LLM_MODEL=qwen2.5-coder breadth scan . --llm\n` +
       `Any other OpenAI-compatible server or gateway: "provider": "openai-compatible", "baseUrl": "...", "model": "..."\n`,
   );
 }
@@ -405,6 +408,61 @@ function insightSummary(graph: FlowGraph, sentence = false): string {
 
 const SEV_ORDER: Record<Severity, number> = { info: 0, warning: 1, critical: 2 };
 const SEV_MARK: Record<Severity, string> = { critical: "✖", warning: "▲", info: "●" };
+
+async function cmdDiff(args: string[]) {
+  const { values, positionals } = parseArgs({
+    args,
+    allowPositionals: true,
+    options: {
+      base: { type: "string", short: "b" },
+      head: { type: "string" },
+      out: { type: "string", short: "o" },
+      markdown: { type: "string", short: "m" },
+      json: { type: "boolean" },
+      "fail-on": { type: "string" },
+      link: { type: "string" },
+      collector: { type: "string", short: "c" },
+      config: { type: "string" },
+      exclude: { type: "string", multiple: true },
+    },
+  });
+  let before: FlowGraph;
+  let after: FlowGraph;
+  let report: ChangeReport;
+  if (positionals.length === 2 && positionals.every((p) => p.endsWith(".json"))) {
+    before = loadGraph(positionals[0]);
+    after = loadGraph(positionals[1]);
+    report = describeChanges(withoutRemoved(before), withoutRemoved(after), { base: values.base ?? path.basename(positionals[0]), head: values.head ?? path.basename(positionals[1]) });
+  } else {
+    const target = path.resolve(positionals[0] ?? ".");
+    const config = loadConfig(target, values.config);
+    process.stderr.write(`breadth: scanning ${values.base ?? "the merge base"} and ${values.head ?? "the working tree"}…\n`);
+    ({ before, after, report } = await diffRefs({
+      target,
+      base: values.base,
+      head: values.head,
+      collectors: values.collector?.split(",").map((x) => x.trim()).filter(Boolean) ?? config.collectors,
+      collectorOptions: { exclude: [...(config.exclude ?? []), ...(values.exclude ?? [])], include: config.include, settings: config.settings },
+    }));
+  }
+  const md = renderMarkdown(report, before, after, { link: values.link });
+  if (values.out) {
+    writeFileSync(values.out, JSON.stringify(diffGraph(before, after, report)) + "\n");
+    process.stderr.write(`breadth: wrote the diff graph to ${values.out} (open it with \`breadth serve ${values.out}\`)\n`);
+  }
+  if (values.markdown) writeFileSync(values.markdown, md);
+  if (values.json) {
+    const { insightsAddedFull: _a, insightsResolvedFull: _r, ...plain } = report;
+    process.stdout.write(JSON.stringify(plain, null, 2) + "\n");
+  } else if (!values.markdown) process.stdout.write(process.stdout.isTTY ? renderText(report) : md);
+  const failOn = values["fail-on"];
+  if (failOn) {
+    const rank = { high: 0, medium: 1, low: 2 } as const;
+    const limit = rank[failOn as keyof typeof rank];
+    if (limit === undefined) throw new Error("--fail-on takes high, medium or low");
+    if (report.changes.some((c) => rank[c.severity] <= limit)) process.exitCode = 2;
+  }
+}
 
 async function cmdInsights(args: string[]) {
   const { values, positionals } = parseArgs({
@@ -452,7 +510,7 @@ async function cmdInsights(args: string[]) {
 
 function cmdValidate(args: string[]) {
   const file = args[0];
-  if (!file) throw new Error("usage: noodles validate <flowgraph.json>");
+  if (!file) throw new Error("usage: breadth validate <flowgraph.json>");
   const r = validateGraph(JSON.parse(readFileSync(file, "utf8")));
   if (r.valid) {
     process.stdout.write(`${file}: valid\n`);
@@ -481,6 +539,8 @@ async function main(argv: string[]) {
       return cmdInsights(rest);
     case "watch":
       return cmdWatch(rest);
+    case "diff":
+      return cmdDiff(rest);
     case "hook":
       return cmdHook(rest);
     case "connect":
@@ -508,13 +568,13 @@ async function main(argv: string[]) {
   }
 }
 
-// `noodles insights … | head` closes stdout early: that is not an error.
+// `breadth insights … | head` closes stdout early: that is not an error.
 process.stdout.on("error", (err: NodeJS.ErrnoException) => {
   if (err.code === "EPIPE") process.exit(0);
   throw err;
 });
 
 main(process.argv.slice(2)).catch((err: Error) => {
-  process.stderr.write(`noodles: ${err.message}\n`);
+  process.stderr.write(`breadth: ${err.message}\n`);
   process.exit(1);
 });

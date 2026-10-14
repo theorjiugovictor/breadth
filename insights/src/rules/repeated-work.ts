@@ -1,4 +1,4 @@
-import type { Insight } from "@noodles/schema";
+import type { Insight } from "@breadth/schema";
 import { stableJson, type Ctx } from "../context.js";
 import type { Rule } from "../rule.js";
 

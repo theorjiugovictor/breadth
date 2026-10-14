@@ -19,7 +19,7 @@ import {
   Layers,
   type LucideIcon,
 } from "lucide-react";
-import type { EdgeKind, FlowNode, Layer, NodeKind } from "@noodles/schema";
+import type { EdgeKind, FlowNode, Layer, NodeKind } from "@breadth/schema";
 
 export const KIND_LABEL: Record<NodeKind, string> = {
   function: "Function",

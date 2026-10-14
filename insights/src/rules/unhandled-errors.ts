@@ -1,4 +1,4 @@
-import type { Insight, Step } from "@noodles/schema";
+import type { Insight, Step } from "@breadth/schema";
 import type { Rule } from "../rule.js";
 
 /**

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://noodles.dev/schema/flowgraph/1.0.json",
-  "title": "Noodles flowgraph",
+  "$id": "https://breadth.io/schema/flowgraph/1.0.json",
+  "title": "Breadth flowgraph",
   "description": "Universal graph contract. Collectors produce it, the UI only reads it.",
   "type": "object",
   "required": [
@@ -45,9 +45,114 @@
     },
     "insights": {
       "type": "array",
-      "description": "Findings computed over the graph (by noodles rules or other tools). Signals, not verdicts.",
+      "description": "Findings computed over the graph (by breadth rules or other tools). Signals, not verdicts.",
       "items": {
         "$ref": "#/$defs/insight"
+      }
+    },
+    "diff": {
+      "type": "object",
+      "description": "Present when the graph shows what changed between two versions (written by `breadth diff`). Removed nodes and edges are kept, marked with metadata.diff = \"removed\".",
+      "required": [
+        "added",
+        "removed",
+        "changed",
+        "edgesAdded",
+        "edgesRemoved",
+        "changes"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "base": {
+          "type": "string",
+          "description": "The version compared against, e.g. a git ref."
+        },
+        "head": {
+          "type": "string"
+        },
+        "added": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "removed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "changed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "edgesAdded": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "edgesRemoved": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "insightsAdded": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "insightsResolved": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "changes": {
+          "type": "array",
+          "description": "Behaviour-level changes, most important first.",
+          "items": {
+            "type": "object",
+            "required": [
+              "kind",
+              "severity",
+              "text",
+              "nodes"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "type": "string"
+              },
+              "severity": {
+                "enum": [
+                  "high",
+                  "medium",
+                  "low"
+                ]
+              },
+              "text": {
+                "type": "string"
+              },
+              "nodes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "edges": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
       }
     }
   },

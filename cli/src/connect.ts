@@ -3,9 +3,9 @@ import os from "node:os";
 import path from "node:path";
 import { AGENTS, type AgentId } from "./hook.js";
 
-/** How to launch this CLI from an agent's config: `noodles` when linked, else node + this bundle. */
-export function selfCommand(argv1 = process.argv[1] ?? "noodles"): { command: string; args: string[] } {
-  if (path.basename(argv1).replace(/\.(cmd|exe)$/, "") === "noodles") return { command: "noodles", args: [] };
+/** How to launch this CLI from an agent's config: `breadth` when linked, else node + this bundle. */
+export function selfCommand(argv1 = process.argv[1] ?? "breadth"): { command: string; args: string[] } {
+  if (path.basename(argv1).replace(/\.(cmd|exe)$/, "") === "breadth") return { command: "breadth", args: [] };
   return { command: "node", args: [path.resolve(argv1)] };
 }
 
@@ -42,7 +42,7 @@ export function integrations(port?: string): Integration[] {
     {
       id: "claude",
       name: AGENTS.claude,
-      // No --agent: VS Code runs these hooks too, and `noodles hook` tells the two apart.
+      // No --agent: VS Code runs these hooks too, and `breadth hook` tells the two apart.
       hooks: {
         file: ".claude/settings.json",
         json: {
@@ -52,24 +52,24 @@ export function integrations(port?: string): Integration[] {
           },
         },
       },
-      mcp: { file: ".mcp.json", json: { mcpServers: { noodles: stdio } } },
+      mcp: { file: ".mcp.json", json: { mcpServers: { breadth: stdio } } },
       notes: [],
     },
     {
       id: "copilot",
       name: AGENTS.copilot,
-      hooks: { file: ".github/hooks/noodles.json", json: { hooks: { UserPromptSubmit: [cmd(AGENTS.copilot)], PostToolUse: [cmd(AGENTS.copilot)] } } },
-      mcp: { file: ".vscode/mcp.json", json: { servers: { noodles: { type: "stdio", ...stdio } } } },
+      hooks: { file: ".github/hooks/breadth.json", json: { hooks: { UserPromptSubmit: [cmd(AGENTS.copilot)], PostToolUse: [cmd(AGENTS.copilot)] } } },
+      mcp: { file: ".vscode/mcp.json", json: { servers: { breadth: { type: "stdio", ...stdio } } } },
       notes: [
         "Agent hooks are a VS Code preview feature; your organisation may have them turned off.",
-        "VS Code also runs Claude Code hooks from .claude/settings.json; noodles drops the duplicate events.",
+        "VS Code also runs Claude Code hooks from .claude/settings.json; breadth drops the duplicate events.",
       ],
     },
     {
       id: "cursor",
       name: AGENTS.cursor,
       hooks: { file: ".cursor/hooks.json", json: { version: 1, hooks: { beforeSubmitPrompt: [{ command: hook() }], afterFileEdit: [{ command: hook() }] } } },
-      mcp: { file: ".cursor/mcp.json", json: { mcpServers: { noodles: stdio } } },
+      mcp: { file: ".cursor/mcp.json", json: { mcpServers: { breadth: stdio } } },
       notes: [],
     },
     {
@@ -79,19 +79,19 @@ export function integrations(port?: string): Integration[] {
         file: ".gemini/settings.json",
         json: {
           hooks: {
-            BeforeAgent: [{ hooks: [{ ...cmd(), name: "noodles" }] }],
-            AfterTool: [{ matcher: "write_file|replace|edit", hooks: [{ ...cmd(), name: "noodles" }] }],
+            BeforeAgent: [{ hooks: [{ ...cmd(), name: "breadth" }] }],
+            AfterTool: [{ matcher: "write_file|replace|edit", hooks: [{ ...cmd(), name: "breadth" }] }],
           },
         },
       },
-      mcp: { file: ".gemini/settings.json", json: { mcpServers: { noodles: stdio } } },
+      mcp: { file: ".gemini/settings.json", json: { mcpServers: { breadth: stdio } } },
       notes: [],
     },
     {
       id: "windsurf",
       name: AGENTS.windsurf,
       hooks: { file: ".windsurf/hooks.json", json: { hooks: { pre_user_prompt: [{ command: hook() }], post_write_code: [{ command: hook() }] } } },
-      mcp: { file: path.join(os.homedir(), ".codeium/windsurf/mcp_config.json"), user: true, json: { mcpServers: { noodles: stdio } } },
+      mcp: { file: path.join(os.homedir(), ".codeium/windsurf/mcp_config.json"), user: true, json: { mcpServers: { breadth: stdio } } },
       notes: [],
     },
     {
@@ -99,15 +99,15 @@ export function integrations(port?: string): Integration[] {
       name: AGENTS.antigravity,
       hooks: {
         file: ".agents/hooks.json",
-        json: { noodles: { PostToolUse: [{ matcher: "write_to_file|replace_file_content|multi_replace_file_content", hooks: [cmd()] }] } },
+        json: { breadth: { PostToolUse: [{ matcher: "write_to_file|replace_file_content|multi_replace_file_content", hooks: [cmd()] }] } },
       },
       mcp: {
         file: path.join(os.homedir(), ".gemini/antigravity/mcp_config.json"),
         user: true,
-        json: { mcpServers: { noodles: stdio } },
+        json: { mcpServers: { breadth: stdio } },
         note: "or paste it in Agent panel › MCP servers › Manage › View raw config",
       },
-      notes: ["Antigravity has no prompt hook: its tasks reach the feed when the agent calls the noodles MCP tool `noodles_report_task`."],
+      notes: ["Antigravity has no prompt hook: its tasks reach the feed when the agent calls the breadth MCP tool `breadth_report_task`."],
     },
     {
       id: "codex",
@@ -123,7 +123,7 @@ export function integrations(port?: string): Integration[] {
       },
       mcp: {
         file: ".codex/config.toml",
-        toml: `[mcp_servers.noodles]\ncommand = ${JSON.stringify(stdio.command)}\nargs = ${JSON.stringify(stdio.args)}\n`,
+        toml: `[mcp_servers.breadth]\ncommand = ${JSON.stringify(stdio.command)}\nargs = ${JSON.stringify(stdio.args)}\n`,
       },
       notes: ["Codex asks you to trust new hooks: run /hooks in Codex once after connecting."],
     },
@@ -131,7 +131,7 @@ export function integrations(port?: string): Integration[] {
 }
 
 /** Our hook and MCP entries are recognised by this, so connecting twice replaces instead of duplicating. */
-const OURS = /\bnoodles(\.mjs)?"?\s+(hook|mcp)\b/;
+const OURS = /\bbreadth(\.mjs)?"?\s+(hook|mcp)\b/;
 
 function commandsIn(v: unknown, out = new Set<string>()): Set<string> {
   if (Array.isArray(v)) v.forEach((x) => commandsIn(x, out));
@@ -166,7 +166,7 @@ export function writeConfig(dir: string, cf: ConfigFile): WriteResult {
   const before = existsSync(file) ? readFileSync(file, "utf8") : undefined;
   let after: string;
   if (cf.toml) {
-    if (before?.includes("[mcp_servers.noodles]")) return { file, status: "unchanged" };
+    if (before?.includes("[mcp_servers.breadth]")) return { file, status: "unchanged" };
     after = (before ? before.replace(/\n*$/, "\n\n") : "") + cf.toml;
   } else {
     let parsed: unknown = {};

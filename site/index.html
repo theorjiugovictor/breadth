@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>noodles: see how your system flows</title>
-    <meta name="description" content="noodles turns any codebase, trace and infrastructure into an n8n-style canvas. Click a node to see what goes in and what comes out." />
+    <title>breadth: understand what your agents built</title>
+    <meta name="description" content="The understanding layer for AI-written systems. breadth maps what your code actually does and shows every pull request as a change in behaviour." />
     <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
-    <meta property="og:title" content="noodles: see how your system flows" />
+    <meta property="og:title" content="breadth: see how your system flows" />
     <meta property="og:description" content="An n8n-style canvas for any codebase or distributed system." />
     <meta property="og:image" content="assets/hero-light.png" />
     <style>
@@ -487,6 +487,76 @@
         color: #8b919d;
       }
 
+      .split {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 40px;
+        align-items: center;
+      }
+      .pr-split {
+        grid-template-columns: 2fr 3fr;
+        margin-top: 28px;
+      }
+      .debt-cards {
+        display: grid;
+        gap: 12px;
+      }
+      .debt-card {
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 16px 18px;
+        background: var(--bg-2);
+        display: grid;
+        gap: 4px;
+      }
+      .debt-card span {
+        color: var(--text-2);
+      }
+      .pr-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        display: grid;
+        gap: 10px;
+      }
+      .pr-list li {
+        line-height: 1.5;
+        padding-left: 20px;
+        position: relative;
+      }
+      .pr-list .dot {
+        position: absolute;
+        left: 2px;
+        top: 0.55em;
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+      }
+      .pr-list .pr-yaml {
+        padding-left: 0;
+      }
+      .pr-list .dot.hi {
+        background: #e5484d;
+      }
+      .pr-list .dot.md {
+        background: #f59e0b;
+      }
+      .pr-list .pr-yaml pre {
+        margin: 8px 0 0;
+        padding: 12px 14px;
+        border-radius: 12px;
+        background: var(--code-bg);
+        color: var(--code-text);
+        font-family: var(--mono);
+        font-size: 12.5px;
+        overflow-x: auto;
+      }
+      @media (max-width: 860px) {
+        .split,
+        .pr-split {
+          grid-template-columns: 1fr;
+        }
+      }
       .final {
         text-align: center;
         padding: 110px 0 96px;
@@ -534,11 +604,9 @@
         <a class="logo" href="./">
           <svg viewBox="0 0 32 32" aria-hidden="true">
             <rect width="32" height="32" rx="8" fill="#ff6d5a" />
-            <path d="M7 11c5 0 5 10 10 10s4-10 8-10" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" />
-            <circle cx="7" cy="11" r="2.5" fill="#fff" />
-            <circle cx="25" cy="11" r="2.5" fill="#fff" />
+            <path d="M8 16 24 8M8 16h16M8 16l16 8" stroke="#fff" stroke-width="2.4" stroke-linecap="round" fill="none"/><circle cx="8" cy="16" r="3.4" fill="#fff"/><circle cx="24" cy="8" r="2.6" fill="#fff"/><circle cx="24" cy="16" r="2.6" fill="#fff"/><circle cx="24" cy="24" r="2.6" fill="#fff"/>
           </svg>
-          noodles
+          breadth
         </a>
         <div class="links">
           <a href="#features" class="hide-sm">Features</a>
@@ -554,9 +622,9 @@
 
     <header class="hero">
       <div class="wrap">
-        <a class="pill" href="app/"><b>v0.1</b> Open the live demo, no install needed →</a>
-        <h1>See how your system <span class="accent">flows</span>.</h1>
-        <p class="lead">noodles turns any codebase, trace and infrastructure into an n8n-style canvas, and points out the N+1 queries, dead code and risky data flows hiding in it.</p>
+        <a class="pill" href="app/?graph=graphs/shop-pr.json"><b>New</b> Graph diffs on pull requests: see one →</a>
+        <h1>Understand what your agents <span class="accent">built</span>.</h1>
+        <p class="lead">Agents write code faster than anyone can read it. breadth maps what your system actually does, and shows every change as a change in behaviour, so review is judging intent, not reading 2,000 lines.</p>
         <form class="scan" id="scan" action="app/" method="get" autocomplete="off">
           <svg class="gh" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 0-.8.4-1.3.7-1.6-2.7-.3-5.5-1.3-5.5-6 0-1.2.5-2.3 1.3-3.1-.2-.4-.6-1.6 0-3.2 0 0 1-.3 3.4 1.2a11.5 11.5 0 0 1 6 0C17.3 4.7 18.3 5 18.3 5c.7 1.6.2 2.8.1 3.2.8.8 1.3 1.9 1.3 3.1 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .5Z" /></svg>
           <input name="repo" id="repo" placeholder="github.com/owner/repo" aria-label="Public GitHub repository" spellcheck="false" required />
@@ -581,7 +649,7 @@
         </div>
         <div>
           <div class="install">
-            <span><span class="p">$</span> noodles scan . &amp;&amp; noodles serve</span>
+            <span><span class="p">$</span> breadth scan . &amp;&amp; breadth serve</span>
             <button id="copy" type="button">Copy</button>
           </div>
           <div style="margin-top: 10px; font-size: 13.5px; color: var(--text-3)">
@@ -589,15 +657,54 @@
           </div>
         </div>
         <a class="shot" href="app/" style="display: block" aria-label="Open the live demo">
-          <img class="light-img" src="assets/hero-light.png" alt="The noodles canvas replaying a checkout trace across services" width="1600" height="1000" />
+          <img class="light-img" src="assets/hero-light.png" alt="The breadth canvas replaying a checkout trace across services" width="1600" height="1000" />
           <img class="dark-img" src="assets/hero-dark.png" alt="" width="1600" height="1000" loading="lazy" />
         </a>
       </div>
     </header>
 
+    <section id="debt">
+      <div class="wrap split">
+        <div>
+          <div class="eyebrow">Comprehension debt</div>
+          <h2>Code that works, ships, and nobody can explain.</h2>
+          <p class="sub">Writing code used to be the slow part, so understanding kept pace. Now every merge adds code faster than the team's mental model can follow. The gap compounds like tech debt and stays invisible until an incident.</p>
+          <p class="sub">breadth is the understanding layer: one map of calls, data, endpoints, messages and infrastructure, kept current while you and your agents work.</p>
+        </div>
+        <div class="debt-cards">
+          <div class="debt-card"><b>For reviewers</b><span>A pull request as a picture of what changed in behaviour.</span></div>
+          <div class="debt-card"><b>For agents</b><span>Ground truth over MCP: what depends on this, and what did my change do.</span></div>
+          <div class="debt-card"><b>For teams</b><span>A live canvas while Claude Code, Copilot, Cursor, Gemini, Windsurf, Antigravity or Codex work.</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="pr">
+      <div class="wrap">
+        <div class="eyebrow">Graph diffs on every pull request</div>
+        <h2>Review what the change does, not 40 files.</h2>
+        <p class="sub">breadth scans the base and the head of a pull request and comments with the behaviour that changed, worst first, with a picture.</p>
+        <div class="split pr-split">
+          <ul class="pr-list">
+            <li><span class="dot hi"></span><code>charge</code> no longer calls <code>risk_score</code>: a check was removed</li>
+            <li><span class="dot hi"></span><code>mark_refunded</code> now writes to postgresql (UPDATE orders)</li>
+            <li><span class="dot hi"></span><code>create_refund</code> now calls api.stripe.com</li>
+            <li><span class="dot hi"></span><code>refund_orders</code> now reads the database once per order, in a loop</li>
+            <li><span class="dot md"></span>new endpoint POST /orders/refunds</li>
+            <li class="pr-yaml"><pre><code>- uses: actions/checkout@v4
+  with: { fetch-depth: 0 }
+- uses: theorjiugovictor/noodles@main</code></pre></li>
+          </ul>
+          <a class="shot" href="app/?graph=graphs/shop-pr.json" style="display: block" aria-label="Open the pull request demo">
+            <img src="assets/diff.png" alt="A pull request on the breadth canvas: the removed fraud check highlighted" width="1600" height="1000" loading="lazy" />
+          </a>
+        </div>
+      </div>
+    </section>
+
     <section id="features">
       <div class="wrap">
-        <div class="eyebrow">Why noodles</div>
+        <div class="eyebrow">Why breadth</div>
         <h2>One canvas, from org chart to function call.</h2>
         <p class="sub">Every collector writes the same simple graph format. The canvas only reads that format, so new sources show up without UI changes.</p>
         <div class="grid">
@@ -641,7 +748,7 @@
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.9 19.1a10 10 0 0 1 0-14.2M19.1 4.9a10 10 0 0 1 0 14.2M7.8 16.2a6 6 0 0 1 0-8.4M16.2 7.8a6 6 0 0 1 0 8.4" /><circle cx="12" cy="12" r="2" /></svg>
             </div>
             <h3>Watch your agent build</h3>
-            <p>Run <code>noodles watch</code> while Claude Code, Copilot, Cursor, Gemini, Windsurf, Antigravity or Codex works. New and changed functions light up as they are written, even before they are saved, next to the task that caused them.</p>
+            <p>Run <code>breadth watch</code> while Claude Code, Copilot, Cursor, Gemini, Windsurf, Antigravity or Codex works. New and changed functions light up as they are written, even before they are saved, next to the task that caused them.</p>
           </div>
         </div>
 
@@ -671,20 +778,20 @@
             <div class="n">01</div>
             <h3>Scan your code and infra</h3>
             <p>Python and TypeScript via tree-sitter, plus Terraform and Kubernetes. No config needed.</p>
-            <pre>noodles scan . <span class="c"># → flowgraph.json</span></pre>
+            <pre>breadth scan . <span class="c"># → flowgraph.json</span></pre>
           </div>
           <div class="step">
             <div class="n">02</div>
             <h3>Add real traffic</h3>
             <p>Merge exported OpenTelemetry traces. Spans link to the functions that produced them.</p>
-            <pre>noodles import-traces otlp.json \
+            <pre>breadth import-traces otlp.json \
   --merge flowgraph.json</pre>
           </div>
           <div class="step">
             <div class="n">03</div>
             <h3>Open the canvas</h3>
             <p>Search, filter by layer, drill in, and replay executions step by step.</p>
-            <pre>noodles serve <span class="c"># opens the UI</span></pre>
+            <pre>breadth serve <span class="c"># opens the UI</span></pre>
           </div>
         </div>
       </div>
@@ -692,10 +799,11 @@
 
     <div class="final">
       <div class="wrap">
-        <h2>Untangle your system.</h2>
-        <p class="sub" style="margin: 0 auto 30px">Try the demo: a small shop with four services, Postgres, Kafka, Terraform, Kubernetes and two recorded checkouts.</p>
+        <h2>Pay down comprehension debt.</h2>
+        <p class="sub" style="margin: 0 auto 30px">See an agent-written pull request as breadth shows it, or explore a small shop with four services, Postgres, Kafka, Terraform, Kubernetes and two recorded checkouts.</p>
         <div class="ctas">
-          <a class="btn primary" href="app/">Open live demo</a>
+          <a class="btn primary" href="app/?graph=graphs/shop-pr.json">See a PR diff</a>
+          <a class="btn ghost" href="app/?graph=graphs/shop.json">Explore the shop</a>
           <a class="btn ghost" href="https://github.com/theorjiugovictor/noodles#write-a-collector">Write a collector</a>
         </div>
       </div>
@@ -703,7 +811,7 @@
 
     <footer>
       <div class="wrap">
-        <span>noodles · MIT licensed · runs locally</span>
+        <span>breadth · MIT licensed · runs locally</span>
         <span><a href="app/">Demo</a> · <a href="https://github.com/theorjiugovictor/noodles">GitHub</a> · <a href="https://github.com/theorjiugovictor/noodles/blob/main/schema/flowgraph.schema.json">Schema</a></span>
       </div>
     </footer>
@@ -712,20 +820,20 @@
       (function () {
         var root = document.documentElement;
         try {
-          var saved = localStorage.getItem("noodles-theme");
+          var saved = localStorage.getItem("breadth-theme");
           if (saved) root.dataset.theme = saved;
         } catch (e) {}
         document.getElementById("theme").addEventListener("click", function () {
           var dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
           root.dataset.theme = dark ? "light" : "dark";
           try {
-            localStorage.setItem("noodles-theme", root.dataset.theme);
+            localStorage.setItem("breadth-theme", root.dataset.theme);
           } catch (e) {}
         });
         document.getElementById("copy").addEventListener("click", function (e) {
           var b = e.currentTarget;
           navigator.clipboard &&
-            navigator.clipboard.writeText("noodles scan . && noodles serve").then(function () {
+            navigator.clipboard.writeText("breadth scan . && breadth serve").then(function () {
               b.textContent = "Copied";
               setTimeout(function () {
                 b.textContent = "Copy";

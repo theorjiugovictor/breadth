@@ -1,4 +1,4 @@
-import type { FlowGraph, Insight, Severity } from "@noodles/schema";
+import type { FlowGraph, Insight, Severity } from "@breadth/schema";
 import { Ctx } from "./context.js";
 import type { Rule, RuleOptions } from "./rule.js";
 import { dataExposure } from "./rules/data-exposure.js";
@@ -18,6 +18,7 @@ export type { Rule, RuleOptions } from "./rule.js";
 export { Ctx } from "./context.js";
 export { sensitiveFields } from "./rules/data-exposure.js";
 export { expectedKinds } from "./rules/contract-drift.js";
+export { describeChanges, diffGraph, withoutRemoved, type ChangeReport } from "./changes.js";
 
 export const RULES: Rule[] = [
   nPlusOne,
@@ -55,7 +56,7 @@ export function runInsights(graph: FlowGraph, opts: InsightOptions = {}): Insigh
       found = rule.run(ctx, opts.thresholds?.[rule.id] ?? {});
     } catch (err) {
       // A broken rule must never break the canvas.
-      console.warn(`noodles insights: rule ${rule.id} failed: ${(err as Error).message}`);
+      console.warn(`breadth insights: rule ${rule.id} failed: ${(err as Error).message}`);
       continue;
     }
     for (const i of found) {

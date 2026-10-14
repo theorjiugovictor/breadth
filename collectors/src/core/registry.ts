@@ -1,4 +1,4 @@
-import { assertValidGraph, mergeGraphs, type FlowGraph } from "@noodles/schema";
+import { assertValidGraph, mergeGraphs, type FlowGraph } from "@breadth/schema";
 import { codeCollector } from "../code/index.js";
 import { infraCollector } from "../infra/index.js";
 import { otelCollector } from "../otel/index.js";

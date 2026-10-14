@@ -1,4 +1,4 @@
-import type { FlowGraph, FlowNode } from "@noodles/schema";
+import type { FlowGraph, FlowNode } from "@breadth/schema";
 
 /**
  * The single seam for optional LLM features: node summaries, "explain this", and live
@@ -204,9 +204,9 @@ export function resolveSettings(config: LLMSettings | undefined, flags: { provid
   const env = process.env;
   return {
     ...(config ?? {}),
-    ...(env.NOODLES_LLM_PROVIDER ? { provider: env.NOODLES_LLM_PROVIDER } : {}),
-    ...(env.NOODLES_LLM_MODEL ? { model: env.NOODLES_LLM_MODEL } : {}),
-    ...(env.NOODLES_LLM_BASE_URL ? { baseUrl: env.NOODLES_LLM_BASE_URL } : {}),
+    ...(env.BREADTH_LLM_PROVIDER ? { provider: env.BREADTH_LLM_PROVIDER } : {}),
+    ...(env.BREADTH_LLM_MODEL ? { model: env.BREADTH_LLM_MODEL } : {}),
+    ...(env.BREADTH_LLM_BASE_URL ? { baseUrl: env.BREADTH_LLM_BASE_URL } : {}),
     ...(flags.provider ? { provider: flags.provider } : {}),
     ...(flags.model ? { model: flags.model } : {}),
     ...(flags.baseUrl ? { baseUrl: flags.baseUrl } : {}),
@@ -220,7 +220,7 @@ export function createProvider(settings: LLMSettings | undefined): LLMProvider {
   if (!preset) throw new Error(`unknown LLM provider "${settings?.provider}". Known: none, ${Object.keys(PRESETS).join(", ")}`);
   const s = settings!;
   const model = s.model ?? preset.defaultModel;
-  if (!model) throw new Error(`LLM provider "${id}" needs a model: set "llm": {"model": "..."} in noodles.config.json, NOODLES_LLM_MODEL, or --llm-model`);
+  if (!model) throw new Error(`LLM provider "${id}" needs a model: set "llm": {"model": "..."} in breadth.config.json, BREADTH_LLM_MODEL, or --llm-model`);
   const base = s.baseUrl ?? preset.baseUrl;
   if (!base) throw new Error(`LLM provider "${id}" needs a baseUrl (the OpenAI-compatible endpoint, e.g. http://localhost:4000/v1)`);
   const keyEnv = s.apiKeyEnv ?? preset.keyEnv ?? "";

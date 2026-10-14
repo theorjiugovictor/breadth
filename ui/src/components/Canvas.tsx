@@ -13,7 +13,7 @@ import {
 } from "@xyflow/react";
 import { layoutView, handleId, type Positioned } from "../graph/layout";
 import type { View } from "../graph/view";
-import type { Severity } from "@noodles/schema";
+import type { Severity } from "@breadth/schema";
 import { EDGE_HEX, nodeVisual } from "../graph/visual";
 import { NodeCard, type CardData } from "./NodeCard";
 import { FlowEdge, type EdgeData } from "./FlowEdge";
@@ -47,7 +47,9 @@ interface Props {
   /** Insight counts per graph node (map mode badges). */
   flags?: Map<string, { count: number; severity: Severity }>;
   /** Live mode: graph nodes that just appeared or changed. */
-  marks?: Map<string, "new" | "edited">;
+  marks?: Map<string, "new" | "edited" | "removed">;
+  /** Diff mode: edges added or removed by the change. */
+  edgeMarks?: Map<string, "added" | "removed">;
   /** Live mode: keep the viewport when the same level is re-laid out after an update. */
   live?: boolean;
   onSelect: (id: string | undefined) => void;
@@ -56,7 +58,7 @@ interface Props {
 
 const SEV_RANK: Record<Severity, number> = { critical: 3, warning: 2, info: 1 };
 
-export function Canvas({ view, selected, trace, theme, centerOn, highlight, flags, marks, live, onSelect, onDrill }: Props) {
+export function Canvas({ view, selected, trace, theme, centerOn, highlight, flags, marks, edgeMarks, live, onSelect, onDrill }: Props) {
   const [positions, setPositions] = useState<Map<string, Positioned>>(new Map());
   const [layoutKey, setLayoutKey] = useState(0);
   const rf = useReactFlow();
@@ -126,10 +128,11 @@ export function Canvas({ view, selected, trace, theme, centerOn, highlight, flag
         severity: cur && SEV_RANK[cur.severity] > SEV_RANK[f.severity] ? cur.severity : f.severity,
       });
     }
-    const changed = new Map<string, "new" | "edited">();
+    const changed = new Map<string, "new" | "edited" | "removed">();
     for (const [id, kind] of marks ?? []) {
       const r = view.repOf(id);
-      if (r && changed.get(r) !== "new") changed.set(r, r === id ? kind : "edited");
+      if (!r || changed.get(r) === "new" || (changed.get(r) === "removed" && r === id)) continue;
+      changed.set(r, r === id ? kind : "edited");
     }
     return { active, visited, runs, errors, hl, flagged, changed };
   }, [trace, view, highlight, flags, marks]);
@@ -170,7 +173,9 @@ export function Canvas({ view, selected, trace, theme, centerOn, highlight, flag
           (e.edgeIds.some((id) => highlight.edges.has(id)) || (!highlight.edges.size && overlay.hl.has(e.source) && overlay.hl.has(e.target)));
         const traversed = (!!trace && e.edgeIds.some((id) => trace.traversedEdges.has(id))) || flaggedEdge;
         const current = !!trace?.currentEdge && e.edgeIds.includes(trace.currentEdge);
-        const data: EdgeData = { e, traversed, showLabel };
+        const marksOf = edgeMarks ? e.edgeIds.map((id) => edgeMarks.get(id)) : [];
+        const diff = marksOf.includes("added") ? "added" : marksOf.length && marksOf.every((m) => m === "removed") ? "removed" : undefined;
+        const data: EdgeData = { e, traversed, showLabel, diff };
         const color = traversed ? "#ff6d5a" : hex[e.kind];
         return {
           id: e.id,
@@ -185,7 +190,7 @@ export function Canvas({ view, selected, trace, theme, centerOn, highlight, flag
           zIndex: traversed ? 2 : 0,
         } satisfies Edge;
       });
-  }, [view, positions, trace, theme, highlight, overlay]);
+  }, [view, positions, trace, theme, highlight, overlay, edgeMarks]);
 
   const onNodesChange = useCallback((changes: NodeChange[]) => {
     setPositions((prev) => {

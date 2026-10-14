@@ -1,4 +1,4 @@
-import { edgeId, type EdgeKind, type FlowEdge, type FlowNode, type Layer, type NodeKind } from "@noodles/schema";
+import { edgeId, type EdgeKind, type FlowEdge, type FlowNode, type Layer, type NodeKind } from "@breadth/schema";
 
 /** A resource normalised from state (show -json / raw tfstate) or plan JSON. */
 interface TfResource {

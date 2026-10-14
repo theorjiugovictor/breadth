@@ -1,4 +1,4 @@
-import type { Port } from "@noodles/schema";
+import type { Port } from "@breadth/schema";
 
 export type Lang = "python" | "typescript" | "tsx" | "javascript";
 

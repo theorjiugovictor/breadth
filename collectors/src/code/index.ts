@@ -1,6 +1,6 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import type { FlowGraph } from "@noodles/schema";
+import type { FlowGraph } from "@breadth/schema";
 import type { Collector, CollectorOptions } from "../core/types.js";
 import { isDirectory, walkFiles } from "../core/walk.js";
 import "./parser-node.js";

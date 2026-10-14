@@ -1,12 +1,13 @@
 import path from "node:path";
 import { createInterface } from "node:readline";
-import type { FlowEdge, FlowGraph, FlowNode, Insight } from "@noodles/schema";
-import { runCollectors, type CollectorOptions } from "@noodles/collectors";
-import { runInsights } from "@noodles/insights";
+import type { FlowEdge, FlowGraph, FlowNode, Insight } from "@breadth/schema";
+import { runCollectors, type CollectorOptions } from "@breadth/collectors";
+import { runInsights } from "@breadth/insights";
 import { AGENTS } from "./hook.js";
+import { diffRefs } from "./diff.js";
 
 /**
- * `noodles mcp`: a Model Context Protocol server (stdio) for any coding agent.
+ * `breadth mcp`: a Model Context Protocol server (stdio) for any coding agent.
  *
  * Agents get the graph as tools (find, callers and callees, impact of a change, insights),
  * and can report what they are working on to the live canvas. MCP only hears from an agent
@@ -34,6 +35,7 @@ interface Tool {
 interface Ctx {
   graph: () => Promise<{ graph: FlowGraph; live: boolean }>;
   report: (summary: string, files: string[]) => Promise<boolean>;
+  changes: (base?: string) => Promise<string>;
 }
 
 const schema = (properties: Record<string, unknown>, required: string[] = []) => ({ type: "object", properties, required, additionalProperties: false });
@@ -84,9 +86,18 @@ function insightLine(i: Insight, byId: Map<string, FlowNode>): string {
 
 const TOOLS: Tool[] = [
   {
-    name: "noodles_report_task",
+    name: "breadth_changes",
     description:
-      "Tell the developer what you are about to work on. Call this once at the start of every task with a one-line summary, and again when the plan changes. It shows up on the live noodles canvas next to the code you change. Cheap and safe: it never fails the task.",
+      "What your uncommitted and committed changes do in behaviour, compared with a git ref (default: the merge base with the main branch): new database writes, new external API calls, new endpoints, removed call paths, changed signatures and their callers, new loops doing I/O, new findings. Call it before you say a task is done, and mention anything surprising to the user.",
+    inputSchema: schema({ base: { type: "string", description: "Git ref to compare with, e.g. HEAD, main, origin/main. Default: merge base with the main branch." } }),
+    async run(args, ctx) {
+      return ctx.changes(args.base ? String(args.base) : undefined);
+    },
+  },
+  {
+    name: "breadth_report_task",
+    description:
+      "Tell the developer what you are about to work on. Call this once at the start of every task with a one-line summary, and again when the plan changes. It shows up on the live breadth canvas next to the code you change. Cheap and safe: it never fails the task.",
     inputSchema: schema(
       {
         summary: { type: "string", description: "One line: what you are doing and why, e.g. 'Add a cancel endpoint that refunds the order'." },
@@ -96,11 +107,11 @@ const TOOLS: Tool[] = [
     ),
     async run(args, ctx) {
       const ok = await ctx.report(String(args.summary ?? "").slice(0, 500), (args.files as string[] | undefined) ?? []);
-      return ok ? "Shown on the live canvas." : "Noted (noodles watch is not running, so nothing is shown live).";
+      return ok ? "Shown on the live canvas." : "Noted (breadth watch is not running, so nothing is shown live).";
     },
   },
   {
-    name: "noodles_overview",
+    name: "breadth_overview",
     description: "Summary of the codebase graph: top-level systems, services and folders, node counts, and the most important insights. Use it to orient yourself in an unfamiliar repository.",
     inputSchema: schema({}),
     async run(_args, ctx) {
@@ -126,8 +137,8 @@ const TOOLS: Tool[] = [
     },
   },
   {
-    name: "noodles_find",
-    description: "Find functions, classes, files, endpoints, datastores or services by name or path. Returns ids to use with the other noodles tools.",
+    name: "breadth_find",
+    description: "Find functions, classes, files, endpoints, datastores or services by name or path. Returns ids to use with the other breadth tools.",
     inputSchema: schema({ query: { type: "string" }, limit: { type: "number", description: "Default 20." } }, ["query"]),
     async run(args, ctx) {
       const { graph } = await ctx.graph();
@@ -136,13 +147,13 @@ const TOOLS: Tool[] = [
     },
   },
   {
-    name: "noodles_node",
-    description: "Everything noodles knows about one node: where it lives, inputs and outputs, what calls it, what it calls, data it reads or writes, and insights about it. Accepts an id or a name.",
+    name: "breadth_node",
+    description: "Everything breadth knows about one node: where it lives, inputs and outputs, what calls it, what it calls, data it reads or writes, and insights about it. Accepts an id or a name.",
     inputSchema: schema({ node: { type: "string", description: "Node id or name." } }, ["node"]),
     async run(args, ctx) {
       const { graph: g } = await ctx.graph();
       const n = resolveNode(g, String(args.node ?? ""));
-      if (!n) return "Unknown node. Use noodles_find first.";
+      if (!n) return "Unknown node. Use breadth_find first.";
       const byId = new Map(g.nodes.map((x) => [x.id, x]));
       const { incoming, outgoing } = edgeIndex(g);
       const chain: string[] = [];
@@ -174,14 +185,14 @@ const TOOLS: Tool[] = [
     },
   },
   {
-    name: "noodles_impact",
+    name: "breadth_impact",
     description:
       "What could break if this node changes: everything that calls it or reads its data, directly or through other nodes (up to `depth` hops), plus the endpoints and services those belong to. Use before changing a function's signature or behaviour.",
     inputSchema: schema({ node: { type: "string" }, depth: { type: "number", description: "Hops to follow, default 3, max 6." } }, ["node"]),
     async run(args, ctx) {
       const { graph: g } = await ctx.graph();
       const n = resolveNode(g, String(args.node ?? ""));
-      if (!n) return "Unknown node. Use noodles_find first.";
+      if (!n) return "Unknown node. Use breadth_find first.";
       const byId = new Map(g.nodes.map((x) => [x.id, x]));
       const { incoming } = edgeIndex(g);
       const depth = Math.min(6, Math.max(1, Number(args.depth ?? 3)));
@@ -209,7 +220,7 @@ const TOOLS: Tool[] = [
     },
   },
   {
-    name: "noodles_insights",
+    name: "breadth_insights",
     description: "Problems found in the graph (N+1 queries, repeated work, dead code, duplicate logic, unhandled errors, data sent to third parties, ...), optionally only for a file or folder.",
     inputSchema: schema({
       path: { type: "string", description: "Only insights about nodes in this file or folder." },
@@ -248,13 +259,20 @@ export async function runMcp(opts: McpOptions): Promise<void> {
   let local: { graph: FlowGraph; at: number } | undefined;
 
   const ctx: Ctx = {
+    async changes(base) {
+      const { report } = await diffRefs({ target: opts.root, base, collectorOptions: { ...opts.collectorOptions, log: undefined } });
+      const c = report.counts;
+      const head = `Compared ${report.base} with the working tree: +${c.functionsAdded} −${c.functionsRemoved} ~${c.functionsChanged} functions, +${c.edgesAdded} −${c.edgesRemoved} connections.`;
+      if (!report.changes.length) return `${head}\nNo behaviour changes (same calls, data access and endpoints).`;
+      return [head, "", ...report.changes.map((x) => `- [${x.severity}] ${x.text}`)].join("\n");
+    },
     async graph() {
       // Prefer the live session (always current); otherwise scan here, cached for a few seconds.
       try {
         const res = await fetch(`${base}/flowgraph.json`, { signal: AbortSignal.timeout(800) });
         if (res.ok) return { graph: (await res.json()) as FlowGraph, live: true };
       } catch {
-        /* no noodles watch */
+        /* no breadth watch */
       }
       if (!local || Date.now() - local.at > 5000) {
         const graph = await runCollectors(opts.root, undefined, { ...opts.collectorOptions, log: undefined });
@@ -267,7 +285,7 @@ export async function runMcp(opts: McpOptions): Promise<void> {
       try {
         const res = await fetch(`${base}/api/activity`, {
           method: "POST",
-          headers: { "content-type": "application/json", "x-noodles": "1" },
+          headers: { "content-type": "application/json", "x-breadth": "1" },
           body: JSON.stringify({ agent, event: "mcp", prompt: summary, files: files.map((f) => path.resolve(opts.root, f)) }),
           signal: AbortSignal.timeout(1500),
         });
@@ -299,9 +317,9 @@ export async function runMcp(opts: McpOptions): Promise<void> {
         return void reply({
           protocolVersion: (msg.params?.protocolVersion as string) ?? "2025-06-18",
           capabilities: { tools: {} },
-          serverInfo: { name: "noodles", version: opts.version },
+          serverInfo: { name: "breadth", version: opts.version },
           instructions:
-            "noodles maps this codebase as a graph. At the start of each task call noodles_report_task with a one-line summary so the developer can follow your work on the live canvas. Use noodles_impact before changing a function others depend on, and noodles_node / noodles_find to see callers and callees without reading every file.",
+            "breadth maps this codebase as a graph. At the start of each task call breadth_report_task with a one-line summary so the developer can follow your work on the live canvas. Use breadth_impact before changing a function others depend on, and breadth_node / breadth_find to see callers and callees without reading every file. Before finishing, call breadth_changes and tell the user about any high-severity behaviour change.",
         });
       }
       case "ping":
@@ -314,7 +332,7 @@ export async function runMcp(opts: McpOptions): Promise<void> {
         const p = tool
           .run((msg.params?.arguments as Record<string, unknown>) ?? {}, ctx)
           .then((text) => reply({ content: [{ type: "text", text }] }))
-          .catch((err: Error) => reply({ content: [{ type: "text", text: `noodles: ${err.message}` }], isError: true }))
+          .catch((err: Error) => reply({ content: [{ type: "text", text: `breadth: ${err.message}` }], isError: true }))
           .finally(() => pending.delete(p));
         pending.add(p);
         return;

@@ -1,4 +1,4 @@
-import { edgeId, type EdgeKind, type FlowEdge, type FlowNode, type Port } from "@noodles/schema";
+import { edgeId, type EdgeKind, type FlowEdge, type FlowNode, type Port } from "@breadth/schema";
 import { parseAllDocuments } from "yaml";
 
 type Json = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any

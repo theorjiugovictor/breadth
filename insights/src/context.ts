@@ -1,4 +1,4 @@
-import type { Execution, FlowEdge, FlowGraph, FlowNode, Step } from "@noodles/schema";
+import type { Execution, FlowEdge, FlowGraph, FlowNode, Step } from "@breadth/schema";
 
 /** Read-only indexes shared by all rules. Pure: no Node or DOM APIs, so it runs in the CLI and the browser. */
 export class Ctx {

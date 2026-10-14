@@ -7,6 +7,8 @@ export interface EdgeData extends Record<string, unknown> {
   e: ViewEdge;
   traversed: boolean;
   showLabel: boolean;
+  /** Diff mode: the change added or removed this connection. */
+  diff?: "added" | "removed";
 }
 
 function labelText(e: ViewEdge): string | undefined {
@@ -52,10 +54,10 @@ export const FlowEdge = memo(function FlowEdge(props: EdgeProps) {
         path={path}
         markerEnd={markerEnd}
         style={{
-          stroke: edgeColor(e.kind),
-          strokeWidth: style.width + Math.min(2, Math.log10(Math.max(1, e.count))),
-          strokeDasharray: style.dash,
-          opacity: e.conditional ? 0.75 : 1,
+          stroke: d.diff === "added" ? "var(--ok)" : d.diff === "removed" ? "var(--err)" : edgeColor(e.kind),
+          strokeWidth: style.width + Math.min(2, Math.log10(Math.max(1, e.count))) + (d.diff ? 1 : 0),
+          strokeDasharray: d.diff === "removed" ? "6 5" : style.dash,
+          opacity: d.diff === "removed" ? 0.8 : e.conditional ? 0.75 : 1,
         }}
         interactionWidth={14}
       />

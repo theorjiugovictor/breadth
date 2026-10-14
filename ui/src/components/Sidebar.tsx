@@ -1,15 +1,16 @@
 import { useMemo, useState } from "react";
-import { Check, Compass, Lightbulb, Radio, Search } from "lucide-react";
-import { EDGE_KINDS, LAYERS, type EdgeKind, type FlowNode, type Insight, type Layer } from "@noodles/schema";
+import { Check, Compass, GitCompareArrows, Lightbulb, Radio, Search } from "lucide-react";
+import { EDGE_KINDS, LAYERS, type EdgeKind, type FlowNode, type Insight, type Layer } from "@breadth/schema";
 import { InsightsList } from "./InsightsList";
 import { LiveFeed } from "./LiveFeed";
+import { ChangesList } from "./ChangesList";
 import type { LiveState } from "../live";
 import type { GraphIndex } from "../graph/model";
 import { ancestors } from "../graph/model";
 import { EDGE_STYLE, LAYER_LABEL, edgeColor, nodeVisual } from "../graph/visual";
 import type { Filters } from "../graph/view";
 
-export type SideTab = "explore" | "insights" | "live";
+export type SideTab = "explore" | "insights" | "live" | "changes";
 
 interface Props {
   index: GraphIndex;
@@ -25,6 +26,8 @@ interface Props {
   live?: LiveState;
   followAgent?: boolean;
   onFollowAgent?: (on: boolean) => void;
+  activeChange?: number;
+  onChange?: (i: number | undefined) => void;
 }
 
 function search(index: GraphIndex, q: string): FlowNode[] {
@@ -44,7 +47,7 @@ function search(index: GraphIndex, q: string): FlowNode[] {
   return scored.sort((a, b) => a[0] - b[0]).slice(0, 30).map(([, n]) => n);
 }
 
-export function Sidebar({ index, filters, onFilters, onPick, tab, onTab, insights, activeInsight, onInsight, onReplay, live, followAgent, onFollowAgent }: Props) {
+export function Sidebar({ index, filters, onFilters, onPick, tab, onTab, insights, activeInsight, onInsight, onReplay, live, followAgent, onFollowAgent, activeChange, onChange }: Props) {
   const [q, setQ] = useState("");
   const [hl, setHl] = useState(0);
   const results = useMemo(() => search(index, q), [index, q]);
@@ -80,6 +83,12 @@ export function Sidebar({ index, filters, onFilters, onPick, tab, onTab, insight
   const worst = insights.some((i) => i.severity === "critical") ? "critical" : insights.some((i) => i.severity === "warning") ? "warning" : "info";
   const tabs = (
     <div className="side-tabs" role="tablist">
+      {index.graph.diff && (
+        <button className={tab === "changes" ? "on" : ""} onClick={() => onTab("changes")} role="tab" aria-selected={tab === "changes"}>
+          <GitCompareArrows size={14} /> Changes{" "}
+          {index.graph.diff.changes.length > 0 && <span className={`count-pill sev-${index.graph.diff.changes.some((c) => c.severity === "high") ? "critical" : "warning"}`}>{index.graph.diff.changes.length}</span>}
+        </button>
+      )}
       {live && (
         <button className={tab === "live" ? "on" : ""} onClick={() => onTab("live")} role="tab" aria-selected={tab === "live"}>
           <Radio size={14} /> Live
@@ -93,6 +102,15 @@ export function Sidebar({ index, filters, onFilters, onPick, tab, onTab, insight
       </button>
     </div>
   );
+
+  if (tab === "changes" && index.graph.diff) {
+    return (
+      <aside className="sidebar">
+        {tabs}
+        <ChangesList index={index} diff={index.graph.diff} active={activeChange} onSelect={(i) => onChange?.(i)} />
+      </aside>
+    );
+  }
 
   if (tab === "live" && live) {
     return (

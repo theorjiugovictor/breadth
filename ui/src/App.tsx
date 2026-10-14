@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
-import { EDGE_KINDS, LAYERS, type FlowGraph, type Insight, type Severity } from "@noodles/schema";
-import { RULES, runInsights } from "@noodles/insights";
+import { EDGE_KINDS, LAYERS, type FlowGraph, type Insight, type Severity } from "@breadth/schema";
+import { RULES, runInsights, withoutRemoved } from "@breadth/insights";
 import { ancestors, buildIndex, commonAncestor, defaultFocus, ROOT } from "./graph/model";
 import { computeView, MORE_ID, type Filters } from "./graph/view";
 import { Canvas, type InsightHighlight, type TraceOverlay } from "./components/Canvas";
@@ -23,7 +23,7 @@ const FOLLOW_RANK: Record<string, number> = { function: 0, network_endpoint: 1, 
 
 function initialTheme(): Theme {
   try {
-    const saved = localStorage.getItem("noodles-theme");
+    const saved = localStorage.getItem("breadth-theme");
     if (saved === "light" || saved === "dark") return saved;
   } catch {
     /* storage blocked */
@@ -54,7 +54,7 @@ export function App() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     try {
-      localStorage.setItem("noodles-theme", theme);
+      localStorage.setItem("breadth-theme", theme);
     } catch {
       /* ignore */
     }
@@ -154,7 +154,7 @@ export function App() {
           <p>Scan a public GitHub repository right here in the browser:</p>
           <RepoForm onSubmit={scanRepo} autoFocus />
           <p style={{ marginTop: 22 }}>
-            Or run <code>noodles scan .</code> then <code>noodles serve</code>, or drop a <code>flowgraph.json</code> here.
+            Or run <code>breadth scan .</code> then <code>breadth serve</code>, or drop a <code>flowgraph.json</code> here.
           </p>
           {error && <p style={{ color: "var(--err)", whiteSpace: "pre-wrap" }}>{error}</p>}
           <button className="btn" onClick={() => fileInput.current?.click()}>
@@ -226,7 +226,8 @@ function Workspace({ graph, name, notice, initialTab, demos, live, llm, theme, o
   const [sideOpen, setSideOpen] = useState(true);
   const [tab, setTab] = useState<Tab>("overview");
 
-  const [sideTab, setSideTab] = useState<SideTab>(live ? "live" : initialTab);
+  const [sideTab, setSideTab] = useState<SideTab>(graph.diff ? "changes" : live ? "live" : initialTab);
+  const [activeChange, setActiveChange] = useState<number>();
   const [activeInsight, setActiveInsight] = useState<string>();
   const pendingStep = useRef<string>();
   const [followAgent, setFollowAgent] = useState(true);
@@ -241,12 +242,14 @@ function Workspace({ graph, name, notice, initialTab, demos, live, llm, theme, o
 
   // Built-in rules always run on the loaded graph; findings from other tools in the file are kept.
   const insights: Insight[] = useMemo(() => {
-    const computed = runInsights(graph);
+    // A diff graph also holds what was removed; rules look at the new version only.
+    const computed = runInsights(withoutRemoved(graph));
     const known = new Set(RULES.map((r) => r.id));
     const foreign = (graph.insights ?? []).filter((i) => !known.has(i.rule) && i.nodes.every((n) => index.nodes.has(n)));
     return [...computed, ...foreign];
   }, [graph, index]);
-  const insight = mode === "map" ? insights.find((i) => i.id === activeInsight) : undefined;
+  const change = mode === "map" && activeChange !== undefined ? graph.diff?.changes[activeChange] : undefined;
+  const insight = mode === "map" ? (insights.find((i) => i.id === activeInsight) ?? (change && { id: "change", rule: "change", title: change.text, severity: ({ high: "critical", medium: "warning", low: "info" } as const)[change.severity], nodes: change.nodes.filter((n) => index.nodes.has(n)), edges: change.edges })) : undefined;
   // Steps on shared nodes (a database, a topic, a third-party API) are followed from the caller's
   // level, with the shared node pinned next to it instead of opening wherever it lives.
   const exec0 = index.executions.find((x) => x.id === execId);
@@ -309,6 +312,7 @@ function Workspace({ graph, name, notice, initialTab, demos, live, llm, theme, o
   const selectInsight = useCallback(
     (id: string | undefined) => {
       setActiveInsight(id);
+      setActiveChange(undefined);
       const i = insights.find((x) => x.id === id);
       if (!i) return;
       setMode("map");
@@ -322,6 +326,39 @@ function Workspace({ graph, name, notice, initialTab, demos, live, llm, theme, o
     },
     [insights, index],
   );
+
+  const selectChange = useCallback(
+    (i: number | undefined) => {
+      setActiveChange(i);
+      setActiveInsight(undefined);
+      const c = i === undefined ? undefined : graph.diff?.changes[i];
+      const ids = c?.nodes.filter((n) => index.nodes.has(n)) ?? [];
+      if (!ids.length) return;
+      setMode("map");
+      const lca = commonAncestor(index, ids);
+      const subjectParent = index.nodes.get(ids[0])?.parent;
+      setFocus(lca !== ROOT || ids.length === 1 ? lca : subjectParent && index.nodes.has(subjectParent) ? subjectParent : ROOT);
+      setSelected(ids[0]);
+      setCenterOn(undefined);
+    },
+    [graph, index],
+  );
+
+  // The change set as badges: added, edited and removed nodes, added and removed edges.
+  const diffMarks = useMemo(() => {
+    const d = graph.diff;
+    if (!d) return undefined;
+    const m = new Map<string, "new" | "edited" | "removed">();
+    for (const id of d.changed) m.set(id, "edited");
+    for (const id of d.added) m.set(id, "new");
+    for (const id of d.removed) m.set(id, "removed");
+    return m;
+  }, [graph]);
+  const edgeMarks = useMemo(() => {
+    const d = graph.diff;
+    if (!d) return undefined;
+    return new Map<string, "added" | "removed">([...d.edgesAdded.map((id) => [id, "added"] as const), ...d.edgesRemoved.map((id) => [id, "removed"] as const)]);
+  }, [graph]);
 
   const replayInsight = useCallback((i: Insight) => {
     if (!i.execution) return;
@@ -424,6 +461,7 @@ function Workspace({ graph, name, notice, initialTab, demos, live, llm, theme, o
       if (e.key === "Escape") {
         setSelected(undefined);
         setActiveInsight(undefined);
+        setActiveChange(undefined);
       }
       if (e.key === "Backspace" && focus !== ROOT) {
         const p = index.nodes.get(focus)?.parent;
@@ -445,7 +483,7 @@ function Workspace({ graph, name, notice, initialTab, demos, live, llm, theme, o
   const selectedReal = selected && index.nodes.has(selected) ? selected : undefined;
 
   return (
-    <div className={`app${sideOpen ? "" : " no-side"}`}>
+    <div className={`app${sideOpen ? "" : " no-side"}${graph.diff ? " diff-mode" : ""}`}>
       <TopBar
         index={index}
         focus={focus}
@@ -480,6 +518,8 @@ function Workspace({ graph, name, notice, initialTab, demos, live, llm, theme, o
         live={live}
         followAgent={followAgent}
         onFollowAgent={setFollowAgent}
+        activeChange={activeChange}
+        onChange={selectChange}
       />
       <main className="canvas-area">
         <Canvas
@@ -490,7 +530,8 @@ function Workspace({ graph, name, notice, initialTab, demos, live, llm, theme, o
           centerOn={centerOn}
           highlight={highlight}
           flags={flags}
-          marks={live ? markKinds : undefined}
+          marks={diffMarks ? new Map([...diffMarks, ...markKinds]) : live ? markKinds : undefined}
+          edgeMarks={edgeMarks}
           live={!!live}
           onSelect={(id) => setSelected(id === MORE_ID ? undefined : id)}
           onDrill={drill}
@@ -498,7 +539,14 @@ function Workspace({ graph, name, notice, initialTab, demos, live, llm, theme, o
         {insight && (
           <div className="insight-banner">
             <span>{insight.title}</span>
-            <button onClick={() => setActiveInsight(undefined)}>Clear</button>
+            <button
+              onClick={() => {
+                setActiveInsight(undefined);
+                setActiveChange(undefined);
+              }}
+            >
+              Clear
+            </button>
           </div>
         )}
         {showNotice && notice && !insight && (

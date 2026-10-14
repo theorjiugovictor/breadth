@@ -1,11 +1,11 @@
 {
-  "name": "noodles",
+  "name": "breadth",
   "version": "0.1.0",
   "private": true,
   "description": "Turn any codebase or system into an n8n-style canvas",
   "type": "module",
   "bin": {
-    "noodles": "./dist/noodles.mjs"
+    "breadth": "./dist/breadth.mjs"
   },
   "files": [
     "dist"
@@ -15,9 +15,9 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.133.0",
-    "@noodles/collectors": "*",
-    "@noodles/insights": "*",
-    "@noodles/schema": "*",
+    "@breadth/collectors": "*",
+    "@breadth/insights": "*",
+    "@breadth/schema": "*",
     "ignore": "^7.0.12",
     "tree-sitter-wasms": "0.1.13",
     "web-tree-sitter": "0.25.10"

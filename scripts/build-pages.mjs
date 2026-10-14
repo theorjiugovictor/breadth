@@ -14,8 +14,9 @@ execFileSync("npm", ["run", "build:pages", "-w", "ui"], { cwd: root, stdio: "inh
 cpSync(join(root, "site"), out, { recursive: true });
 
 const demos = [
+  { from: "examples/shop-pr.flowgraph.json", file: "shop-pr.json", title: "Pull request: add bulk refunds", description: "What an agent-written PR on the shop changes in behaviour" },
   { from: "examples/shop/flowgraph.json", file: "shop.json", title: "Shop: code, infra and traces", description: "Four services, Postgres, Kafka, Terraform, Kubernetes and two recorded checkouts" },
-  { from: "examples/noodles.flowgraph.json", file: "noodles.json", title: "noodles: this repository", description: "noodles scanning its own source code" },
+  { from: "examples/breadth.flowgraph.json", file: "breadth.json", title: "breadth: this repository", description: "breadth scanning its own source code" },
 ];
 const graphs = join(out, "app", "graphs");
 mkdirSync(graphs, { recursive: true });

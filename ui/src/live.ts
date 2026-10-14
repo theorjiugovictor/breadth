@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { IS_PAGES, parseGraph, type Loaded } from "./data";
 
-/** What `noodles serve` / `noodles watch` report at /api/info. */
+/** What `breadth serve` / `breadth watch` report at /api/info. */
 export interface ServerInfo {
   live: boolean;
   version: number;
@@ -144,7 +144,7 @@ function mergeActivity(incoming: ActivityEntry[], current: ActivityEntry[]): Act
 
 /** Ask the local LLM provider to explain a node. */
 export async function explainNode(id: string): Promise<{ text: string; by: string; remote: boolean }> {
-  const res = await fetch(`./api/explain?node=${encodeURIComponent(id)}`, { headers: { "x-noodles": "1" } });
+  const res = await fetch(`./api/explain?node=${encodeURIComponent(id)}`, { headers: { "x-breadth": "1" } });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.error ?? `explain failed (${res.status})`);
   return body;

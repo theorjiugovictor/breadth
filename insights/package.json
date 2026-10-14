@@ -1,5 +1,5 @@
 {
-  "name": "@noodles/insights",
+  "name": "@breadth/insights",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -7,9 +7,9 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@noodles/schema": "*"
+    "@breadth/schema": "*"
   },
   "devDependencies": {
-    "@noodles/collectors": "*"
+    "@breadth/collectors": "*"
   }
 }

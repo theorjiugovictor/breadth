@@ -144,6 +144,31 @@ export interface FlowGraph {
   edges: FlowEdge[];
   executions?: Execution[];
   insights?: Insight[];
+  /** Set when the graph shows what changed between two versions (`breadth diff`). */
+  diff?: GraphDiffInfo;
+}
+
+/** One behaviour-level change between two versions, e.g. "save_order now writes to postgresql". */
+export interface BehaviorChange {
+  kind: string;
+  severity: "high" | "medium" | "low";
+  text: string;
+  /** Nodes to show; the first is the subject. */
+  nodes: string[];
+  edges?: string[];
+}
+
+export interface GraphDiffInfo {
+  base?: string;
+  head?: string;
+  added: string[];
+  removed: string[];
+  changed: string[];
+  edgesAdded: string[];
+  edgesRemoved: string[];
+  insightsAdded?: string[];
+  insightsResolved?: string[];
+  changes: BehaviorChange[];
 }
 
 export function emptyGraph(): FlowGraph {

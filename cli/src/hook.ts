@@ -1,8 +1,8 @@
 import path from "node:path";
 
 /**
- * Coding-agent hook events, normalised. Every agent has its own hook format; `noodles hook`
- * reads whichever one arrives on stdin and forwards this shape to `noodles watch`.
+ * Coding-agent hook events, normalised. Every agent has its own hook format; `breadth hook`
+ * reads whichever one arrives on stdin and forwards this shape to `breadth watch`.
  */
 export interface AgentEvent {
   agent: string;

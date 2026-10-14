@@ -1,4 +1,4 @@
-import type { Insight, InsightCategory } from "@noodles/schema";
+import type { Insight, InsightCategory } from "@breadth/schema";
 import type { Ctx } from "./context.js";
 
 export interface RuleOptions {

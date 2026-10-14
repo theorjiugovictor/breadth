@@ -26,9 +26,7 @@ export function Logo() {
   return (
     <svg className="brand-mark" viewBox="0 0 32 32" aria-hidden>
       <rect width="32" height="32" rx="8" fill="#ff6d5a" />
-      <path d="M7 11c5 0 5 10 10 10s4-10 8-10" stroke="#fff" strokeWidth="3" fill="none" strokeLinecap="round" />
-      <circle cx="7" cy="11" r="2.5" fill="#fff" />
-      <circle cx="25" cy="11" r="2.5" fill="#fff" />
+      <path d="M8 16 24 8M8 16h16M8 16l16 8" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" fill="none"/><circle cx="8" cy="16" r="3.4" fill="#fff"/><circle cx="24" cy="8" r="2.6" fill="#fff"/><circle cx="24" cy="16" r="2.6" fill="#fff"/><circle cx="24" cy="24" r="2.6" fill="#fff"/>
     </svg>
   );
 }
@@ -41,9 +39,9 @@ export function TopBar(p: Props) {
       <button className="icon-btn" onClick={p.onToggleSide} title="Toggle sidebar" aria-label="Toggle sidebar">
         <PanelLeft size={17} />
       </button>
-      <a className="brand" href={IS_HOME ? "../" : "#"} title="noodles">
+      <a className="brand" href={IS_HOME ? "../" : "#"} title="breadth">
         <Logo />
-        noodles
+        breadth
       </a>
       <nav className="crumbs" aria-label="Breadcrumbs">
         <button className={`crumb${chain.length === 0 ? " current" : ""}`} onClick={() => p.onFocus(ROOT)} title={`${p.graphName}: everything`} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
@@ -92,7 +90,7 @@ export function TopBar(p: Props) {
           className={p.mode === "trace" ? "on" : ""}
           onClick={() => p.onMode("trace")}
           disabled={!hasRuns}
-          title={hasRuns ? "Replay a recorded execution" : "No executions in this graph. Import traces with `noodles import-traces`."}
+          title={hasRuns ? "Replay a recorded execution" : "No executions in this graph. Import traces with `breadth import-traces`."}
           role="tab"
           aria-selected={p.mode === "trace"}
         >
@@ -121,7 +119,7 @@ function LiveBadge({ live }: { live: LiveState }) {
   }, [fresh, a?.at]);
   const doing = fresh && a ? (a.files.length ? `editing ${a.files[0].split("/").pop()}` : a.event === "UserPromptSubmit" ? "got a task" : "working") : "";
   return (
-    <span className={`live-pill${live.connected ? "" : " off"}`} title={live.connected ? "Updates as files change" : "Reconnecting to noodles watch…"}>
+    <span className={`live-pill${live.connected ? "" : " off"}`} title={live.connected ? "Updates as files change" : "Reconnecting to breadth watch…"}>
       <span className={`live-dot${live.connected ? " on" : ""}`} />
       Live
       {doing && (
@@ -133,5 +131,5 @@ function LiveBadge({ live }: { live: LiveState }) {
   );
 }
 
-declare const __NOODLES_PAGES__: boolean;
-const IS_HOME = typeof __NOODLES_PAGES__ !== "undefined" && __NOODLES_PAGES__;
+declare const __BREADTH_PAGES__: boolean;
+const IS_HOME = typeof __BREADTH_PAGES__ !== "undefined" && __BREADTH_PAGES__;

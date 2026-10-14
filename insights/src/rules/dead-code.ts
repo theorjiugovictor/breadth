@@ -1,4 +1,4 @@
-import type { FlowNode, Insight } from "@noodles/schema";
+import type { FlowNode, Insight } from "@breadth/schema";
 import type { Ctx } from "../context.js";
 import type { Rule } from "../rule.js";
 

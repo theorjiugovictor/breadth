@@ -1,6 +1,6 @@
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { validateGraph, type FlowGraph } from "@noodles/schema";
+import { validateGraph, type FlowGraph } from "@breadth/schema";
 import { codeCollector } from "./index.js";
 import { normRoute, parseUrl } from "./build.js";
 

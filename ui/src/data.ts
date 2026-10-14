@@ -1,7 +1,7 @@
-import { validateGraph, type FlowGraph } from "@noodles/schema";
+import { validateGraph, type FlowGraph } from "@breadth/schema";
 
-declare const __NOODLES_PAGES__: boolean;
-export const IS_PAGES = typeof __NOODLES_PAGES__ !== "undefined" && __NOODLES_PAGES__;
+declare const __BREADTH_PAGES__: boolean;
+export const IS_PAGES = typeof __BREADTH_PAGES__ !== "undefined" && __BREADTH_PAGES__;
 
 export interface DemoEntry {
   file: string;
@@ -40,7 +40,7 @@ async function tryFetch(url: string): Promise<string | undefined> {
   }
 }
 
-/** ?graph=<url>, then ./flowgraph.json (noodles serve), then the bundled demo list. */
+/** ?graph=<url>, then ./flowgraph.json (breadth serve), then the bundled demo list. */
 export async function loadInitial(): Promise<{ loaded?: Loaded; demos: DemoEntry[] }> {
   const params = new URLSearchParams(location.search);
   const demosText = await tryFetch("./graphs/index.json");
@@ -60,7 +60,7 @@ export async function loadDemo(d: DemoEntry): Promise<Loaded> {
   return parseGraph(text, d.file);
 }
 
-/** Source snippet from `noodles serve` (absent on static hosting). */
+/** Source snippet from `breadth serve` (absent on static hosting). */
 export async function fetchSource(file: string, line: number, end: number): Promise<{ lines: string[]; start: number; path?: string } | undefined> {
   if (IS_PAGES) return undefined;
   const text = await tryFetch(`./api/source?file=${encodeURIComponent(file)}&start=${Math.max(1, line - 3)}&end=${end + 3}`);

@@ -1,6 +1,6 @@
-# Noodles: v1 plan (approved, implemented)
+# Breadth: v1 plan (approved, implemented)
 
-Noodles turns a codebase or a distributed system into an n8n-style canvas. Everything
+Breadth turns a codebase or a distributed system into an n8n-style canvas. Everything
 goes through one contract, `flowgraph.json`, defined in
 [`schema/flowgraph.schema.json`](../schema/flowgraph.schema.json).
 
@@ -10,7 +10,7 @@ goes through one contract, `flowgraph.json`, defined in
 |---|---|---|
 | Language | **TypeScript everywhere** (Node 20+) | One toolchain for CLI, collectors and UI, and the graph types are shared. |
 | Packaging | npm workspaces: `schema`, `collectors`, `cli`, `ui` | Matches the requested layout. |
-| Parsing | `web-tree-sitter` (WASM) + prebuilt Python/TS/TSX/JS grammars | No native compile step, so `npx noodles scan .` works anywhere. |
+| Parsing | `web-tree-sitter` (WASM) + prebuilt Python/TS/TSX/JS grammars | No native compile step, so `npx breadth scan .` works anywhere. |
 | Validation | `ajv` (JSON Schema 2020-12) | Every collector's output and every merge result gets validated. |
 | UI | React 18 + `@xyflow/react` 12 + `elkjs` (layered, left to right) + Vite | As specified. |
 | Serve | Built UI as static files, served by Node `http` on `127.0.0.1` | Fully local. The graph is served at `/flowgraph.json`. |
@@ -28,7 +28,7 @@ collectors/
   messaging/  STUB + README (Kafka, SQS, producers/consumers)
   cicd/       STUB + README (GitHub Actions, GitLab CI, ...)
   org/        STUB + README (CODEOWNERS -> team nodes)
-cli/          `noodles` binary: scan, import-traces, serve, validate; optional LLM provider
+cli/          `breadth` binary: scan, import-traces, serve, validate; optional LLM provider
 ui/           React app
 examples/     sample microservice project + fake OTLP trace + terraform/k8s files
 docs/
@@ -96,7 +96,7 @@ interface Collector {
   `rpc.system`, `http.*`, `db.system` or `messaging.system`. Messaging spans become
   `event` edges.
 - Executions: one per trace. Steps are ordered by start time. Inputs and outputs are
-  read from the `noodles.input` and `noodles.output` span attributes (or the
+  read from the `breadth.input` and `breadth.output` span attributes (or the
   `input.value`/`output.value` attributes from OpenInference), and fall back to
   request/response attributes (`http.request.*`, `db.statement`, ...). Samples are
   attached to the edges.
@@ -159,13 +159,13 @@ spec.
 ## 6. CLI
 
 ```
-noodles scan <path> [--collector code,infra] [-o flowgraph.json] [--config noodles.config.json]
-noodles import-traces <otlp.json> --merge flowgraph.json [-o out.json]
-noodles serve [flowgraph.json] [--port 4321] [--no-open]
-noodles validate <flowgraph.json>
+breadth scan <path> [--collector code,infra] [-o flowgraph.json] [--config breadth.config.json]
+breadth import-traces <otlp.json> --merge flowgraph.json [-o out.json]
+breadth serve [flowgraph.json] [--port 4321] [--no-open]
+breadth validate <flowgraph.json>
 ```
 
-- `noodles.config.json` is optional. It can hold include/exclude globs, collector
+- `breadth.config.json` is optional. It can hold include/exclude globs, collector
   options and the LLM settings.
 - LLM support: there is one `LLMProvider` interface with `summarize`, `name` and
   `group` methods.
@@ -179,8 +179,8 @@ Each phase is one commit or a few, and each ends green with tests.
 
 1. **Schema**: JSON Schema, TS types, `validate`, `merge`, plus unit tests.
 2. **Code collector**: tree-sitter Python and TS/JS, with fixtures and tests.
-   `noodles scan`.
-3. **UI**: built against a hand-written sample graph, then wired to `noodles serve`.
+   `breadth scan`.
+3. **UI**: built against a hand-written sample graph, then wired to `breadth serve`.
    Playwright smoke test and screenshots.
 4. **OTel importer**: `import-traces`, plus Trace mode end to end.
 5. **Infra collector**: Terraform and k8s. Then the stubs and their READMEs.
@@ -193,7 +193,7 @@ Each phase is one commit or a few, and each ends green with tests.
 
 ## 8. Open questions (defaults in bold)
 
-1. Name: **`noodles`** for the package and CLI. The file stays `flowgraph.json`.
+1. Name: **`breadth`** for the package and CLI. The file stays `flowgraph.json`.
 2. All TypeScript (**yes**). The alternative is a Python CLI plus a TS UI.
 3. Timestamps in executions: **epoch ms numbers**. The alternative is ISO strings.
 4. Small schema additions beyond your spec:

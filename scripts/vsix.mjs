@@ -114,5 +114,5 @@ export function buildVsix(out) {
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
-  console.log(`built ${buildVsix(process.argv[2] ?? join(src, "noodles-live.vsix"))}`);
+  console.log(`built ${buildVsix(process.argv[2] ?? join(src, "breadth-live.vsix"))}`);
 }

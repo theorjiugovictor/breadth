@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
-import { scanSources, setWasmLocator } from "@noodles/collectors/browser";
-import { runInsights } from "@noodles/insights";
-import type { FlowGraph } from "@noodles/schema";
+import { scanSources, setWasmLocator } from "@breadth/collectors/browser";
+import { runInsights } from "@breadth/insights";
+import type { FlowGraph } from "@breadth/schema";
 import { downloadFiles, listRepo, ScanError, repoLabel, type RepoRef } from "./github";
 
 export type ScanMessage =
