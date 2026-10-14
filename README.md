@@ -12,7 +12,7 @@
 - **Watch your coding agent build.** `noodles watch` keeps the canvas live while you or your agent edit: Claude Code, Copilot, Cursor, Gemini CLI, Windsurf, Antigravity, Codex or anything else. New and changed functions light up as they appear, even before they are saved, with a feed of what each task changed. An MCP server gives the agent the same graph as tools. See [Live mode](#live-mode-watch-a-coding-agent).
 - **Zero config, fully local.** Nothing leaves your machine. LLM features are optional, off by default, and work with any provider: Claude, OpenAI, Gemini, Ollama, or anything OpenAI-compatible.
 
-**Try it without installing anything:** the [landing page](#publishing-the-site) has a box where you paste a public GitHub repository. It is scanned in your browser: files come straight from GitHub and are parsed in a Web Worker with tree-sitter compiled to WebAssembly. No server is involved and nothing is uploaded.
+**Try it without installing anything:** the [landing page](https://theorjiugovictor.github.io/noodles/) has a box where you paste a public GitHub repository. It is scanned in your browser: files come straight from GitHub and are parsed in a Web Worker with tree-sitter compiled to WebAssembly. No server is involved and nothing is uploaded.
 
 ## Install
 
