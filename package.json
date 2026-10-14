@@ -1,0 +1,23 @@
+{
+  "name": "noodles-monorepo",
+  "private": true,
+  "type": "module",
+  "workspaces": ["schema", "collectors", "ui", "cli"],
+  "scripts": {
+    "build": "npm run build -w ui && npm run build -w cli",
+    "build:pages": "npm run build:pages -w ui",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit && npm run typecheck -w ui",
+    "noodles": "tsx cli/src/main.ts",
+    "demo": "npm run demo:build && node cli/dist/noodles.mjs serve examples/shop/flowgraph.json",
+    "demo:build": "node scripts/build-demo.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "esbuild": "^0.25.0",
+    "tsx": "^4.20.0",
+    "typescript": "~5.9.3",
+    "vitest": "^3.2.4"
+  },
+  "engines": { "node": ">=20" }
+}
