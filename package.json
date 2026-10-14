@@ -5,6 +5,7 @@
   "workspaces": [
     "schema",
     "collectors",
+    "insights",
     "ui",
     "cli"
   ],

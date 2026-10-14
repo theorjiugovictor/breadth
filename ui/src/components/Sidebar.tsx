@@ -1,16 +1,25 @@
 import { useMemo, useState } from "react";
-import { Check, Search } from "lucide-react";
-import { EDGE_KINDS, LAYERS, type EdgeKind, type FlowNode, type Layer } from "@noodles/schema";
+import { Check, Compass, Lightbulb, Search } from "lucide-react";
+import { EDGE_KINDS, LAYERS, type EdgeKind, type FlowNode, type Insight, type Layer } from "@noodles/schema";
+import { InsightsList } from "./InsightsList";
 import type { GraphIndex } from "../graph/model";
 import { ancestors } from "../graph/model";
 import { EDGE_STYLE, LAYER_LABEL, edgeColor, nodeVisual } from "../graph/visual";
 import type { Filters } from "../graph/view";
+
+export type SideTab = "explore" | "insights";
 
 interface Props {
   index: GraphIndex;
   filters: Filters;
   onFilters: (f: Filters) => void;
   onPick: (id: string) => void;
+  tab: SideTab;
+  onTab: (t: SideTab) => void;
+  insights: Insight[];
+  activeInsight?: string;
+  onInsight: (id: string | undefined) => void;
+  onReplay: (i: Insight) => void;
 }
 
 function search(index: GraphIndex, q: string): FlowNode[] {
@@ -30,7 +39,7 @@ function search(index: GraphIndex, q: string): FlowNode[] {
   return scored.sort((a, b) => a[0] - b[0]).slice(0, 30).map(([, n]) => n);
 }
 
-export function Sidebar({ index, filters, onFilters, onPick }: Props) {
+export function Sidebar({ index, filters, onFilters, onPick, tab, onTab, insights, activeInsight, onInsight, onReplay }: Props) {
   const [q, setQ] = useState("");
   const [hl, setHl] = useState(0);
   const results = useMemo(() => search(index, q), [index, q]);
@@ -63,8 +72,30 @@ export function Sidebar({ index, filters, onFilters, onPick }: Props) {
     setQ("");
   };
 
+  const worst = insights.some((i) => i.severity === "critical") ? "critical" : insights.some((i) => i.severity === "warning") ? "warning" : "info";
+  const tabs = (
+    <div className="side-tabs" role="tablist">
+      <button className={tab === "explore" ? "on" : ""} onClick={() => onTab("explore")} role="tab" aria-selected={tab === "explore"}>
+        <Compass size={14} /> Explore
+      </button>
+      <button className={tab === "insights" ? "on" : ""} onClick={() => onTab("insights")} role="tab" aria-selected={tab === "insights"}>
+        <Lightbulb size={14} /> Insights {insights.length > 0 && <span className={`count-pill sev-${worst}`}>{insights.length}</span>}
+      </button>
+    </div>
+  );
+
+  if (tab === "insights") {
+    return (
+      <aside className="sidebar">
+        {tabs}
+        <InsightsList index={index} insights={insights} active={activeInsight} onSelect={onInsight} onReplay={onReplay} onNode={onPick} />
+      </aside>
+    );
+  }
+
   return (
     <aside className="sidebar">
+      {tabs}
       <div className="search">
         <Search size={15} />
         <input

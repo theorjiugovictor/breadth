@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
-import { EDGE_KINDS, LAYERS, type FlowGraph } from "@noodles/schema";
+import { EDGE_KINDS, LAYERS, type FlowGraph, type Insight, type Severity } from "@noodles/schema";
+import { RULES, runInsights } from "@noodles/insights";
 import { ancestors, buildIndex, commonAncestor, defaultFocus, ROOT } from "./graph/model";
 import { computeView, MORE_ID, type Filters } from "./graph/view";
-import { Canvas, type TraceOverlay } from "./components/Canvas";
-import { Sidebar } from "./components/Sidebar";
+import { Canvas, type InsightHighlight, type TraceOverlay } from "./components/Canvas";
+import { Sidebar, type SideTab } from "./components/Sidebar";
 import { TopBar, Logo } from "./components/TopBar";
 import { SidePanel, type Tab } from "./components/SidePanel";
 import { TracePlayer } from "./components/TracePlayer";
@@ -170,7 +171,48 @@ function Workspace({ graph, name, demos, theme, onTheme, onOpenFile, onDemo }: W
   const [sideOpen, setSideOpen] = useState(true);
   const [tab, setTab] = useState<Tab>("overview");
 
-  const view = useMemo(() => computeView(index, focus, filters), [index, focus, filters]);
+  const [sideTab, setSideTab] = useState<SideTab>("explore");
+  const [activeInsight, setActiveInsight] = useState<string>();
+  const pendingStep = useRef<string>();
+
+  // Built-in rules always run on the loaded graph; findings from other tools in the file are kept.
+  const insights: Insight[] = useMemo(() => {
+    const computed = runInsights(graph);
+    const known = new Set(RULES.map((r) => r.id));
+    const foreign = (graph.insights ?? []).filter((i) => !known.has(i.rule) && i.nodes.every((n) => index.nodes.has(n)));
+    return [...computed, ...foreign];
+  }, [graph, index]);
+  const insight = mode === "map" ? insights.find((i) => i.id === activeInsight) : undefined;
+  // Steps on shared nodes (a database, a topic, a third-party API) are followed from the caller's
+  // level, with the shared node pinned next to it instead of opening wherever it lives.
+  const exec0 = index.executions.find((x) => x.id === execId);
+  const step0 = mode === "trace" ? exec0?.steps[stepIdx] : undefined;
+  const sharedStep = !!step0 && ["datastore", "queue", "external_api"].includes(index.nodes.get(step0.node)?.kind ?? "");
+  const followNode = useMemo(() => {
+    if (!step0) return undefined;
+    if (!sharedStep || !step0.parent) return step0.node;
+    return exec0?.steps.find((s) => s.id === step0.parent)?.node ?? step0.node;
+  }, [step0, sharedStep, exec0]);
+  const pinned = useMemo(
+    () => (insight ? new Set(insight.nodes) : sharedStep && step0 ? new Set([step0.node]) : undefined),
+    [insight, sharedStep, step0],
+  );
+  const highlight: InsightHighlight | undefined = useMemo(
+    () => (insight ? { nodes: new Set(insight.nodes), edges: new Set(insight.edges ?? []), severity: insight.severity } : undefined),
+    [insight],
+  );
+  const flags = useMemo(() => {
+    const rank: Record<Severity, number> = { critical: 3, warning: 2, info: 1 };
+    const m = new Map<string, { count: number; severity: Severity }>();
+    for (const i of insights) {
+      const subject = i.nodes[0];
+      const cur = m.get(subject);
+      m.set(subject, { count: (cur?.count ?? 0) + 1, severity: cur && rank[cur.severity] > rank[i.severity] ? cur.severity : i.severity });
+    }
+    return m;
+  }, [insights]);
+
+  const view = useMemo(() => computeView(index, focus, filters, undefined, pinned), [index, focus, filters, pinned]);
   const exec = index.executions.find((x) => x.id === execId);
   const step = mode === "trace" ? exec?.steps[stepIdx] : undefined;
 
@@ -200,27 +242,54 @@ function Workspace({ graph, name, demos, theme, onTheme, onOpenFile, onDemo }: W
     [index],
   );
 
+  const selectInsight = useCallback(
+    (id: string | undefined) => {
+      setActiveInsight(id);
+      const i = insights.find((x) => x.id === id);
+      if (!i) return;
+      setMode("map");
+      // Open the level that holds the subject; other involved nodes are pinned as context.
+      const lca = commonAncestor(index, i.nodes);
+      const subjectParent = index.nodes.get(i.nodes[0])?.parent;
+      const level = lca !== ROOT || i.nodes.length === 1 ? lca : subjectParent && index.nodes.has(subjectParent) ? subjectParent : ROOT;
+      setFocus(level);
+      setSelected(i.nodes[0]);
+      setCenterOn(undefined);
+    },
+    [insights, index],
+  );
+
+  const replayInsight = useCallback((i: Insight) => {
+    if (!i.execution) return;
+    setActiveInsight(undefined);
+    pendingStep.current = i.steps?.[0];
+    setExecId(i.execution);
+    setMode("trace");
+  }, []);
+
   // Entering trace mode: open the level that contains the whole run.
   useEffect(() => {
     if (mode !== "trace" || !exec) return;
     const ids = [...new Set(exec.steps.map((s) => s.node))];
     setFocus(commonAncestor(index, ids));
-    setStepIdx(0);
+    const pending = pendingStep.current ? exec.steps.findIndex((st) => st.id === pendingStep.current) : -1;
+    pendingStep.current = undefined;
+    setStepIdx(Math.max(0, pending));
     setPlaying(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, execId]);
 
   // Follow: when the active node is hidden inside a card, drill to its level.
   useEffect(() => {
-    if (!step) return;
+    if (!step || !followNode) return;
     setSelected(step.node);
     if (!follow) return;
-    const rep = view.repOf(step.node);
-    if (rep === step.node) return;
-    const parent = index.nodes.get(step.node)?.parent;
+    const rep = view.repOf(followNode);
+    if (rep === followNode) return;
+    const parent = index.nodes.get(followNode)?.parent;
     const target = parent && index.nodes.has(parent) ? parent : ROOT;
     // Only drill down into the containing card; never jump sideways.
-    if (rep === undefined || rep === MORE_ID || ancestors(index, step.node).includes(rep) || rep === focus) setFocus(target);
+    if (rep === undefined || rep === MORE_ID || ancestors(index, followNode).includes(rep) || rep === focus) setFocus(target);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step?.id, follow]);
 
@@ -254,7 +323,10 @@ function Workspace({ graph, name, demos, theme, onTheme, onOpenFile, onDemo }: W
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement)?.tagName === "INPUT" || (e.target as HTMLElement)?.tagName === "SELECT") return;
-      if (e.key === "Escape") setSelected(undefined);
+      if (e.key === "Escape") {
+        setSelected(undefined);
+        setActiveInsight(undefined);
+      }
       if (e.key === "Backspace" && focus !== ROOT) {
         const p = index.nodes.get(focus)?.parent;
         goTo(p && index.nodes.has(p) ? p : ROOT);
@@ -295,7 +367,18 @@ function Workspace({ graph, name, demos, theme, onTheme, onOpenFile, onDemo }: W
         onOpenFile={onOpenFile}
         onDemo={onDemo}
       />
-      <Sidebar index={index} filters={filters} onFilters={setFilters} onPick={reveal} />
+      <Sidebar
+        index={index}
+        filters={filters}
+        onFilters={setFilters}
+        onPick={reveal}
+        tab={sideTab}
+        onTab={setSideTab}
+        insights={insights}
+        activeInsight={activeInsight}
+        onInsight={selectInsight}
+        onReplay={replayInsight}
+      />
       <main className="canvas-area">
         <Canvas
           view={view}
@@ -303,11 +386,19 @@ function Workspace({ graph, name, demos, theme, onTheme, onOpenFile, onDemo }: W
           trace={trace}
           theme={theme}
           centerOn={centerOn}
+          highlight={highlight}
+          flags={flags}
           onSelect={(id) => setSelected(id === MORE_ID ? undefined : id)}
           onDrill={drill}
         />
+        {insight && (
+          <div className="insight-banner">
+            <span>{insight.title}</span>
+            <button onClick={() => setActiveInsight(undefined)}>Clear</button>
+          </div>
+        )}
         {view.nodes.length === 0 && <div className="canvas-note">Nothing to show here with the current filters.</div>}
-        {view.hidden > 0 && <div className="canvas-note">{view.hidden} less connected nodes are grouped. Search or drill in to see them.</div>}
+        {view.hidden > 0 && !insight && <div className="canvas-note">{view.hidden} less connected nodes are grouped. Search or drill in to see them.</div>}
         <Legend kinds={new Set(view.edges.map((e) => e.kind))} />
         {mode === "trace" && exec && (
           <TracePlayer

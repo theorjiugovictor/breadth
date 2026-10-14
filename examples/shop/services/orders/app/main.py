@@ -12,8 +12,9 @@ app = FastAPI()
 @app.post("/orders")
 def create_order(req: OrderRequest) -> Order:
     """Price the cart, charge the customer and persist the order."""
+    customer = repository.fetch_customer(req.customer_id)
     total = price_order(req.items, req.coupon)
-    payment = charge(req.customer_id, total)
+    payment = charge(req.customer_id, total, customer["email"])
     order = Order(id=repository.next_id(), customer_id=req.customer_id, total=total, status=payment["status"])
     repository.save_order(order)
     if order.status == "paid":

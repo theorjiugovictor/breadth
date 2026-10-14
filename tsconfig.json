@@ -1,4 +1,4 @@
 {
   "extends": "./tsconfig.base.json",
-  "include": ["schema/src", "collectors/src", "cli/src"]
+  "include": ["schema/src", "collectors/src", "insights/src", "cli/src"]
 }

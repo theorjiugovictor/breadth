@@ -1027,3 +1027,220 @@ pre,
     display: none;
   }
 }
+
+/* ---------- insights ---------- */
+:root {
+  --sev-critical: #e5484d;
+  --sev-warning: #f59e0b;
+  --sev-info: #3b82f6;
+}
+.badge.sev-critical {
+  background: var(--sev-critical);
+  border-color: var(--sev-critical);
+  color: #fff;
+}
+.badge.sev-warning {
+  background: var(--sev-warning);
+  border-color: var(--sev-warning);
+  color: #fff;
+}
+.badge.sev-info {
+  background: var(--surface);
+  border-color: var(--sev-info);
+  color: var(--sev-info);
+}
+.card.flagged {
+  border-width: 1.5px;
+}
+.card.flagged.sev-critical {
+  border-color: var(--sev-critical);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--sev-critical) 22%, transparent), var(--shadow-lg);
+}
+.card.flagged.sev-warning {
+  border-color: var(--sev-warning);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--sev-warning) 25%, transparent), var(--shadow-lg);
+}
+.card.flagged.sev-info {
+  border-color: var(--sev-info);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--sev-info) 20%, transparent), var(--shadow-lg);
+}
+.side-tabs {
+  display: flex;
+  gap: 2px;
+  background: var(--surface-3);
+  border-radius: 9px;
+  padding: 3px;
+  margin-bottom: 14px;
+}
+.side-tabs button {
+  flex: 1;
+  border: 0;
+  background: none;
+  padding: 6px 8px;
+  border-radius: 7px;
+  cursor: pointer;
+  color: var(--text-2);
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.side-tabs button.on {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+}
+.count-pill {
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--sev-warning);
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+.count-pill.sev-critical {
+  background: var(--sev-critical);
+}
+.count-pill.sev-info {
+  background: var(--sev-info);
+}
+.cat-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.cat-chip {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 11.5px;
+  cursor: pointer;
+  color: var(--text-2);
+}
+.cat-chip.on {
+  background: var(--text);
+  border-color: var(--text);
+  color: var(--surface);
+}
+.insight {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 10px;
+  padding: 10px 11px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.insight:hover {
+  border-color: var(--border-strong);
+}
+.insight.on {
+  border-color: var(--focus);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 18%, transparent);
+}
+.insight-head {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+.insight-head svg {
+  flex: none;
+  margin-top: 1px;
+}
+.insight-title {
+  font-weight: 600;
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+.insight-detail {
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 6px 0 0 22px;
+}
+.insight:not(.on) .insight-detail {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.insight-meta {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin: 8px 0 0 22px;
+  flex-wrap: wrap;
+}
+.tag {
+  font-size: 10.5px;
+  color: var(--text-3);
+  background: var(--surface-3);
+  border-radius: 5px;
+  padding: 1px 6px;
+  font-family: var(--mono);
+}
+.insight-actions {
+  display: flex;
+  gap: 6px;
+  margin: 10px 0 0 22px;
+  flex-wrap: wrap;
+}
+.insight-actions .btn {
+  padding: 4px 9px;
+  font-size: 11.5px;
+}
+.insight-nodes {
+  margin: 8px 0 0 22px;
+}
+.insight-nodes .link-row {
+  padding: 3px 4px;
+  font-size: 12px;
+}
+.insights-note {
+  color: var(--text-3);
+  font-size: 11px;
+  line-height: 1.5;
+  margin-top: 14px;
+  padding: 0 2px;
+}
+.insight-banner {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 6px 5px 14px;
+  font-size: 12px;
+  color: var(--text-2);
+  box-shadow: var(--shadow);
+  z-index: 6;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  max-width: calc(100% - 340px);
+}
+.insight-banner span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.insight-banner button {
+  border: 0;
+  background: var(--surface-3);
+  border-radius: 999px;
+  padding: 3px 10px;
+  cursor: pointer;
+  font-size: 11.5px;
+  flex: none;
+}

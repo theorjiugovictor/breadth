@@ -109,6 +109,26 @@ export interface Execution {
   metadata?: Metadata;
 }
 
+export type Severity = "info" | "warning" | "critical";
+export type InsightCategory = "inefficiency" | "redundancy" | "risk";
+
+/** A finding over the graph. Signals, not verdicts. */
+export interface Insight {
+  id: string;
+  rule: string;
+  category?: InsightCategory;
+  severity: Severity;
+  confidence?: "low" | "medium" | "high";
+  title: string;
+  detail?: string;
+  /** Nodes to highlight; the first one is the subject. */
+  nodes: string[];
+  edges?: string[];
+  execution?: string;
+  steps?: string[];
+  metadata?: Metadata;
+}
+
 export interface GraphSource {
   collector: string;
   collectorVersion?: string;
@@ -123,6 +143,7 @@ export interface FlowGraph {
   nodes: FlowNode[];
   edges: FlowEdge[];
   executions?: Execution[];
+  insights?: Insight[];
 }
 
 export function emptyGraph(): FlowGraph {

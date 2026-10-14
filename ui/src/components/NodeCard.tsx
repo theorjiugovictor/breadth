@@ -1,7 +1,7 @@
 import { memo } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { ChevronsDown, Repeat } from "lucide-react";
-import type { Port } from "@noodles/schema";
+import { ChevronsDown, Repeat, TriangleAlert } from "lucide-react";
+import type { Port, Severity } from "@noodles/schema";
 import { nodeVisual } from "../graph/visual";
 import { visiblePorts } from "../graph/layout";
 import type { ViewNode } from "../graph/view";
@@ -15,6 +15,10 @@ export interface CardData extends Record<string, unknown> {
   runs: number;
   error: boolean;
   hasSelfLoop: boolean;
+  /** Ring colour when part of the selected insight. */
+  insight?: Severity;
+  /** Insight badge in map mode. */
+  flag?: { count: number; severity: Severity };
 }
 
 function subtitle(v: ViewNode, label: string): string {
@@ -55,7 +59,7 @@ export const NodeCard = memo(function NodeCard({ data }: NodeProps) {
   const { v } = d;
   const { Icon, color, label } = nodeVisual(v.node);
   const showPorts = !v.ghost && !v.more && ((v.node.inputs?.length ?? 0) > 0 || (v.node.outputs?.length ?? 0) > 0);
-  const cls = ["card", v.ghost && "ghost", d.selected && "selected", d.active && "active", d.visited && "visited", d.dim && "dim", d.error && "error"]
+  const cls = ["card", v.ghost && "ghost", d.selected && "selected", d.active && "active", d.visited && "visited", d.dim && "dim", d.error && "error", d.insight && `flagged sev-${d.insight}`]
     .filter(Boolean)
     .join(" ");
   return (
@@ -63,6 +67,11 @@ export const NodeCard = memo(function NodeCard({ data }: NodeProps) {
       <Handle type="target" position={Position.Left} id="in" className="h h-main" style={{ top: 29, left: 0 }} />
       <Handle type="source" position={Position.Right} id="out" className="h h-main" style={{ top: 29, right: 0 }} />
       <div className="badges">
+        {d.flag && (
+          <span className={`badge sev-${d.flag.severity}`} title={`${d.flag.count} insight${d.flag.count === 1 ? "" : "s"}`}>
+            <TriangleAlert size={10} /> {d.flag.count}
+          </span>
+        )}
         {d.runs > 1 && <span className="badge runs">×{d.runs}</span>}
         {d.runs === 1 && <span className="badge runs">ran</span>}
         {d.error && <span className="badge err">error</span>}

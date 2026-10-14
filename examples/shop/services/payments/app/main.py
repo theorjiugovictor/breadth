@@ -1,6 +1,7 @@
 """Payments service: fraud checks and card charges."""
 from flask import Flask, request
 
+from . import audit
 from .fraud import risk_score
 from .stripe_client import create_charge
 
@@ -11,7 +12,8 @@ LIMIT = 500.0
 @app.route("/charges", methods=["POST"])
 def charge():
     body = request.get_json()
+    getattr(audit, "record")({"event": "charge.requested", "customer": body["customer"]})
     if risk_score(body["customer"], body["amount"]) > 0.8 or body["amount"] > LIMIT:
         return {"status": "declined", "reason": "risk"}, 402
-    charge_id = create_charge(body["customer"], body["amount"])
+    charge_id = create_charge(body["customer"], body["amount"], body["email"])
     return {"status": "paid", "chargeId": charge_id}

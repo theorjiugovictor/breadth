@@ -13,7 +13,7 @@ describe("otel importer", () => {
 
   it("parses spans with resource service names and nanosecond times", () => {
     const spans = parseOtlp(otlp);
-    expect(spans.length).toBe(43);
+    expect(spans.length).toBe(61);
     const root = spans.find((s) => s.name === "POST /checkout")!;
     expect(root.service).toBe("gateway");
     expect(root.kind).toBe("server");
@@ -46,7 +46,7 @@ describe("otel importer", () => {
     expect(price).toHaveLength(3);
     expect(price[0].input).toEqual({ sku: "sku-1" });
     expect(price[0].output).toBe(12.5);
-    const db = ok.steps.find((s) => s.node === "store:postgresql")!;
+    const db = ok.steps.find((s) => s.node === "store:postgresql" && s.metadata?.span === "INSERT shop.orders")!;
     expect(db.input).toEqual({ params: ["5f3b2c1d", "cus_42", 53.1, "paid"] });
   });
 

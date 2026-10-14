@@ -73,6 +73,13 @@ function makeTrace(traceId, scenario) {
     "noodles.input": { cart },
     "noodles.output": order,
   });
+  // seeded: the client validates the cart again (same input as in checkout)
+  span("gateway", cc, "validateCart", "internal", 2.1, 0.3, {
+    "code.function": "validateCart",
+    "code.filepath": "src/routes/checkout.ts",
+    "noodles.input": { cart },
+    "noodles.output": cart,
+  });
   const hc = span("gateway", cc, "POST", "client", 2.5, declined ? 56 : 142, {
     "http.request.method": "POST",
     "url.full": "http://orders:8000/orders",
@@ -81,56 +88,90 @@ function makeTrace(traceId, scenario) {
   });
 
   // orders
+  const email = declined ? "mallory@example.net" : "ana@example.com";
   const os = span("orders", hc, "POST /orders", "server", 4, declined ? 53 : 138, {
     "http.request.method": "POST",
     "http.route": "/orders",
     "http.response.status_code": declined ? 402 : 200,
     "noodles.input": { customer_id: cart.customerId, items: cart.items, coupon: cart.coupon },
     "noodles.output": { id: order.orderId, status: order.status, total },
-  });
+  }, declined ? "payment declined" : undefined);
   const cr = span("orders", os, "create_order", "internal", 5, declined ? 51 : 136, {
     "code.function": "create_order",
     "code.namespace": "app.main",
     "code.filepath": "app/main.py",
     "noodles.input": { req: { customer_id: cart.customerId, items: cart.items, coupon: cart.coupon } },
     "noodles.output": { id: order.orderId, customer_id: cart.customerId, total, status: order.status },
+  }, declined ? "payment declined" : undefined);
+  const db = (parent, start, dur, op, table, statement, input, output) =>
+    span("orders", parent, `${op} shop.${table}`, "client", start, dur, {
+      "db.system": "postgresql",
+      "db.name": "shop",
+      "db.operation": op,
+      "db.sql.table": table,
+      "db.statement": statement,
+      "server.address": "postgres",
+      "noodles.input": input,
+      "noodles.output": output,
+    });
+  // seeded: customer lookup and pricing are independent but run one after the other
+  const fc = span("orders", cr, "fetch_customer", "internal", 6, 8, {
+    "code.function": "fetch_customer",
+    "code.filepath": "app/repository.py",
+    "noodles.input": { customer_id: cart.customerId },
+    "noodles.output": { id: cart.customerId, email, tier: declined ? "new" : "gold" },
   });
-  const po = span("orders", cr, "price_order", "internal", 6, 2.2, {
+  db(fc, 6.5, 7, "SELECT", "customers", "SELECT id, email, tier FROM customers WHERE id = %s", { params: [cart.customerId] }, { rows: 1 });
+  const po = span("orders", cr, "price_order", "internal", 14.5, 9, {
     "code.function": "price_order",
     "code.filepath": "app/pricing.py",
     "noodles.input": { items: cart.items, coupon: cart.coupon },
     "noodles.output": total,
   });
+  span("orders", po, "validate_items", "internal", 14.6, 0.2, {
+    "code.function": "validate_items",
+    "code.filepath": "app/pricing.py",
+    "noodles.input": { items: cart.items },
+    "noodles.output": cart.items,
+  });
   const prices = { "sku-1": 12.5, "sku-2": 30.0, "sku-3": 4.25 };
+  // seeded N+1: one SELECT per cart line
   cart.items.forEach((it, i) => {
-    span("orders", po, "get_price", "internal", 6.2 + i * 0.4, 0.2, {
+    const gp = span("orders", po, "get_price", "internal", 15 + i * 2.8, 2.5, {
       "code.function": "get_price",
       "code.filepath": "app/pricing.py",
       "noodles.input": { sku: it.sku },
       "noodles.output": prices[it.sku],
     });
+    const pf = span("orders", gp, "price_for", "internal", 15.1 + i * 2.8, 2.3, {
+      "code.function": "price_for",
+      "code.filepath": "app/repository.py",
+      "noodles.input": { sku: it.sku },
+      "noodles.output": prices[it.sku],
+    });
+    db(pf, 15.2 + i * 2.8, 2.1, "SELECT", "products", "SELECT price FROM products WHERE sku = %s", { params: [it.sku] }, { rows: 1 });
   });
   if (!declined) {
-    const d1 = span("orders", po, "apply_discounts", "internal", 7.6, 0.4, {
+    const d1 = span("orders", po, "apply_discounts", "internal", 23.5, 0.4, {
       "code.function": "apply_discounts",
       "code.filepath": "app/pricing.py",
       "noodles.input": { total: 59.0, codes: ["WELCOME10"] },
       "noodles.output": 53.1,
     });
-    span("orders", d1, "apply_discounts", "internal", 7.8, 0.1, {
+    span("orders", d1, "apply_discounts", "internal", 23.7, 0.1, {
       "code.function": "apply_discounts",
       "code.filepath": "app/pricing.py",
       "noodles.input": { total: 53.1, codes: [] },
       "noodles.output": 53.1,
     });
   }
-  const ch = span("orders", cr, "charge", "internal", 9, declined ? 40 : 96, {
+  const ch = span("orders", cr, "charge", "internal", 24, declined ? 25 : 81, {
     "code.function": "charge",
     "code.filepath": "app/payments.py",
-    "noodles.input": { customer_id: cart.customerId, amount: total },
+    "noodles.input": { customer_id: cart.customerId, amount: total, email },
     "noodles.output": declined ? { status: "declined", reason: "risk" } : { status: "paid", chargeId: "ch_3PqL9x" },
   });
-  const hp = span("orders", ch, "POST", "client", 9.5, declined ? 39 : 95, {
+  const hp = span("orders", ch, "POST", "client", 24.5, declined ? 24 : 80, {
     "http.request.method": "POST",
     "url.full": "http://payments:9000/charges",
     "server.address": "payments",
@@ -138,38 +179,46 @@ function makeTrace(traceId, scenario) {
   });
 
   // payments
-  const ps = span("payments", hp, "POST /charges", "server", 11, declined ? 35 : 91, {
+  const ps = span("payments", hp, "POST /charges", "server", 26, declined ? 20 : 77, {
     "http.request.method": "POST",
     "http.route": "/charges",
     "http.response.status_code": declined ? 402 : 200,
-    "noodles.input": { customer: cart.customerId, amount: total },
-    "noodles.output": declined ? { status: "declined", reason: "risk" } : { status: "paid", chargeId: "ch_3PqL9x" },
-  });
-  const pc = span("payments", ps, "charge", "internal", 12, declined ? 33 : 89, {
-    "code.function": "charge",
-    "code.filepath": "app/main.py",
-    "noodles.input": { customer: cart.customerId, amount: total },
+    "noodles.input": { customer: cart.customerId, amount: total, email },
     "noodles.output": declined ? { status: "declined", reason: "risk" } : { status: "paid", chargeId: "ch_3PqL9x" },
   }, declined ? "declined: risk score 1.0" : undefined);
-  span("payments", pc, "risk_score", "internal", 12.5, 1.2, {
+  const pc = span("payments", ps, "charge", "internal", 27, declined ? 18 : 75, {
+    "code.function": "charge",
+    "code.filepath": "app/main.py",
+    "noodles.input": { customer: cart.customerId, amount: total, email },
+    "noodles.output": declined ? { status: "declined", reason: "risk" } : { status: "paid", chargeId: "ch_3PqL9x" },
+  }, declined ? "declined: risk score 1.0" : undefined);
+  // seeded: called through getattr(), so the static map cannot see this edge
+  span("payments", pc, "record", "internal", 27.2, 0.2, {
+    "code.function": "record",
+    "code.filepath": "app/audit.py",
+    "noodles.input": { event: { event: "charge.requested", customer: cart.customerId } },
+    "noodles.output": null,
+  });
+  span("payments", pc, "risk_score", "internal", 27.5, 1.2, {
     "code.function": "risk_score",
     "code.filepath": "app/fraud.py",
-    "noodles.input": { customer: cart.customerId, amount: total },
+    // seeded contract drift: the declined request sends the amount as a string
+    "noodles.input": { customer: cart.customerId, amount: declined ? "600.00" : total },
     "noodles.output": declined ? 1.0 : 0.0531,
   });
   if (!declined) {
-    const sc = span("payments", pc, "create_charge", "internal", 14, 85, {
+    const sc = span("payments", pc, "create_charge", "internal", 30, 70, {
       "code.function": "create_charge",
       "code.filepath": "app/stripe_client.py",
-      "noodles.input": { customer: cart.customerId, amount: total },
+      "noodles.input": { customer: cart.customerId, amount: total, email },
       "noodles.output": "ch_3PqL9x",
     });
-    span("payments", sc, "POST", "client", 14.5, 84, {
+    span("payments", sc, "POST", "client", 30.5, 69, {
       "http.request.method": "POST",
       "url.full": "https://api.stripe.com/v1/charges",
       "server.address": "api.stripe.com",
       "http.response.status_code": 200,
-      "noodles.input": { customer: cart.customerId, amount: Math.round(total * 100), currency: "eur" },
+      "noodles.input": { customer: cart.customerId, amount: Math.round(total * 100), currency: "eur", receipt_email: email },
       "noodles.output": { id: "ch_3PqL9x", object: "charge", paid: true, amount: Math.round(total * 100) },
     });
   }
@@ -228,7 +277,7 @@ function makeTrace(traceId, scenario) {
       "url.full": "https://api.sendgrid.com/v3/mail/send",
       "server.address": "api.sendgrid.com",
       "http.response.status_code": 202,
-      "noodles.input": { to: cart.customerId, subject: `Order ${order.orderId} confirmed` },
+      "noodles.input": { to: "ana@example.com", subject: `Order ${order.orderId} confirmed` },
       "noodles.output": { status: 202 },
     });
   }

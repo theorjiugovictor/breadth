@@ -3,6 +3,8 @@ import path from "node:path";
 import { parseArgs } from "node:util";
 import { assertValidGraph, mergeGraphs, validateGraph, type FlowGraph } from "@noodles/schema";
 import { collectors, importOtlp, linkTracesToCode, runCollectors, type Logger } from "@noodles/collectors";
+import { RULES, runInsights } from "@noodles/insights";
+import type { Insight, Severity } from "@noodles/schema";
 import { loadConfig } from "./config.js";
 import { createProvider, summarizeGraph } from "./llm/provider.js";
 import { serve } from "./serve.js";
@@ -15,6 +17,7 @@ Usage:
   noodles scan <path> [--collector code,infra] [-o flowgraph.json] [--config file] [--exclude glob]...
   noodles import-traces <otlp.json>... [--merge flowgraph.json] [-o out.json]
   noodles serve [flowgraph.json] [--port 4321] [--host 127.0.0.1] [--no-open]
+  noodles insights <flowgraph.json> [--json] [--write] [--fail-on warning|critical] [--rules a,b]
   noodles validate <flowgraph.json>
   noodles collectors
 
@@ -25,6 +28,7 @@ Options:
       --exclude     extra ignore pattern, gitignore syntax (repeatable)
       --no-external hide third-party packages
       --llm         summarise nodes with the configured LLM provider (off by default)
+      --no-insights do not store insights in the written graph
   -q, --quiet       less output
 `;
 
@@ -59,6 +63,7 @@ async function cmdScan(args: string[]) {
       exclude: { type: "string", multiple: true },
       "no-external": { type: "boolean" },
       llm: { type: "boolean" },
+      "no-insights": { type: "boolean" },
       quiet: { type: "boolean", short: "q" },
     },
   });
@@ -86,8 +91,9 @@ async function cmdScan(args: string[]) {
     log.info(`llm: summarised ${n} nodes with ${provider.name}`);
   }
 
+  if (!values["no-insights"]) attachInsights(graph);
   writeGraph(values.out!, graph);
-  process.stderr.write(`noodles: wrote ${values.out} (${graph.nodes.length} nodes, ${graph.edges.length} edges) in ${((Date.now() - start) / 1000).toFixed(1)}s\n`);
+  process.stderr.write(`noodles: wrote ${values.out} (${graph.nodes.length} nodes, ${graph.edges.length} edges${insightSummary(graph)}) in ${((Date.now() - start) / 1000).toFixed(1)}s\n`);
   process.stderr.write(`         view it with: noodles serve ${values.out}\n`);
 }
 
@@ -106,6 +112,7 @@ async function cmdImportTraces(args: string[]) {
     options: {
       merge: { type: "string", short: "m" },
       out: { type: "string", short: "o" },
+      "no-insights": { type: "boolean" },
       quiet: { type: "boolean", short: "q" },
     },
   });
@@ -117,10 +124,11 @@ async function cmdImportTraces(args: string[]) {
     const base = readGraph(values.merge);
     graph = mergeGraphs(base, linkTracesToCode(traces, base));
   }
+  if (!values["no-insights"]) attachInsights(graph);
   assertValidGraph(graph, "merged graph");
   writeGraph(out, graph);
   process.stderr.write(
-    `noodles: imported ${traces.executions?.length ?? 0} traces (${traces.nodes.length} nodes, ${traces.edges.length} edges) into ${out}\n`,
+    `noodles: imported ${traces.executions?.length ?? 0} traces (${traces.nodes.length} nodes, ${traces.edges.length} edges) into ${out}${insightSummary(graph, true)}\n`,
   );
 }
 
@@ -138,6 +146,64 @@ async function cmdServe(args: string[]) {
   readGraph(graphFile);
   const url = await serve({ graphFile, port: Number(values.port), host: values.host!, open: !values["no-open"] });
   process.stderr.write(`noodles: serving ${graphFile} at ${url}  (Ctrl+C to stop)\n`);
+}
+
+function attachInsights(graph: FlowGraph) {
+  graph.insights = runInsights(graph);
+  if (!graph.insights.length) delete graph.insights;
+}
+
+function insightSummary(graph: FlowGraph, sentence = false): string {
+  const n = graph.insights?.length ?? 0;
+  if (!n) return "";
+  return sentence ? `; ${n} insight${n === 1 ? "" : "s"}` : `, ${n} insight${n === 1 ? "" : "s"}`;
+}
+
+const SEV_ORDER: Record<Severity, number> = { info: 0, warning: 1, critical: 2 };
+const SEV_MARK: Record<Severity, string> = { critical: "✖", warning: "▲", info: "●" };
+
+async function cmdInsights(args: string[]) {
+  const { values, positionals } = parseArgs({
+    args,
+    allowPositionals: true,
+    options: {
+      json: { type: "boolean" },
+      write: { type: "boolean" },
+      "fail-on": { type: "string" },
+      rules: { type: "string" },
+      list: { type: "boolean" },
+    },
+  });
+  if (values.list) {
+    for (const r of RULES) process.stdout.write(`  ${r.id.padEnd(26)} ${r.category.padEnd(13)} ${r.description}\n`);
+    return;
+  }
+  const file = positionals[0] ?? "flowgraph.json";
+  const graph = readGraph(file);
+  const insights: Insight[] = runInsights(graph, { rules: values.rules?.split(",").map((s) => s.trim()) });
+  if (values.write) {
+    graph.insights = insights;
+    writeGraph(file, graph);
+  }
+  if (values.json) {
+    process.stdout.write(JSON.stringify(insights, null, 2) + "\n");
+  } else if (!insights.length) {
+    process.stdout.write(`${file}: no insights\n`);
+  } else {
+    const names = new Map(graph.nodes.map((n) => [n.id, n.name]));
+    for (const i of insights) {
+      process.stdout.write(`${SEV_MARK[i.severity]} ${i.severity.padEnd(8)} ${i.title}  [${i.rule}]\n`);
+      if (i.detail) process.stdout.write(`  ${i.detail}\n`);
+      process.stdout.write(`  at: ${i.nodes.slice(0, 4).map((n) => names.get(n) ?? n).join(", ")}${i.confidence === "low" ? "  (low confidence)" : ""}\n\n`);
+    }
+    const counts = (["critical", "warning", "info"] as Severity[]).map((s) => `${insights.filter((i) => i.severity === s).length} ${s}`);
+    process.stdout.write(`${insights.length} insights: ${counts.join(", ")}\n`);
+  }
+  const failOn = values["fail-on"] as Severity | undefined;
+  if (failOn) {
+    if (!(failOn in SEV_ORDER)) throw new Error("--fail-on must be info, warning or critical");
+    if (insights.some((i) => SEV_ORDER[i.severity] >= SEV_ORDER[failOn])) process.exitCode = 1;
+  }
 }
 
 function cmdValidate(args: string[]) {
@@ -167,6 +233,8 @@ async function main(argv: string[]) {
       return cmdServe(rest);
     case "validate":
       return cmdValidate(rest);
+    case "insights":
+      return cmdInsights(rest);
     case "collectors":
       return cmdCollectors();
     case "-v":
@@ -183,6 +251,12 @@ async function main(argv: string[]) {
       throw new Error(`unknown command "${cmd}"\n\n${HELP}`);
   }
 }
+
+// `noodles insights … | head` closes stdout early: that is not an error.
+process.stdout.on("error", (err: NodeJS.ErrnoException) => {
+  if (err.code === "EPIPE") process.exit(0);
+  throw err;
+});
 
 main(process.argv.slice(2)).catch((err: Error) => {
   process.stderr.write(`noodles: ${err.message}\n`);

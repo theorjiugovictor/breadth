@@ -48,7 +48,11 @@ export interface View {
   hidden: number;
 }
 
-export function computeView(index: GraphIndex, focus: string, filters: Filters, maxNodes = MAX_NODES): View {
+/**
+ * @param pinned nodes to show as themselves (not folded into an ancestor) when they are outside
+ *               the focus, e.g. the nodes of the selected insight.
+ */
+export function computeView(index: GraphIndex, focus: string, filters: Filters, maxNodes = MAX_NODES, pinned?: Set<string>): View {
   const focusChain = focus === ROOT ? [ROOT] : [ROOT, ...ancestors(index, focus), focus];
 
   // A node is shown if its layer is on, or if something inside it is.
@@ -76,6 +80,8 @@ export function computeView(index: GraphIndex, focus: string, filters: Filters, 
       const k = chain.indexOf(focus);
       if (focus !== ROOT && id === focus) rep = focus;
       else if (k >= 0 && k < chain.length - 1) rep = chain[k + 1];
+      else if (pinned?.has(id) && !focusChain.includes(id)) rep = id;
+      else if (pinned && k < 0 && chain.some((c) => pinned.has(c) && !focusChain.includes(c))) rep = chain.find((c) => pinned.has(c) && !focusChain.includes(c));
       else {
         let i = 0;
         while (i < chain.length && i < focusChain.length && chain[i] === focusChain[i]) i++;
@@ -146,6 +152,11 @@ export function computeView(index: GraphIndex, focus: string, filters: Filters, 
   const ghostDegree = new Map<string, number>();
   for (const e of edges) {
     for (const r of [e.source, e.target]) if (!insideSet.has(r)) ghostDegree.set(r, (ghostDegree.get(r) ?? 0) + e.count);
+  }
+  // Pinned ghosts are always kept, even without edges at this level.
+  for (const id of pinned ?? []) {
+    const r = rawRep(id);
+    if (r && !insideSet.has(r) && !ghostDegree.has(r)) ghostDegree.set(r, Number.MAX_SAFE_INTEGER);
   }
   const ghosts = [...ghostDegree.entries()].sort((a, b) => b[1] - a[1]).slice(0, MAX_GHOSTS).map(([id]) => id);
   const ghostSet = new Set(ghosts);

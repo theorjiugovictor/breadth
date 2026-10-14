@@ -58,6 +58,9 @@ export function validateGraph(graph: unknown): ValidationResult {
       if (!ids.has(s.node)) errors.push(`execution "${x.id}" step "${s.id}" has unknown node "${s.node}"`);
     }
   }
+  for (const i of g.insights ?? []) {
+    for (const n of i.nodes) if (!ids.has(n)) errors.push(`insight "${i.id}" has unknown node "${n}"`);
+  }
   if (errors.length === 0) {
     const cycle = findParentCycle(g);
     if (cycle) errors.push(`parent cycle: ${cycle.join(" > ")}`);

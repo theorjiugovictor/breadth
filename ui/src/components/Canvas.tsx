@@ -13,12 +13,19 @@ import {
 } from "@xyflow/react";
 import { layoutView, handleId, type Positioned } from "../graph/layout";
 import type { View } from "../graph/view";
+import type { Severity } from "@noodles/schema";
 import { EDGE_HEX, nodeVisual } from "../graph/visual";
 import { NodeCard, type CardData } from "./NodeCard";
 import { FlowEdge, type EdgeData } from "./FlowEdge";
 
 const nodeTypes = { card: NodeCard };
 const edgeTypes = { flow: FlowEdge };
+
+export interface InsightHighlight {
+  nodes: Set<string>;
+  edges: Set<string>;
+  severity: Severity;
+}
 
 export interface TraceOverlay {
   activeNode?: string;
@@ -35,11 +42,17 @@ interface Props {
   trace?: TraceOverlay;
   theme: "light" | "dark";
   centerOn?: string;
+  /** The selected insight: its nodes/edges are emphasised, everything else dims. */
+  highlight?: InsightHighlight;
+  /** Insight counts per graph node (map mode badges). */
+  flags?: Map<string, { count: number; severity: Severity }>;
   onSelect: (id: string | undefined) => void;
   onDrill: (id: string) => void;
 }
 
-export function Canvas({ view, selected, trace, theme, centerOn, onSelect, onDrill }: Props) {
+const SEV_RANK: Record<Severity, number> = { critical: 3, warning: 2, info: 1 };
+
+export function Canvas({ view, selected, trace, theme, centerOn, highlight, flags, onSelect, onDrill }: Props) {
   const [positions, setPositions] = useState<Map<string, Positioned>>(new Map());
   const [layoutKey, setLayoutKey] = useState(0);
   const rf = useReactFlow();
@@ -90,8 +103,23 @@ export function Canvas({ view, selected, trace, theme, centerOn, onSelect, onDri
         if (r) errors.add(r);
       }
     }
-    return { active, visited, runs, errors };
-  }, [trace, view]);
+    const hl = new Set<string>();
+    for (const id of highlight?.nodes ?? []) {
+      const r = view.repOf(id);
+      if (r) hl.add(r);
+    }
+    const flagged = new Map<string, { count: number; severity: Severity }>();
+    for (const [id, f] of flags ?? []) {
+      const r = view.repOf(id);
+      if (!r) continue;
+      const cur = flagged.get(r);
+      flagged.set(r, {
+        count: (cur?.count ?? 0) + f.count,
+        severity: cur && SEV_RANK[cur.severity] > SEV_RANK[f.severity] ? cur.severity : f.severity,
+      });
+    }
+    return { active, visited, runs, errors, hl, flagged };
+  }, [trace, view, highlight, flags]);
 
   const selfLoops = useMemo(() => new Set(view.edges.filter((e) => e.source === e.target).map((e) => e.source)), [view]);
 
@@ -105,14 +133,16 @@ export function Canvas({ view, selected, trace, theme, centerOn, onSelect, onDri
           selected: selected === n.id,
           active: overlay.active === n.id,
           visited: overlay.visited.has(n.id),
-          dim: !!trace && !overlay.visited.has(n.id) && overlay.active !== n.id,
+          dim: highlight ? !overlay.hl.has(n.id) : !!trace && !overlay.visited.has(n.id) && overlay.active !== n.id,
+          insight: highlight && overlay.hl.has(n.id) ? highlight.severity : undefined,
+          flag: !trace && !highlight ? overlay.flagged.get(n.id) : undefined,
           runs: trace ? (overlay.runs.get(n.id) ?? 0) : 0,
           error: overlay.errors.has(n.id),
           hasSelfLoop: selfLoops.has(n.id),
         };
         return { id: n.id, type: "card", position: { x: p.x, y: p.y }, data, draggable: true, selectable: false, initialWidth: p.width, initialHeight: p.height };
       });
-  }, [view, positions, selected, overlay, trace, selfLoops]);
+  }, [view, positions, selected, overlay, trace, selfLoops, highlight]);
 
   const edges: Edge[] = useMemo(() => {
     const byId = new Map(view.nodes.map((n) => [n.id, n]));
@@ -121,7 +151,10 @@ export function Canvas({ view, selected, trace, theme, centerOn, onSelect, onDri
     return view.edges
       .filter((e) => positions.has(e.source) && positions.has(e.target))
       .map((e) => {
-        const traversed = !!trace && e.edgeIds.some((id) => trace.traversedEdges.has(id));
+        const flaggedEdge =
+          !!highlight &&
+          (e.edgeIds.some((id) => highlight.edges.has(id)) || (!highlight.edges.size && overlay.hl.has(e.source) && overlay.hl.has(e.target)));
+        const traversed = (!!trace && e.edgeIds.some((id) => trace.traversedEdges.has(id))) || flaggedEdge;
         const current = !!trace?.currentEdge && e.edgeIds.includes(trace.currentEdge);
         const data: EdgeData = { e, traversed, showLabel };
         const color = traversed ? "#ff6d5a" : hex[e.kind];
@@ -133,12 +166,12 @@ export function Canvas({ view, selected, trace, theme, centerOn, onSelect, onDri
           targetHandle: handleId(byId.get(e.target), "in", e.targetPort),
           type: "flow",
           data,
-          className: [traversed && "traversed", current && "current", trace && !traversed && "dim"].filter(Boolean).join(" "),
+          className: [traversed && "traversed", current && "current", (trace || highlight) && !traversed && "dim"].filter(Boolean).join(" "),
           markerEnd: { type: MarkerType.ArrowClosed, color, width: 14, height: 14 },
           zIndex: traversed ? 2 : 0,
         } satisfies Edge;
       });
-  }, [view, positions, trace, theme]);
+  }, [view, positions, trace, theme, highlight, overlay]);
 
   const onNodesChange = useCallback((changes: NodeChange[]) => {
     setPositions((prev) => {

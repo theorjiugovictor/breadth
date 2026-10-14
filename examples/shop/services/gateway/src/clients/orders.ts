@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { Cart } from "../routes/checkout";
+import { validateCart, type Cart } from "../routes/checkout";
 
 const ORDERS_URL = process.env.ORDERS_URL ?? "http://orders:8000";
 
@@ -12,6 +12,7 @@ export interface Order {
 /** Thin HTTP client for the orders service. */
 export class OrdersClient {
   async createOrder(cart: Cart): Promise<Order> {
+    validateCart(cart);
     const res = await axios.post(`${ORDERS_URL}/orders`, cart);
     return res.data;
   }

@@ -4,8 +4,12 @@
   "private": true,
   "description": "Turn any codebase or system into an n8n-style canvas",
   "type": "module",
-  "bin": { "noodles": "./dist/noodles.mjs" },
-  "files": ["dist"],
+  "bin": {
+    "noodles": "./dist/noodles.mjs"
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "node scripts/build.mjs"
   },
@@ -13,7 +17,8 @@
     "@noodles/collectors": "*",
     "@noodles/schema": "*",
     "tree-sitter-wasms": "0.1.13",
-    "web-tree-sitter": "0.25.10"
+    "web-tree-sitter": "0.25.10",
+    "@noodles/insights": "*"
   },
   "license": "MIT"
 }

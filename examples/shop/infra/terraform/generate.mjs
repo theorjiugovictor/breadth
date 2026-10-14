@@ -32,6 +32,9 @@ const root = [
   R("aws_db_subnet_group", "main", { name: "shop-db" }, { subnet_ids: ["module.network.private_subnet_ids", "module.network"] }),
   R("aws_msk_cluster", "events", { cluster_name: "shop-events", kafka_version: "3.6.0", number_of_broker_nodes: 3 }, { "broker_node_group_info.security_groups": ["aws_security_group.kafka.id", "aws_security_group.kafka"], "broker_node_group_info.client_subnets": ["module.network.private_subnet_ids", "module.network"] }),
   R("aws_secretsmanager_secret", "stripe", { name: "shop/stripe-key" }),
+  // seeded: left over from an old invoicing feature, nothing uses them any more
+  R("aws_s3_bucket", "invoices_legacy", { bucket: "shop-invoices-legacy", tags: { Name: "shop-invoices-legacy" } }),
+  R("aws_sqs_queue", "invoice_jobs", { name: "shop-invoice-jobs", message_retention_seconds: 345600 }),
 ];
 
 const asPlanned = (list, prefix) =>

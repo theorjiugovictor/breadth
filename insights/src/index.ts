@@ -1,0 +1,49 @@
+import type { FlowGraph, Insight, Severity } from "@noodles/schema";
+import { Ctx } from "./context.js";
+import type { Rule, RuleOptions } from "./rule.js";
+import { dataExposure } from "./rules/data-exposure.js";
+import { nPlusOne } from "./rules/n-plus-one.js";
+import { orphanInfra } from "./rules/orphan-infra.js";
+import { raceRisk } from "./rules/race-risk.js";
+import { repeatedWork } from "./rules/repeated-work.js";
+import { chattyServices, longHopChain } from "./rules/services.js";
+
+export type { Rule, RuleOptions } from "./rule.js";
+export { Ctx } from "./context.js";
+export { sensitiveFields } from "./rules/data-exposure.js";
+
+export const RULES: Rule[] = [nPlusOne, repeatedWork, chattyServices, longHopChain, raceRisk, dataExposure, orphanInfra];
+
+export const SEVERITY_RANK: Record<Severity, number> = { critical: 0, warning: 1, info: 2 };
+
+export interface InsightOptions {
+  /** Only run these rule ids. */
+  rules?: string[];
+  /** Per-rule thresholds. */
+  thresholds?: RuleOptions;
+}
+
+/** Run every rule over a graph. Pure; safe in Node and the browser. */
+export function runInsights(graph: FlowGraph, opts: InsightOptions = {}): Insight[] {
+  const ctx = new Ctx(graph);
+  const out = new Map<string, Insight>();
+  for (const rule of RULES) {
+    if (opts.rules && !opts.rules.includes(rule.id)) continue;
+    let found: Insight[];
+    try {
+      found = rule.run(ctx, opts.thresholds?.[rule.id] ?? {});
+    } catch (err) {
+      // A broken rule must never break the canvas.
+      console.warn(`noodles insights: rule ${rule.id} failed: ${(err as Error).message}`);
+      continue;
+    }
+    for (const i of found) {
+      const nodes = [...new Set(i.nodes)].filter((n) => ctx.nodes.has(n));
+      if (!nodes.length || out.has(i.id)) continue;
+      out.set(i.id, { ...i, nodes });
+    }
+  }
+  return [...out.values()].sort(
+    (a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] || a.rule.localeCompare(b.rule) || a.title.localeCompare(b.title),
+  );
+}

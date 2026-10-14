@@ -212,6 +212,30 @@
      "values": {
       "name": "shop/stripe-key"
      }
+    },
+    {
+     "address": "aws_s3_bucket.invoices_legacy",
+     "mode": "managed",
+     "type": "aws_s3_bucket",
+     "name": "invoices_legacy",
+     "provider_name": "registry.terraform.io/hashicorp/aws",
+     "values": {
+      "bucket": "shop-invoices-legacy",
+      "tags": {
+       "Name": "shop-invoices-legacy"
+      }
+     }
+    },
+    {
+     "address": "aws_sqs_queue.invoice_jobs",
+     "mode": "managed",
+     "type": "aws_sqs_queue",
+     "name": "invoice_jobs",
+     "provider_name": "registry.terraform.io/hashicorp/aws",
+     "values": {
+      "name": "shop-invoice-jobs",
+      "message_retention_seconds": 345600
+     }
     }
    ],
    "child_modules": [
@@ -577,6 +601,20 @@
      "mode": "managed",
      "type": "aws_secretsmanager_secret",
      "name": "stripe",
+     "expressions": {}
+    },
+    {
+     "address": "aws_s3_bucket.invoices_legacy",
+     "mode": "managed",
+     "type": "aws_s3_bucket",
+     "name": "invoices_legacy",
+     "expressions": {}
+    },
+    {
+     "address": "aws_sqs_queue.invoice_jobs",
+     "mode": "managed",
+     "type": "aws_sqs_queue",
+     "name": "invoice_jobs",
      "expressions": {}
     }
    ],
