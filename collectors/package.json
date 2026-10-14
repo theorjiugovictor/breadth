@@ -1,0 +1,16 @@
+{
+  "name": "@noodles/collectors",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@noodles/schema": "*",
+    "ignore": "^7.0.5",
+    "tree-sitter-wasms": "0.1.13",
+    "web-tree-sitter": "0.25.10",
+    "yaml": "^2.8.1"
+  }
+}
