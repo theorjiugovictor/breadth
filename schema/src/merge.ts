@@ -59,12 +59,14 @@ export function mergeGraphs(...graphs: FlowGraph[]): FlowGraph {
 
   // 3. Edges.
   const edges = new Map<string, FlowEdge>();
-  for (const g of graphs) {
+  const edgeRemap = graphs.map(() => new Map<string, string>());
+  for (const [gi, g] of graphs.entries()) {
     for (const e of g.edges) {
       const from = { ...e.from, node: canon(e.from.node) };
       const to = { ...e.to, node: canon(e.to.node) };
       const moved = from.node !== e.from.node || to.node !== e.to.node;
       const id = moved ? edgeId(e.kind, from, to) : e.id;
+      if (id !== e.id) edgeRemap[gi].set(e.id, id);
       const next: FlowEdge = { ...e, id, from, to };
       const existing = edges.get(id);
       edges.set(id, existing ? mergeEdge(existing, next) : next);
@@ -73,10 +75,15 @@ export function mergeGraphs(...graphs: FlowGraph[]): FlowGraph {
 
   // 4. Executions.
   const executions = new Map<string, Execution>();
-  for (const g of graphs) {
+  for (const [gi, g] of graphs.entries()) {
     for (const x of g.executions ?? []) {
       if (executions.has(x.id)) continue;
-      executions.set(x.id, { ...x, steps: x.steps.map((s) => ({ ...s, node: canon(s.node) })) });
+      const steps = x.steps.map((s) => {
+        const step = { ...s, node: canon(s.node) };
+        if (s.via) step.via = edgeRemap[gi].get(s.via) ?? s.via;
+        return step;
+      });
+      executions.set(x.id, { ...x, steps });
     }
   }
 

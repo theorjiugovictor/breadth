@@ -1,0 +1,5 @@
+{
+  "name": "gateway",
+  "private": true,
+  "dependencies": { "express": "^4.19.2", "axios": "^1.7.0" }
+}

@@ -1,0 +1,5 @@
+{
+  "name": "notifier",
+  "private": true,
+  "dependencies": { "kafkajs": "^2.2.4", "axios": "^1.7.0" }
+}

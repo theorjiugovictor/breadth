@@ -39,9 +39,9 @@ export const codeCollector: Collector = {
   description: "Static code structure for Python and TypeScript/JavaScript (tree-sitter)",
   implemented: true,
 
-  async detect(target) {
+  async detect(target, options = {}) {
     if (!(await isDirectory(target))) return false;
-    const files = await walkFiles(target, { filter: (f) => !!langForFile(f) });
+    const files = await walkFiles(target, { exclude: options.exclude, include: options.include, filter: (f) => !!langForFile(f) });
     return files.length > 0;
   },
 

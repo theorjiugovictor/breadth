@@ -25,7 +25,7 @@ export interface Collector {
   /** Stub collectors are listed but never auto-selected. */
   implemented: boolean;
   /** Cheap check used for zero-config auto-selection. */
-  detect(target: string): Promise<boolean>;
+  detect(target: string, options?: CollectorOptions): Promise<boolean>;
   collect(target: string, options: CollectorOptions): Promise<FlowGraph>;
 }
 

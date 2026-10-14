@@ -1,0 +1,4 @@
+{
+  "collectors": ["code", "infra"],
+  "exclude": ["**/generate.mjs", "traces/"]
+}

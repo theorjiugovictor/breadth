@@ -130,4 +130,4 @@ export function sqlLabel(sql?: string): string | undefined {
 }
 
 export const PRODUCE_METHODS = /^(send\w*|produce\w*|publish\w*|basic_publish|emit|add|enqueue|delay|apply_async)$/;
-export const CONSUME_METHODS = /^(subscribe|consume|poll|basic_consume|on_message|run|process|listen|KafkaConsumer|Consumer|AIOKafkaConsumer|Worker)$/;
+export const CONSUME_METHODS = /^(subscribe|consume|poll|basic_consume|on_message|KafkaConsumer|Consumer|AIOKafkaConsumer|Worker)$/;

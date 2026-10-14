@@ -1,0 +1,4 @@
+fastapi
+httpx
+psycopg2-binary
+kafka-python

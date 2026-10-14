@@ -94,7 +94,8 @@ export function buildGraph(input: BuildInput): FlowGraph {
     const base = path.posix.basename(manifestDir ?? dir);
     addNode({
       id: ids.dir(dir),
-      name: name + "/",
+      // services are named after their manifest dir ("gateway"), plain dirs after their path ("lib/utils/")
+      name: isService ? base : name + "/",
       kind: isService ? "service" : "module",
       layer: "code",
       parent: parentDir ? ids.dir(parentDir) : systemId,
@@ -337,10 +338,34 @@ export function buildGraph(input: BuildInput): FlowGraph {
     return undefined;
   };
 
+  /**
+   * A module-level object created by a call stands for what created it:
+   * producer = KafkaProducer(...) -> the kafka package; orders = new OrdersClient() -> that class.
+   */
+  const clientOf = (t: Target & { kind: "global" }, depth = 0): Target | undefined => {
+    const f = byPath.get(t.file)!;
+    const g = f.globals.find((x) => x.name === t.name);
+    if (!g?.init || depth > 3) return undefined;
+    const head = resolveName(f, g.init[0]);
+    if (!head) return undefined;
+    if (head.kind === "global") return clientOf(head, depth + 1);
+    const r = descend(head, g.init.slice(1));
+    if (r?.target.kind === "external") return { ...r.target, member: undefined };
+    if (r?.target.kind === "def" && defIndex.get(r.target.file)!.get(r.target.qual)?.type === "class") return r.target;
+    return undefined;
+  };
+
   const descend = (t: Target, member: string[]): { target: Target } | undefined => {
     if (member.length === 0) return { target: t };
     if (t.kind === "external") return { target: { ...t, member: [t.member, ...member].filter(Boolean).join(".") } };
-    if (t.kind === "global") return { target: t };
+    if (t.kind === "global") {
+      const client = clientOf(t);
+      if (client?.kind === "def") {
+        const m = findMethod(client.file, client.qual, member[0]);
+        return m ? { target: m } : undefined;
+      }
+      return client ? descend(client, member) : { target: t };
+    }
     if (t.kind === "module") {
       const r = resolveName(byPath.get(t.file)!, member[0]);
       return r ? descend(r, member.slice(1)) : undefined;
@@ -612,6 +637,7 @@ export function buildGraph(input: BuildInput): FlowGraph {
     for (const a of f.globalAccess) {
       const t = resolveInScope(f, a.from, a.name);
       if (t?.kind !== "global") continue;
+      if (clientOf(t)) continue;
       const g = byPath.get(t.file)!.globals.find((x) => x.name === t.name);
       const from = fromNodeId(f, a.from);
       if (a.mode === "read" && g && g.constantLike && !g.mutable && !isWrittenAnywhere(t.file, t.name)) continue;

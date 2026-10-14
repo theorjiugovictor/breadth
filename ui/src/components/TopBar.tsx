@@ -1,4 +1,4 @@
-import { ChevronRight, Moon, PanelLeft, Play, Map as MapIcon, Sun, Upload, ChevronDown } from "lucide-react";
+import { ChevronRight, Moon, PanelLeft, Play, Map as MapIcon, Sun, Upload, ChevronDown, House } from "lucide-react";
 import type { GraphIndex } from "../graph/model";
 import { ancestors, ROOT } from "../graph/model";
 import type { DemoEntry } from "../data";
@@ -43,8 +43,8 @@ export function TopBar(p: Props) {
         noodles
       </a>
       <nav className="crumbs" aria-label="Breadcrumbs">
-        <button className={`crumb${chain.length === 0 ? " current" : ""}`} onClick={() => p.onFocus(ROOT)}>
-          {p.graphName}
+        <button className={`crumb${chain.length === 0 ? " current" : ""}`} onClick={() => p.onFocus(ROOT)} title={`${p.graphName}: everything`} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <House size={14} /> {chain.length === 0 ? p.graphName : ""}
         </button>
         {chain.map((id, i) => (
           <span key={id} style={{ display: "contents" }}>

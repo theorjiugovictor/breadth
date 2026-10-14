@@ -5,3 +5,5 @@ dist/
 coverage/
 /flowgraph.json
 /scratch/
+site-dist/
+examples/**/flowgraph.json

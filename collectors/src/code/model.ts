@@ -58,6 +58,8 @@ export interface GlobalVar {
   /** Literal kind of the initial value, used to decide if it is mutable shared state. */
   mutable: boolean;
   constantLike: boolean;
+  /** Callee parts when initialised by a call / `new` (a client object: KafkaProducer(...), new Pool()). */
+  init?: string[];
 }
 
 export interface GlobalAccess {

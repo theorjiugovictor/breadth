@@ -34,6 +34,13 @@ export const FlowEdge = memo(function FlowEdge(props: EdgeProps) {
     path = `M ${sourceX} ${sourceY} C ${sourceX + 70} ${sourceY - lift - 30}, ${targetX - 70} ${targetY - lift - 30}, ${targetX} ${targetY}`;
     lx = (sourceX + targetX) / 2;
     ly = Math.min(sourceY, targetY) - lift - 8;
+  } else if (targetX < sourceX + 30) {
+    // Back edge (target is left of the source): swing below both ends instead of cutting across.
+    const low = Math.max(sourceY, targetY) + 60 + Math.min(120, Math.abs(sourceY - targetY) * 0.25);
+    const mx = (sourceX + targetX) / 2;
+    path = `M ${sourceX} ${sourceY} C ${sourceX + 90} ${sourceY}, ${sourceX + 90} ${low}, ${mx} ${low} S ${targetX - 90} ${targetY}, ${targetX} ${targetY}`;
+    lx = mx;
+    ly = low;
   } else {
     [path, lx, ly] = getBezierPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, curvature: 0.35 });
   }

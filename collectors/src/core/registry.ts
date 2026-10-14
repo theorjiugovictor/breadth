@@ -36,7 +36,7 @@ export async function runCollectors(target: string, names: string[] | undefined,
   } else {
     selected = [];
     for (const c of collectors) {
-      if (c.implemented && c.name !== "otel" && (await c.detect(target))) selected.push(c);
+      if (c.implemented && c.name !== "otel" && (await c.detect(target, options))) selected.push(c);
     }
     if (!selected.length) throw new Error(`no collector recognised ${target}; try --collector code`);
   }

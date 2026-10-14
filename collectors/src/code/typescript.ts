@@ -41,10 +41,11 @@ export function extractTypeScript(path: string, root: Node, lang: Lang): FileMod
       const value = d.childForFieldName("value");
       if (name?.type !== "identifier") continue;
       if (value && (FUNCTION_VALUES.has(value.type) || isRequire(value))) continue;
+      const init = newType(value) ?? callType(value);
       const mutable = !isConst || isMutableValue(value);
-      if (!mutable) continue;
+      if (!mutable && !init) continue;
       globalNames.add(name.text);
-      m.globals.push({ name: name.text, line: d.startPosition.row + 1, mutable, constantLike: false });
+      m.globals.push({ name: name.text, line: d.startPosition.row + 1, mutable, constantLike: false, init });
     }
   }
 
@@ -208,7 +209,7 @@ export function extractTypeScript(path: string, root: Node, lang: Lang): FileMod
               line: node.startPosition.row + 1,
               inLoop: ctx.inLoop,
               conditional: ctx.conditional,
-              firstArg: first ? stringLiteral(first) : undefined,
+              firstArg: first ? (stringLiteral(first) ?? objectTopic(first)) : undefined,
               receiver: parts.length > 1 ? ctx.types.get(parts[0]) : undefined,
               argNames: argIdentifiers(args),
             });
@@ -374,6 +375,27 @@ export function extractTypeScript(path: string, root: Node, lang: Lang): FileMod
   }
   m.exports = [...exported];
   return m;
+}
+
+/** Callee parts of `x = make()` / `x = kafka.consumer()` initialisers. */
+function callType(value: Node | null | undefined): string[] | undefined {
+  if (value?.type === "await_expression") value = value.namedChildren[0];
+  if (value?.type !== "call_expression") return undefined;
+  const fn = value.childForFieldName("function");
+  const parts = fn ? calleeParts(fn, "member_expression", "object", "property") : [];
+  return parts.length && !parts.includes("?") ? parts : undefined;
+}
+
+/** `{ topic: "orders" }` style arguments (kafkajs, bullmq, ...): the destination name. */
+function objectTopic(n: Node): string | undefined {
+  if (n.type !== "object") return undefined;
+  for (const p of n.namedChildren) {
+    if (p?.type !== "pair") continue;
+    const key = p.childForFieldName("key")?.text.replace(/["']/g, "");
+    const value = p.childForFieldName("value");
+    if (key && /^(topic|queue|queueName|channel|subject|QueueUrl|TopicArn)$/.test(key) && value) return stringLiteral(value);
+  }
+  return undefined;
 }
 
 function newType(value: Node | null | undefined): string[] | undefined {

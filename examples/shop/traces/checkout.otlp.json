@@ -1,0 +1,1905 @@
+{
+ "resourceSpans": [
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "gateway"
+      }
+     },
+     {
+      "key": "deployment.environment",
+      "value": {
+       "stringValue": "demo"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "noodles-demo"
+     },
+     "spans": [
+      {
+       "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+       "spanId": "4bf92f3500000001",
+       "parentSpanId": "",
+       "name": "POST /checkout",
+       "kind": 2,
+       "startTimeUnixNano": "1760430000000000000",
+       "endTimeUnixNano": "1760430000148000000",
+       "attributes": [
+        {
+         "key": "http.request.method",
+         "value": {
+          "stringValue": "POST"
+         }
+        },
+        {
+         "key": "http.route",
+         "value": {
+          "stringValue": "/checkout"
+         }
+        },
+        {
+         "key": "url.path",
+         "value": {
+          "stringValue": "/checkout"
+         }
+        },
+        {
+         "key": "http.response.status_code",
+         "value": {
+          "intValue": "201"
+         }
+        },
+        {
+         "key": "noodles.input",
+         "value": {
+          "stringValue": "{\"body\":{\"customerId\":\"cus_42\",\"items\":[{\"sku\":\"sku-1\",\"qty\":2},{\"sku\":\"sku-2\",\"qty\":1},{\"sku\":\"sku-3\",\"qty\":4}],\"coupon\":\"WELCOME10\"}}"
+         }
+        },
+        {
+         "key": "noodles.output",
+         "value": {
+          "stringValue": "{\"status\":201,\"body\":{\"orderId\":\"5f3b2c1d\",\"status\":\"paid\",\"total\":53.1}}"
+         }
+        }
+       ],
+       "status": {
+        "code": 1
+       }
+      },
+      {
+       "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+       "spanId": "4bf92f3500000002",
+       "parentSpanId": "4bf92f3500000001",
+       "name": "checkout",
+       "kind": 1,
+       "startTimeUnixNano": "1760430000001000000",
+       "endTimeUnixNano": "1760430000147000000",
+       "attributes": [
+        {
+         "key": "code.function",
+         "value": {
+          "stringValue": "checkout"
+         }
+        },
+        {
+         "key": "code.filepath",
+         "value": {
+          "stringValue": "src/routes/checkout.ts"
+         }
+        },
+        {
+         "key": "noodles.input",
+         "value": {
+          "stringValue": "{\"cart\":{\"customerId\":\"cus_42\",\"items\":[{\"sku\":\"sku-1\",\"qty\":2},{\"sku\":\"sku-2\",\"qty\":1},{\"sku\":\"sku-3\",\"qty\":4}],\"coupon\":\"WELCOME10\"}}"
+         }
+        },
+        {
+         "key": "noodles.output",
+         "value": {
+          "stringValue": "{\"orderId\":\"5f3b2c1d\",\"status\":\"paid\",\"total\":53.1}"
+         }
+        }
+       ],
+       "status": {
+        "code": 1
+       }
+      },
+      {
+       "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+       "spanId": "4bf92f3500000003",
+       "parentSpanId": "4bf92f3500000002",
+       "name": "validateCart",
+       "kind": 1,
+       "startTimeUnixNano": "1760430000001500000",
+       "endTimeUnixNano": "1760430000001899800",
+       "attributes": [
+        {
+         "key": "code.function",
+         "value": {
+          "stringValue": "validateCart"
+         }
+        },
+        {
+         "key": "code.filepath",
+         "value": {
+          "stringValue": "src/routes/checkout.ts"
+         }
+        },
+        {
+         "key": "noodles.input",
+         "value": {
+          "stringValue": "{\"cart\":{\"customerId\":\"cus_42\",\"items\":[{\"sku\":\"sku-1\",\"qty\":2},{\"sku\":\"sku-2\",\"qty\":1},{\"sku\":\"sku-3\",\"qty\":4}],\"coupon\":\"WELCOME10\"}}"
+         }
+        },
+        {
+         "key": "noodles.output",
+         "value": {
+          "stringValue": "{\"customerId\":\"cus_42\",\"items\":[{\"sku\":\"sku-1\",\"qty\":2},{\"sku\":\"sku-2\",\"qty\":1},{\"sku\":\"sku-3\",\"qty\":4}],\"coupon\":\"WELCOME10\"}"
+         }
+        }
+       ],
+       "status": {
+        "code": 1
+       }
+      },
+      {
+       "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+       "spanId": "4bf92f3500000004",
+       "parentSpanId": "4bf92f3500000002",
+       "name": "OrdersClient.createOrder",
+       "kind": 1,
+       "startTimeUnixNano": "1760430000002000000",
+       "endTimeUnixNano": "1760430000145000000",
+       "attributes": [
+        {
+         "key": "code.function",
+         "value": {
+          "stringValue": "OrdersClient.createOrder"
+         }
+        },
+        {
+         "key": "code.filepath",
+         "value": {
+          "stringValue": "src/clients/orders.ts"
+         }
+        },
+        {
+         "key": "noodles.input",
+         "value": {
+          "stringValue": "{\"cart\":{\"customerId\":\"cus_42\",\"items\":[{\"sku\":\"sku-1\",\"qty\":2},{\"sku\":\"sku-2\",\"qty\":1},{\"sku\":\"sku-3\",\"qty\":4}],\"coupon\":\"WELCOME10\"}}"
+         }
+        },
+        {
+         "key": "noodles.output",
+         "value": {
+          "stringValue": "{\"orderId\":\"5f3b2c1d\",\"status\":\"paid\",\"total\":53.1}"
+         }
+        }
+       ],
+       "status": {
+        "code": 1
+       }
+      },
+      {
+       "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+       "spanId": "4bf92f3500000005",
+       "parentSpanId": "4bf92f3500000004",
+       "name": "POST",
+       "kind": 3,
+       "startTimeUnixNano": "1760430000002500000",
+       "endTimeUnixNano": "1760430000144500000",
+       "attributes": [
+        {
+         "key": "http.request.method",
+         "value": {
+          "stringValue": "POST"
+         }
+        },
+        {
+         "key": "url.full",
+         "value": {
+          "stringValue": "http://orders:8000/orders"
+         }
+        },
+        {
+         "key": "server.address",
+         "value": {
+          "stringValue": "orders"
+         }
+        },
+        {
+         "key": "http.response.status_code",
+         "value": {
+          "intValue": "200"
+         }
+        }
+       ],
+       "status": {
+        "code": 1
+       }
+      },
+      {
+       "traceId": "9c1a2b3c4d5e6f708192a3b4c5d6e7f8",
+       "spanId": "9c1a2b3c00000001",
+       "parentSpanId": "",
+       "name": "POST /checkout",
+       "kind": 2,
+       "startTimeUnixNano": "1760430005000000000",
+       "endTimeUnixNano": "1760430005061000000",
+       "attributes": [
+        {
+         "key": "http.request.method",
+         "value": {
+          "stringValue": "POST"
+         }
+        },
+        {
+         "key": "http.route",
+         "value": {
+          "stringValue": "/checkout"
+         }
+        },
+        {
+         "key": "url.path",
+         "value": {
+          "stringValue": "/checkout"
+         }
+        },
+        {
+         "key": "http.response.status_code",
+         "value": {
+          "intValue": "402"
+         }
+        },
+        {
+         "key": "noodles.input",
+         "value": {
+          "stringValue": "{\"body\":{\"customerId\":\"cus_fraud\",\"items\":[{\"sku\":\"sku-2\",\"qty\":20}],\"coupon\":null}}"
+         }
+        },
+        {
+         "key": "noodles.output",
+         "value": {
+          "stringValue": "{\"status\":402,\"body\":{\"orderId\":\"a71c09e2\",\"status\":\"declined\",\"total\":600}}"
+         }
+        }
+       ],
+       "status": {
+        "code": 2,
+        "message": "payment declined"
+       }
+      },
+      {
+       "traceId": "9c1a2b3c4d5e6f708192a3b4c5d6e7f8",
+       "spanId": "9c1a2b3c00000002",
+       "parentSpanId": "9c1a2b3c00000001",
+       "name": "checkout",
+       "kind": 1,
+       "startTimeUnixNano": "1760430005001000000",
+       "endTimeUnixNano": "1760430005060000000",
+       "attributes": [
+        {
+         "key": "code.function",
+         "value": {
+          "stringValue": "checkout"
+         }
+        },
+        {
+         "key": "code.filepath",
+         "value": {
+          "stringValue": "src/routes/checkout.ts"
+         }
+        },
+        {
+         "key": "noodles.input",
+         "value": {
+          "stringValue": "{\"cart\":{\"customerId\":\"cus_fraud\",\"items\":[{\"sku\":\"sku-2\",\"qty\":20}],\"coupon\":null}}"
+         }
+        },
+        {
+         "key": "noodles.output",
+         "value": {
+          "stringValue": "{\"orderId\":\"a71c09e2\",\"status\":\"declined\",\"total\":600}"
+         }
+        }
+       ],
+       "status": {
+        "code": 2,
+        "message": "payment declined"
+       }
+      },
+      {
+       "traceId": "9c1a2b3c4d5e6f708192a3b4c5d6e7f8",
+       "spanId": "9c1a2b3c00000003",
+       "parentSpanId": "9c1a2b3c00000002",
+       "name": "validateCart",
+       "kind": 1,
+       "startTimeUnixNano": "1760430005001500000",
+       "endTimeUnixNano": "1760430005001899800",
+       "attributes": [
+        {
+         "key": "code.function",
+         "value": {
+          "stringValue": "validateCart"
+         }
+        },
+        {
+         "key": "code.filepath",
+         "value": {
+          "stringValue": "src/routes/checkout.ts"
+         }
+        },
+        {
+         "key": "noodles.input",
+         "value": {
+          "stringValue": "{\"cart\":{\"customerId\":\"cus_fraud\",\"items\":[{\"sku\":\"sku-2\",\"qty\":20}],\"coupon\":null}}"
+         }
+        },
+        {
+         "key": "noodles.output",
+         "value": {
+          "stringValue": "{\"customerId\":\"cus_fraud\",\"items\":[{\"sku\":\"sku-2\",\"qty\":20}],\"coupon\":null}"
+         }
+        }
+       ],
+       "status": {
+        "code": 1
+       }
+      },
+      {
+       "traceId": "9c1a2b3c4d5e6f708192a3b4c5d6e7f8",
+       "spanId": "9c1a2b3c00000004",
+       "parentSpanId": "9c1a2b3c00000002",
+       "name": "OrdersClient.createOrder",
+       "kind": 1,
+       "startTimeUnixNano": "1760430005002000000",
+       "endTimeUnixNano": "1760430005059000000",
+       "attributes": [
+        {
+         "key": "code.function",
+         "value": {
+          "stringValue": "OrdersClient.createOrder"
+         }
+        },
+        {
+         "key": "code.filepath",
+         "value": {
+          "stringValue": "src/clients/orders.ts"
+         }
+        },
+        {
+         "key": "noodles.input",
+         "value": {
+          "stringValue": "{\"cart\":{\"customerId\":\"cus_fraud\",\"items\":[{\"sku\":\"sku-2\",\"qty\":20}],\"coupon\":null}}"
+         }
+        },
+        {
+         "key": "noodles.output",
+         "value": {
+          "stringValue": "{\"orderId\":\"a71c09e2\",\"status\":\"declined\",\"total\":600}"
+         }
+        }
+       ],
+       "status": {
+        "code": 1
+       }
+      },
+      {
+       "traceId": "9c1a2b3c4d5e6f708192a3b4c5d6e7f8",
+       "spanId": "9c1a2b3c00000005",
+       "parentSpanId": "9c1a2b3c00000004",
+       "name": "POST",
+       "kind": 3,
+       "startTimeUnixNano": "1760430005002500000",
+       "endTimeUnixNano": "1760430005058500000",
+       "attributes": [
+        {
+         "key": "http.request.method",
+         "value": {
+          "stringValue": "POST"
+         }
+        },
+        {
+         "key": "url.full",
+         "value": {
+          "stringValue": "http://orders:8000/orders"
+         }
+        },
+        {
+         "key": "server.address",
+         "value": {
+          "stringValue": "orders"
+         }
+        },
+        {
+         "key": "http.response.status_code",
+         "value": {
+          "intValue": "402"
+         }
+        }
+       ],
+       "status": {
+        "code": 1
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "orders"
+      }
+     },
+     {
+      "key": "deployment.environment",
+      "value": {
+       "stringValue": "demo"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "noodles-demo"
+     },
+     "spans": [
+      {
+       "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+       "spanId": "4bf92f3500000006",
+       "parentSpanId": "4bf92f3500000005",
+       "name": "POST /orders",
+       "kind": 2,
+       "startTimeUnixNano": "1760430000004000000",
+       "endTimeUnixNano": "1760430000142000000",
+       "attributes": [
+        {
+         "key": "http.request.method",
+         "value": {
+          "stringValue": "POST"
+         }
+        },
+        {
+         "key": "http.route",
+         "value": {
+          "stringValue": "/orders"
+         }
+        },
+        {
+         "key": "http.response.status_code",
+         "value": {
+          "intValue": "200"
+         }
+        },
+        {
+         "key": "noodles.input",
+         "value": {
+          "stringValue": "{\"customer_id\":\"cus_42\",\"items\":[{\"sku\":\"sku-1\",\"qty\":2},{\"sku\":\"sku-2\",\"qty\":1},{\"sku\":\"sku-3\",\"qty\":4}],\"coupon\":\"WELCOME10\"}"
+         }
+        },
+        {
+         "key": "noodles.output",
+         "value": {
+          "stringValue": "{\"id\":\"5f3b2c1d\",\"status\":\"paid\",\"total\":53.1}"
+         }
+        }
+       ],
+       "status": {
+        "code": 1
+       }
+      },
+      {
+       "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+       "spanId": "4bf92f3500000007",
+       "parentSpanId": "4bf92f3500000006",
+       "name": "create_order",
+       "kind": 1,
+       "startTimeUnixNano": "1760430000005000000",
+       "endTimeUnixNano": "1760430000141000000",
+       "attributes": [
+        {
+         "key": "code.function",
+         "value": {
+          "stringValue": "create_order"
+         }
+        },
+        {
+         "key": "code.namespace",
+         "value": {
+          "stringValue": "app.main"
+         }
+        },
+        {
+         "key": "code.filepath",
+         "value": {
+          "stringValue": "app/main.py"
+         }
+        },
+        {
+         "key": "noodles.input",
+         "value": {
+          "stringValue": "{\"req\":{\"customer_id\":\"cus_42\",\"items\":[{\"sku\":\"sku-1\",\"qty\":2},{\"sku\":\"sku-2\",\"qty\":1},{\"sku\":\"sku-3\",\"qty\":4}],\"coupon\":\"WELCOME10\"}}"
+         }
+        },
+        {
+         "key": "noodles.output",
+         "value": {
+          "stringValue": "{\"id\":\"5f3b2c1d\",\"customer_id\":\"cus_42\",\"total\":53.1,\"status\":\"paid\"}"
+         }
+        }
+       ],
+       "status": {
+        "code": 1
+       }
+      },
+      {
+       "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+       "spanId": "4bf92f3500000008",
+       "parentSpanId": "4bf92f3500000007",
+       "name": "price_order",
+       "kind": 1,
+       "startTimeUnixNano": "1760430000006000000",
+       "endTimeUnixNano": "1760430000008200000",
+       "attributes": [
+        {
+         "key": "code.function",
+         "value": {
+          "stringValue": "price_order"
+         }
+        },
+        {
+         "key": "code.filepath",
+         "value": {
+          "stringValue": "app/pricing.py"
+         }
+        },
+        {
+         "key": "noodles.input",
+         "value": {
+          "stringValue": "{\"items\":[{\"sku\":\"sku-1\",\"qty\":2},{\"sku\":\"sku-2\",\"qty\":1},{\"sku\":\"sku-3\",\"qty\":4}],\"coupon\":\"WELCOME10\"}"
+         }
+        },
+        {
+         "key": "noodles.output",
+         "value": {
+          "doubleValue": 53.1
+         }
+        }
+       ],
+       "status": {
+        "code": 1
+       }
+      },
+      {
+       "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+       "spanId": "4bf92f3500000009",
+       "parentSpanId": "4bf92f3500000008",
+       "name": "get_price",
+       "kind": 1,
+       "startTimeUnixNano": "1760430000006200000",
+       "endTimeUnixNano": "1760430000006400000",
+       "attributes": [
+        {
+         "key": "code.function",
+         "value": {
+          "stringValue": "get_price"
+         }
+        },
+        {
+         "key": "code.filepath",
+         "value": {
+          "stringValue": "app/pricing.py"
+         }
+        },
+        {
+         "key": "noodles.input",
+         "value": {
+          "stringValue": "{\"sku\":\"sku-1\"}"
+         }
+        },
+        {
+         "key": "noodles.output",
+         "value": {
+          "doubleValue": 12.5
+         }
+        }
+       ],
+       "status": {
+        "code": 1
+       }
+      },
+      {
+       "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+       "spanId": "4bf92f3500000010",
+       "parentSpanId": "4bf92f3500000008",
+       "name": "get_price",
+       "kind": 1,
+       "startTimeUnixNano": "1760430000006600200",
+       "endTimeUnixNano": "1760430000006800100",
+       "attributes": [
+        {
+         "key": "code.function",
+         "value": {
+          "stringValue": "get_price"
+         }
+        },
+        {
+         "key": "code.filepath",
+         "value": {
+          "stringValue": "app/pricing.py"
+         }
+        },
+        {
+         "key": "noodles.input",
+         "value": {
+          "stringValue": "{\"sku\":\"sku-2\"}"
+         }
+        },
+        {
+         "key": "noodles.output",
+         "value": {
+          "intValue": "30"
+         }
+        }
+       ],
+       "status": {
+        "code": 1
+       }
+      },
+      {
+       "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+       "spanId": "4bf92f3500000011",
+       "parentSpanId": "4bf92f3500000008",
+       "name": "get_price",
+       "kind": 1,
+       "startTimeUnixNano": "1760430000007000000",
+       "endTimeUnixNano": "1760430000007200000",
+       "attributes": [
+        {
+         "key": "code.function",
+         "value": {
+          "stringValue": "get_price"
+         }
+        },
+        {
+         "key": "code.filepath",
+         "value": {
+          "stringValue": "app/pricing.py"
+         }
+        },
+        {
+         "key": "noodles.input",
+         "value": {
+          "stringValue": "{\"sku\":\"sku-3\"}"
+         }
+        },
+        {
+         "key": "noodles.output",
+         "value": {
+          "doubleValue": 4.25
+         }
+        }
+       ],
+       "status": {
+        "code": 1
+       }
+      },
+      {
+       "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+       "spanId": "4bf92f3500000012",
+       "parentSpanId": "4bf92f3500000008",
+       "name": "apply_discounts",
+       "kind": 1,
+       "startTimeUnixNano": "1760430000007600000",
+       "endTimeUnixNano": "1760430000008000000",
+       "attributes": [
+        {
+         "key": "code.function",
+         "value": {
+          "stringValue": "apply_discounts"
+         }
+        },
+        {
+         "key": "code.filepath",
+         "value": {
+          "stringValue": "app/pricing.py"
+         }
+        },
+        {
+         "key": "noodles.input",
+         "value": {
+          "stringValue": "{\"total\":59,\"codes\":[\"WELCOME10\"]}"
+         }
+        },
+        {
+         "key": "noodles.output",
+         "value": {
+          "doubleValue": 53.1
+         }
+        }
+       ],
+       "status": {
+        "code": 1
+       }
+      },
+      {
+       "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+       "spanId": "4bf92f3500000013",
+       "parentSpanId": "4bf92f3500000012",
+       "name": "apply_discounts",
+       "kind": 1,
+       "startTimeUnixNano": "1760430000007800000",
+       "endTimeUnixNano": "1760430000007900200",
+       "attributes": [
+        {
+         "key": "code.function",
+         "value": {
+          "stringValue": "apply_discounts"
+         }
+        },
+        {
+         "key": "code.filepath",
+         "value": {
+          "stringValue": "app/pricing.py"
+         }
+        },
+        {
+         "key": "noodles.input",
+         "value": {
+          "stringValue": "{\"total\":53.1,\"codes\":[]}"
+         }
+        },
+        {
+         "key": "noodles.output",
+         "value": {
+          "doubleValue": 53.1
+         }
+        }
+       ],
+       "status": {
+        "code": 1
+       }
+      },
+      {
+       "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+       "spanId": "4bf92f3500000014",
+       "parentSpanId": "4bf92f3500000007",
+       "name": "charge",
+       "kind": 1,
+       "startTimeUnixNano": "1760430000009000000",
+       "endTimeUnixNano": "1760430000105000000",
+       "attributes": [
+        {
+         "key": "code.function",
+         "value": {
+          "stringValue": "charge"
+         }
+        },
+        {
+         "key": "code.filepath",
+         "value": {
+          "stringValue": "app/payments.py"
+         }
+        },
+        {
+         "key": "noodles.input",
+         "value": {
+          "stringValue": "{\"customer_id\":\"cus_42\",\"amount\":53.1}"
+         }
+        },
+        {
+         "key": "noodles.output",
+         "value": {
+          "stringValue": "{\"status\":\"paid\",\"chargeId\":\"ch_3PqL9x\"}"
+         }
+        }
+       ],
+       "status": {
+        "code": 1
+       }
+      },
+      {
+       "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+       "spanId": "4bf92f3500000015",
+       "parentSpanId": "4bf92f3500000014",
+       "name": "POST",
+       "kind": 3,
+       "startTimeUnixNano": "1760430000009500000",
+       "endTimeUnixNano": "1760430000104500000",
+       "attributes": [
+        {
+         "key": "http.request.method",
+         "value": {
+          "stringValue": "POST"
+         }
+        },
+        {
+         "key": "url.full",
+         "value": {
+          "stringValue": "http://payments:9000/charges"
+         }
+        },
+        {
+         "key": "server.address",
+         "value": {
+          "stringValue": "payments"
+         }
+        },
+        {
+         "key": "http.response.status_code",
+         "value": {
+          "intValue": "200"
+         }
+        }
+       ],
+       "status": {
+        "code": 1
+       }
+      },
+      {
+       "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+       "spanId": "4bf92f3500000021",
+       "parentSpanId": "4bf92f3500000007",
+       "name": "save_order",
+       "kind": 1,
+       "startTimeUnixNano": "1760430000106000000",
+       "endTimeUnixNano": "1760430000112000000",
+       "attributes": [
+        {
+         "key": "code.function",
+         "value": {
+          "stringValue": "save_order"
+         }
+        },
+        {
+         "key": "code.filepath",
+         "value": {
+          "stringValue": "app/repository.py"
+         }
+        },
+        {
+         "key": "noodles.input",
+         "value": {
+          "stringValue": "{\"order\":{\"id\":\"5f3b2c1d\",\"customer_id\":\"cus_42\",\"total\":53.1,\"status\":\"paid\"}}"
+         }
+        },
+        {
+         "key": "noodles.output",
+         "value": {
+          "stringValue": "null"
+         }
+        }
+       ],
+       "status": {
+        "code": 1
+       }
+      },
+      {
+       "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+       "spanId": "4bf92f3500000022",
+       "parentSpanId": "4bf92f3500000021",
+       "name": "INSERT shop.orders",
+       "kind": 3,
+       "startTimeUnixNano": "1760430000106500000",
+       "endTimeUnixNano": "1760430000111500000",
+       "attributes": [
+        {
+         "key": "db.system",
+         "value": {
+          "stringValue": "postgresql"
+         }
+        },
+        {
+         "key": "db.name",
+         "value": {
+          "stringValue": "shop"
+         }
+        },
+        {
+         "key": "db.operation",
+         "value": {
+          "stringValue": "INSERT"
+         }
+        },
+        {
+         "key": "db.sql.table",
+         "value": {
+          "stringValue": "orders"
+         }
+        },
+        {
+         "key": "db.statement",
+         "value": {
+          "stringValue": "INSERT INTO orders (id, customer_id, total, status) VALUES (%s, %s, %s, %s)"
+         }
+        },
+        {
+         "key": "server.address",
+         "value": {
+          "stringValue": "postgres"
+         }
+        },
+        {
+         "key": "noodles.input",
+         "value": {
+          "stringValue": "{\"params\":[\"5f3b2c1d\",\"cus_42\",53.1,\"paid\"]}"
+         }
+        },
+        {
+         "key": "noodles.output",
+         "value": {
+          "stringValue": "{\"rowcount\":1}"
+         }
+        }
+       ],
+       "status": {
+        "code": 1
+       }
+      },
+      {
+       "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+       "spanId": "4bf92f3500000023",
+       "parentSpanId": "4bf92f3500000007",
+       "name": "order_created",
+       "kind": 1,
+       "startTimeUnixNano": "1760430000113000000",
+       "endTimeUnixNano": "1760430000116000000",
+       "attributes": [
+        {
+         "key": "code.function",
+         "value": {
+          "stringValue": "order_created"
+         }
+        },
+        {
+         "key": "code.filepath",
+         "value": {
+          "stringValue": "app/events.py"
+         }
+        },
+        {
+         "key": "noodles.input",
+         "value": {
+          "stringValue": "{\"order\":{\"id\":\"5f3b2c1d\",\"customer_id\":\"cus_42\",\"total\":53.1,\"status\":\"paid\"}}"
+         }
+        },
+        {
+         "key": "noodles.output",
+         "value": {
+          "stringValue": "null"
+         }
+        }
+       ],
+       "status": {
+        "code": 1
+       }
+      },
+      {
+       "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+       "spanId": "4bf92f3500000024",
+       "parentSpanId": "4bf92f3500000023",
+       "name": "order-created publish",
+       "kind": 4,
+       "startTimeUnixNano": "1760430000113500000",
+       "endTimeUnixNano": "1760430000115500000",
+       "attributes": [
+        {
+         "key": "messaging.system",
+         "value": {
+          "stringValue": "kafka"
+         }
+        },
+        {
+         "key": "messaging.destination.name",
+         "value": {
+          "stringValue": "order-created"
+         }
+        },
+        {
+         "key": "messaging.operation",
+         "value": {
+          "stringValue": "publish"
+         }
+        },
+        {
+         "key": "noodles.input",
+         "value": {
+          "stringValue": "{\"key\":\"5f3b2c1d\",\"value\":{\"id\":\"5f3b2c1d\",\"customer_id\":\"cus_42\",\"total\":53.1,\"status\":\"paid\"}}"
+         }
+        },
+        {
+         "key": "noodles.output",
+         "value": {
+          "stringValue": "{\"partition\":2,\"offset\":18233}"
+         }
+        }
+       ],
+       "status": {
+        "code": 1
+       }
+      },
+      {
+       "traceId": "9c1a2b3c4d5e6f708192a3b4c5d6e7f8",
+       "spanId": "9c1a2b3c00000006",
+       "parentSpanId": "9c1a2b3c00000005",
+       "name": "POST /orders",
+       "kind": 2,
+       "startTimeUnixNano": "1760430005004000000",
+       "endTimeUnixNano": "1760430005057000000",
+       "attributes": [
+        {
+         "key": "http.request.method",
+         "value": {
+          "stringValue": "POST"
+         }
+        },
+        {
+         "key": "http.route",
+         "value": {
+          "stringValue": "/orders"
+         }
+        },
+        {
+         "key": "http.response.status_code",
+         "value": {
+          "intValue": "402"
+         }
+        },
+        {
+         "key": "noodles.input",
+         "value": {
+          "stringValue": "{\"customer_id\":\"cus_fraud\",\"items\":[{\"sku\":\"sku-2\",\"qty\":20}],\"coupon\":null}"
+         }
+        },
+        {
+         "key": "noodles.output",
+         "value": {
+          "stringValue": "{\"id\":\"a71c09e2\",\"status\":\"declined\",\"total\":600}"
+         }
+        }
+       ],
+       "status": {
+        "code": 1
+       }
+      },
+      {
+       "traceId": "9c1a2b3c4d5e6f708192a3b4c5d6e7f8",
+       "spanId": "9c1a2b3c00000007",
+       "parentSpanId": "9c1a2b3c00000006",
+       "name": "create_order",
+       "kind": 1,
+       "startTimeUnixNano": "1760430005005000000",
+       "endTimeUnixNano": "1760430005056000000",
+       "attributes": [
+        {
+         "key": "code.function",
+         "value": {
+          "stringValue": "create_order"
+         }
+        },
+        {
+         "key": "code.namespace",
+         "value": {
+          "stringValue": "app.main"
+         }
+        },
+        {
+         "key": "code.filepath",
+         "value": {
+          "stringValue": "app/main.py"
+         }
+        },
+        {
+         "key": "noodles.input",
+         "value": {
+          "stringValue": "{\"req\":{\"customer_id\":\"cus_fraud\",\"items\":[{\"sku\":\"sku-2\",\"qty\":20}],\"coupon\":null}}"
+         }
+        },
+        {
+         "key": "noodles.output",
+         "value": {
+          "stringValue": "{\"id\":\"a71c09e2\",\"customer_id\":\"cus_fraud\",\"total\":600,\"status\":\"declined\"}"
+         }
+        }
+       ],
+       "status": {
+        "code": 1
+       }
+      },
+      {
+       "traceId": "9c1a2b3c4d5e6f708192a3b4c5d6e7f8",
+       "spanId": "9c1a2b3c00000008",
+       "parentSpanId": "9c1a2b3c00000007",
+       "name": "price_order",
+       "kind": 1,
+       "startTimeUnixNano": "1760430005006000000",
+       "endTimeUnixNano": "1760430005008200000",
+       "attributes": [
+        {
+         "key": "code.function",
+         "value": {
+          "stringValue": "price_order"
+         }
+        },
+        {
+         "key": "code.filepath",
+         "value": {
+          "stringValue": "app/pricing.py"
+         }
+        },
+        {
+         "key": "noodles.input",
+         "value": {
+          "stringValue": "{\"items\":[{\"sku\":\"sku-2\",\"qty\":20}],\"coupon\":null}"
+         }
+        },
+        {
+         "key": "noodles.output",
+         "value": {
+          "intValue": "600"
+         }
+        }
+       ],
+       "status": {
+        "code": 1
+       }
+      },
+      {
+       "traceId": "9c1a2b3c4d5e6f708192a3b4c5d6e7f8",
+       "spanId": "9c1a2b3c00000009",
+       "parentSpanId": "9c1a2b3c00000008",
+       "name": "get_price",
+       "kind": 1,
+       "startTimeUnixNano": "1760430005006200000",
+       "endTimeUnixNano": "1760430005006400000",
+       "attributes": [
+        {
+         "key": "code.function",
+         "value": {
+          "stringValue": "get_price"
+         }
+        },
+        {
+         "key": "code.filepath",
+         "value": {
+          "stringValue": "app/pricing.py"
+         }
+        },
+        {
+         "key": "noodles.input",
+         "value": {
+          "stringValue": "{\"sku\":\"sku-2\"}"
+         }
+        },
+        {
+         "key": "noodles.output",
+         "value": {
+          "intValue": "30"
+         }
+        }
+       ],
+       "status": {
+        "code": 1
+       }
+      },
+      {
+       "traceId": "9c1a2b3c4d5e6f708192a3b4c5d6e7f8",
+       "spanId": "9c1a2b3c00000010",
+       "parentSpanId": "9c1a2b3c00000007",
+       "name": "charge",
+       "kind": 1,
+       "startTimeUnixNano": "1760430005009000000",
+       "endTimeUnixNano": "1760430005049000000",
+       "attributes": [
+        {
+         "key": "code.function",
+         "value": {
+          "stringValue": "charge"
+         }
+        },
+        {
+         "key": "code.filepath",
+         "value": {
+          "stringValue": "app/payments.py"
+         }
+        },
+        {
+         "key": "noodles.input",
+         "value": {
+          "stringValue": "{\"customer_id\":\"cus_fraud\",\"amount\":600}"
+         }
+        },
+        {
+         "key": "noodles.output",
+         "value": {
+          "stringValue": "{\"status\":\"declined\",\"reason\":\"risk\"}"
+         }
+        }
+       ],
+       "status": {
+        "code": 1
+       }
+      },
+      {
+       "traceId": "9c1a2b3c4d5e6f708192a3b4c5d6e7f8",
+       "spanId": "9c1a2b3c00000011",
+       "parentSpanId": "9c1a2b3c00000010",
+       "name": "POST",
+       "kind": 3,
+       "startTimeUnixNano": "1760430005009500000",
+       "endTimeUnixNano": "1760430005048500000",
+       "attributes": [
+        {
+         "key": "http.request.method",
+         "value": {
+          "stringValue": "POST"
+         }
+        },
+        {
+         "key": "url.full",
+         "value": {
+          "stringValue": "http://payments:9000/charges"
+         }
+        },
+        {
+         "key": "server.address",
+         "value": {
+          "stringValue": "payments"
+         }
+        },
+        {
+         "key": "http.response.status_code",
+         "value": {
+          "intValue": "402"
+         }
+        }
+       ],
+       "status": {
+        "code": 1
+       }
+      },
+      {
+       "traceId": "9c1a2b3c4d5e6f708192a3b4c5d6e7f8",
+       "spanId": "9c1a2b3c00000015",
+       "parentSpanId": "9c1a2b3c00000007",
+       "name": "save_order",
+       "kind": 1,
+       "startTimeUnixNano": "1760430005050000000",
+       "endTimeUnixNano": "1760430005056000000",
+       "attributes": [
+        {
+         "key": "code.function",
+         "value": {
+          "stringValue": "save_order"
+         }
+        },
+        {
+         "key": "code.filepath",
+         "value": {
+          "stringValue": "app/repository.py"
+         }
+        },
+        {
+         "key": "noodles.input",
+         "value": {
+          "stringValue": "{\"order\":{\"id\":\"a71c09e2\",\"customer_id\":\"cus_fraud\",\"total\":600,\"status\":\"declined\"}}"
+         }
+        },
+        {
+         "key": "noodles.output",
+         "value": {
+          "stringValue": "null"
+         }
+        }
+       ],
+       "status": {
+        "code": 1
+       }
+      },
+      {
+       "traceId": "9c1a2b3c4d5e6f708192a3b4c5d6e7f8",
+       "spanId": "9c1a2b3c00000016",
+       "parentSpanId": "9c1a2b3c00000015",
+       "name": "INSERT shop.orders",
+       "kind": 3,
+       "startTimeUnixNano": "1760430005050500000",
+       "endTimeUnixNano": "1760430005055500000",
+       "attributes": [
+        {
+         "key": "db.system",
+         "value": {
+          "stringValue": "postgresql"
+         }
+        },
+        {
+         "key": "db.name",
+         "value": {
+          "stringValue": "shop"
+         }
+        },
+        {
+         "key": "db.operation",
+         "value": {
+          "stringValue": "INSERT"
+         }
+        },
+        {
+         "key": "db.sql.table",
+         "value": {
+          "stringValue": "orders"
+         }
+        },
+        {
+         "key": "db.statement",
+         "value": {
+          "stringValue": "INSERT INTO orders (id, customer_id, total, status) VALUES (%s, %s, %s, %s)"
+         }
+        },
+        {
+         "key": "server.address",
+         "value": {
+          "stringValue": "postgres"
+         }
+        },
+        {
+         "key": "noodles.input",
+         "value": {
+          "stringValue": "{\"params\":[\"a71c09e2\",\"cus_fraud\",600,\"declined\"]}"
+         }
+        },
+        {
+         "key": "noodles.output",
+         "value": {
+          "stringValue": "{\"rowcount\":1}"
+         }
+        }
+       ],
+       "status": {
+        "code": 1
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "payments"
+      }
+     },
+     {
+      "key": "deployment.environment",
+      "value": {
+       "stringValue": "demo"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "noodles-demo"
+     },
+     "spans": [
+      {
+       "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+       "spanId": "4bf92f3500000016",
+       "parentSpanId": "4bf92f3500000015",
+       "name": "POST /charges",
+       "kind": 2,
+       "startTimeUnixNano": "1760430000011000000",
+       "endTimeUnixNano": "1760430000102000000",
+       "attributes": [
+        {
+         "key": "http.request.method",
+         "value": {
+          "stringValue": "POST"
+         }
+        },
+        {
+         "key": "http.route",
+         "value": {
+          "stringValue": "/charges"
+         }
+        },
+        {
+         "key": "http.response.status_code",
+         "value": {
+          "intValue": "200"
+         }
+        },
+        {
+         "key": "noodles.input",
+         "value": {
+          "stringValue": "{\"customer\":\"cus_42\",\"amount\":53.1}"
+         }
+        },
+        {
+         "key": "noodles.output",
+         "value": {
+          "stringValue": "{\"status\":\"paid\",\"chargeId\":\"ch_3PqL9x\"}"
+         }
+        }
+       ],
+       "status": {
+        "code": 1
+       }
+      },
+      {
+       "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+       "spanId": "4bf92f3500000017",
+       "parentSpanId": "4bf92f3500000016",
+       "name": "charge",
+       "kind": 1,
+       "startTimeUnixNano": "1760430000012000000",
+       "endTimeUnixNano": "1760430000101000000",
+       "attributes": [
+        {
+         "key": "code.function",
+         "value": {
+          "stringValue": "charge"
+         }
+        },
+        {
+         "key": "code.filepath",
+         "value": {
+          "stringValue": "app/main.py"
+         }
+        },
+        {
+         "key": "noodles.input",
+         "value": {
+          "stringValue": "{\"customer\":\"cus_42\",\"amount\":53.1}"
+         }
+        },
+        {
+         "key": "noodles.output",
+         "value": {
+          "stringValue": "{\"status\":\"paid\",\"chargeId\":\"ch_3PqL9x\"}"
+         }
+        }
+       ],
+       "status": {
+        "code": 1
+       }
+      },
+      {
+       "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+       "spanId": "4bf92f3500000018",
+       "parentSpanId": "4bf92f3500000017",
+       "name": "risk_score",
+       "kind": 1,
+       "startTimeUnixNano": "1760430000012500000",
+       "endTimeUnixNano": "1760430000013699800",
+       "attributes": [
+        {
+         "key": "code.function",
+         "value": {
+          "stringValue": "risk_score"
+         }
+        },
+        {
+         "key": "code.filepath",
+         "value": {
+          "stringValue": "app/fraud.py"
+         }
+        },
+        {
+         "key": "noodles.input",
+         "value": {
+          "stringValue": "{\"customer\":\"cus_42\",\"amount\":53.1}"
+         }
+        },
+        {
+         "key": "noodles.output",
+         "value": {
+          "doubleValue": 0.0531
+         }
+        }
+       ],
+       "status": {
+        "code": 1
+       }
+      },
+      {
+       "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+       "spanId": "4bf92f3500000019",
+       "parentSpanId": "4bf92f3500000017",
+       "name": "create_charge",
+       "kind": 1,
+       "startTimeUnixNano": "1760430000014000000",
+       "endTimeUnixNano": "1760430000099000000",
+       "attributes": [
+        {
+         "key": "code.function",
+         "value": {
+          "stringValue": "create_charge"
+         }
+        },
+        {
+         "key": "code.filepath",
+         "value": {
+          "stringValue": "app/stripe_client.py"
+         }
+        },
+        {
+         "key": "noodles.input",
+         "value": {
+          "stringValue": "{\"customer\":\"cus_42\",\"amount\":53.1}"
+         }
+        },
+        {
+         "key": "noodles.output",
+         "value": {
+          "stringValue": "ch_3PqL9x"
+         }
+        }
+       ],
+       "status": {
+        "code": 1
+       }
+      },
+      {
+       "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+       "spanId": "4bf92f3500000020",
+       "parentSpanId": "4bf92f3500000019",
+       "name": "POST",
+       "kind": 3,
+       "startTimeUnixNano": "1760430000014500000",
+       "endTimeUnixNano": "1760430000098500000",
+       "attributes": [
+        {
+         "key": "http.request.method",
+         "value": {
+          "stringValue": "POST"
+         }
+        },
+        {
+         "key": "url.full",
+         "value": {
+          "stringValue": "https://api.stripe.com/v1/charges"
+         }
+        },
+        {
+         "key": "server.address",
+         "value": {
+          "stringValue": "api.stripe.com"
+         }
+        },
+        {
+         "key": "http.response.status_code",
+         "value": {
+          "intValue": "200"
+         }
+        },
+        {
+         "key": "noodles.input",
+         "value": {
+          "stringValue": "{\"customer\":\"cus_42\",\"amount\":5310,\"currency\":\"eur\"}"
+         }
+        },
+        {
+         "key": "noodles.output",
+         "value": {
+          "stringValue": "{\"id\":\"ch_3PqL9x\",\"object\":\"charge\",\"paid\":true,\"amount\":5310}"
+         }
+        }
+       ],
+       "status": {
+        "code": 1
+       }
+      },
+      {
+       "traceId": "9c1a2b3c4d5e6f708192a3b4c5d6e7f8",
+       "spanId": "9c1a2b3c00000012",
+       "parentSpanId": "9c1a2b3c00000011",
+       "name": "POST /charges",
+       "kind": 2,
+       "startTimeUnixNano": "1760430005011000000",
+       "endTimeUnixNano": "1760430005046000000",
+       "attributes": [
+        {
+         "key": "http.request.method",
+         "value": {
+          "stringValue": "POST"
+         }
+        },
+        {
+         "key": "http.route",
+         "value": {
+          "stringValue": "/charges"
+         }
+        },
+        {
+         "key": "http.response.status_code",
+         "value": {
+          "intValue": "402"
+         }
+        },
+        {
+         "key": "noodles.input",
+         "value": {
+          "stringValue": "{\"customer\":\"cus_fraud\",\"amount\":600}"
+         }
+        },
+        {
+         "key": "noodles.output",
+         "value": {
+          "stringValue": "{\"status\":\"declined\",\"reason\":\"risk\"}"
+         }
+        }
+       ],
+       "status": {
+        "code": 1
+       }
+      },
+      {
+       "traceId": "9c1a2b3c4d5e6f708192a3b4c5d6e7f8",
+       "spanId": "9c1a2b3c00000013",
+       "parentSpanId": "9c1a2b3c00000012",
+       "name": "charge",
+       "kind": 1,
+       "startTimeUnixNano": "1760430005012000000",
+       "endTimeUnixNano": "1760430005045000000",
+       "attributes": [
+        {
+         "key": "code.function",
+         "value": {
+          "stringValue": "charge"
+         }
+        },
+        {
+         "key": "code.filepath",
+         "value": {
+          "stringValue": "app/main.py"
+         }
+        },
+        {
+         "key": "noodles.input",
+         "value": {
+          "stringValue": "{\"customer\":\"cus_fraud\",\"amount\":600}"
+         }
+        },
+        {
+         "key": "noodles.output",
+         "value": {
+          "stringValue": "{\"status\":\"declined\",\"reason\":\"risk\"}"
+         }
+        }
+       ],
+       "status": {
+        "code": 2,
+        "message": "declined: risk score 1.0"
+       }
+      },
+      {
+       "traceId": "9c1a2b3c4d5e6f708192a3b4c5d6e7f8",
+       "spanId": "9c1a2b3c00000014",
+       "parentSpanId": "9c1a2b3c00000013",
+       "name": "risk_score",
+       "kind": 1,
+       "startTimeUnixNano": "1760430005012500000",
+       "endTimeUnixNano": "1760430005013699800",
+       "attributes": [
+        {
+         "key": "code.function",
+         "value": {
+          "stringValue": "risk_score"
+         }
+        },
+        {
+         "key": "code.filepath",
+         "value": {
+          "stringValue": "app/fraud.py"
+         }
+        },
+        {
+         "key": "noodles.input",
+         "value": {
+          "stringValue": "{\"customer\":\"cus_fraud\",\"amount\":600}"
+         }
+        },
+        {
+         "key": "noodles.output",
+         "value": {
+          "intValue": "1"
+         }
+        }
+       ],
+       "status": {
+        "code": 1
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "notifier"
+      }
+     },
+     {
+      "key": "deployment.environment",
+      "value": {
+       "stringValue": "demo"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "noodles-demo"
+     },
+     "spans": [
+      {
+       "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+       "spanId": "4bf92f3500000025",
+       "parentSpanId": "4bf92f3500000024",
+       "name": "order-created process",
+       "kind": 5,
+       "startTimeUnixNano": "1760430000160000000",
+       "endTimeUnixNano": "1760430000400000000",
+       "attributes": [
+        {
+         "key": "messaging.system",
+         "value": {
+          "stringValue": "kafka"
+         }
+        },
+        {
+         "key": "messaging.destination.name",
+         "value": {
+          "stringValue": "order-created"
+         }
+        },
+        {
+         "key": "messaging.operation",
+         "value": {
+          "stringValue": "process"
+         }
+        },
+        {
+         "key": "code.function",
+         "value": {
+          "stringValue": "handleOrderCreated"
+         }
+        },
+        {
+         "key": "code.filepath",
+         "value": {
+          "stringValue": "src/consumer.ts"
+         }
+        },
+        {
+         "key": "noodles.input",
+         "value": {
+          "stringValue": "{\"order\":{\"id\":\"5f3b2c1d\",\"customer_id\":\"cus_42\",\"total\":53.1}}"
+         }
+        },
+        {
+         "key": "noodles.output",
+         "value": {
+          "stringValue": "{\"emailed\":true}"
+         }
+        }
+       ],
+       "status": {
+        "code": 1
+       }
+      },
+      {
+       "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+       "spanId": "4bf92f3500000026",
+       "parentSpanId": "4bf92f3500000025",
+       "name": "sendConfirmation",
+       "kind": 1,
+       "startTimeUnixNano": "1760430000161000000",
+       "endTimeUnixNano": "1760430000397000000",
+       "attributes": [
+        {
+         "key": "code.function",
+         "value": {
+          "stringValue": "sendConfirmation"
+         }
+        },
+        {
+         "key": "code.filepath",
+         "value": {
+          "stringValue": "src/email.ts"
+         }
+        },
+        {
+         "key": "noodles.input",
+         "value": {
+          "stringValue": "{\"customerId\":\"cus_42\",\"orderId\":\"5f3b2c1d\",\"total\":53.1}"
+         }
+        },
+        {
+         "key": "noodles.output",
+         "value": {
+          "stringValue": "null"
+         }
+        }
+       ],
+       "status": {
+        "code": 1
+       }
+      },
+      {
+       "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+       "spanId": "4bf92f3500000027",
+       "parentSpanId": "4bf92f3500000026",
+       "name": "POST",
+       "kind": 3,
+       "startTimeUnixNano": "1760430000162000000",
+       "endTimeUnixNano": "1760430000396000000",
+       "attributes": [
+        {
+         "key": "http.request.method",
+         "value": {
+          "stringValue": "POST"
+         }
+        },
+        {
+         "key": "url.full",
+         "value": {
+          "stringValue": "https://api.sendgrid.com/v3/mail/send"
+         }
+        },
+        {
+         "key": "server.address",
+         "value": {
+          "stringValue": "api.sendgrid.com"
+         }
+        },
+        {
+         "key": "http.response.status_code",
+         "value": {
+          "intValue": "202"
+         }
+        },
+        {
+         "key": "noodles.input",
+         "value": {
+          "stringValue": "{\"to\":\"cus_42\",\"subject\":\"Order 5f3b2c1d confirmed\"}"
+         }
+        },
+        {
+         "key": "noodles.output",
+         "value": {
+          "stringValue": "{\"status\":202}"
+         }
+        }
+       ],
+       "status": {
+        "code": 1
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

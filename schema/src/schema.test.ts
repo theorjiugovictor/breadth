@@ -45,7 +45,7 @@ describe("mergeGraphs", () => {
         { id: "otel:fn:app.a", name: "a", kind: "function", layer: "runtime", aliases: ["fn:app.a"], inputs: [{ name: "x", type: "int" }, { name: "y" }] },
       ],
       edges: [{ id: "call:svc:shop->otel:fn:app.a", from: { node: "svc:shop" }, to: { node: "otel:fn:app.a" }, kind: "call", count: 3, samples: [{ value: 1 }] }],
-      executions: [{ id: "otel:t1", steps: [{ id: "s1", node: "otel:fn:app.a", input: { x: 1 } }] }],
+      executions: [{ id: "otel:t1", steps: [{ id: "s1", node: "otel:fn:app.a", via: "call:svc:shop->otel:fn:app.a", input: { x: 1 } }] }],
     };
     const m = mergeGraphs(base, traces);
     expect(validateGraph(m).valid).toBe(true);
@@ -57,6 +57,7 @@ describe("mergeGraphs", () => {
     expect(m.nodes.some((n) => n.id === "otel:fn:app.a")).toBe(false);
     expect(m.edges.find((e) => e.to.node === "code:fn:a")?.id).toBe("call:svc:shop->code:fn:a");
     expect(m.executions?.[0].steps[0].node).toBe("code:fn:a");
+    expect(m.executions?.[0].steps[0].via).toBe("call:svc:shop->code:fn:a");
   });
 
   it("dedupes edges by id and sums counts", () => {

@@ -523,27 +523,50 @@ function clean<T extends object>(o: T): T {
 
 /**
  * Give trace nodes aliases pointing at matching static code nodes, so a merge lands
- * trace steps on real functions. Matches code.filepath (suffix) + code.function.
+ * trace steps on real functions. A candidate must have the same function name; among
+ * those, the one whose file path shares the most trailing segments with code.filepath
+ * wins, and paths containing the span's service name break ties.
  */
 export function linkTracesToCode(traces: FlowGraph, base: FlowGraph): FlowGraph {
   const functions = base.nodes.filter((n) => n.kind === "function" && n.source?.file);
   const out = structuredClone(traces);
+  const segs = (p: string) => p.replace(/\\/g, "/").split("/").filter(Boolean);
   for (const n of out.nodes) {
     const m = n.metadata ?? {};
     const fn = m["code.function"] as string | undefined;
     if (!fn) continue;
-    const file = ((m["code.filepath"] as string | undefined) ?? "").replace(/\\/g, "/");
+    const file = (m["code.filepath"] as string | undefined) ?? "";
     const ns = m["code.namespace"] as string | undefined;
+    const service = m.service as string | undefined;
     const shortFn = fn.split(".").pop()!;
-    const candidates = functions.filter((c) => {
+    const fileSegs = file ? segs(file) : ns ? [...ns.split("."), ""] : [];
+    let best: { id: string; score: number }[] = [];
+    for (const c of functions) {
       const qual = (c.metadata?.qualifiedName as string | undefined) ?? c.name;
-      const nameOk = qual === fn || qual.endsWith(`.${fn}`) || c.name === shortFn;
-      if (!nameOk) return false;
-      if (file) return file.endsWith(c.source!.file!) || c.source!.file!.endsWith(file.replace(/^\/+/, ""));
-      if (ns) return c.source!.file!.replace(/\.\w+$/, "").replace(/\//g, ".").endsWith(ns) || (c.aliases ?? []).includes(`py:${ns}.${fn}`);
-      return false;
-    });
-    if (candidates.length === 1) n.aliases = [...new Set([...(n.aliases ?? []), candidates[0].id])];
+      if (!(qual === fn || qual.endsWith(`.${fn}`) || (c.name === shortFn && !fn.includes(".")))) continue;
+      const cSegs = segs(c.source!.file!);
+      let common = 0;
+      if (file) {
+        while (common < fileSegs.length && common < cSegs.length && fileSegs[fileSegs.length - 1 - common] === cSegs[cSegs.length - 1 - common]) common++;
+        if (common === 0) continue;
+      } else if (ns) {
+        const mod = c.source!.file!.replace(/\.\w+$/, "").replace(/\//g, ".");
+        if (!mod.endsWith(ns)) continue;
+        common = ns.split(".").length;
+      }
+      const score = common * 10 + (service && cSegs.includes(service) ? 5 : 0) + (qual === fn ? 1 : 0);
+      if (!best.length || score > best[0].score) best = [{ id: c.id, score }];
+      else if (score === best[0].score) best.push({ id: c.id, score });
+    }
+    if (best.length === 1) n.aliases = [...new Set([...(n.aliases ?? []), best[0].id])];
+  }
+  // Static code ports are authoritative: drop ports guessed from payloads for nodes that will merge.
+  const known = new Set(base.nodes.flatMap((b) => [b.id, ...(b.aliases ?? [])]));
+  for (const n of out.nodes) {
+    if ([n.id, ...(n.aliases ?? [])].some((a) => known.has(a))) {
+      delete n.inputs;
+      delete n.outputs;
+    }
   }
   return out;
 }

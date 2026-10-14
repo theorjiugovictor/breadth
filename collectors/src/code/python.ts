@@ -52,6 +52,7 @@ export function extractPython(path: string, root: Node): FileModel {
             name,
             line: stmt.startPosition.row + 1,
             mutable: isMutableValue(right),
+            init: right?.type === "call" ? calleeParts(right.childForFieldName("function")!, "attribute", "object", "attribute") : undefined,
             constantLike: /^[A-Z][A-Z0-9_]*$/.test(name),
           });
         }
