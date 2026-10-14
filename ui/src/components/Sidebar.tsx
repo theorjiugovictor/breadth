@@ -1,13 +1,15 @@
 import { useMemo, useState } from "react";
-import { Check, Compass, Lightbulb, Search } from "lucide-react";
+import { Check, Compass, Lightbulb, Radio, Search } from "lucide-react";
 import { EDGE_KINDS, LAYERS, type EdgeKind, type FlowNode, type Insight, type Layer } from "@noodles/schema";
 import { InsightsList } from "./InsightsList";
+import { LiveFeed } from "./LiveFeed";
+import type { LiveState } from "../live";
 import type { GraphIndex } from "../graph/model";
 import { ancestors } from "../graph/model";
 import { EDGE_STYLE, LAYER_LABEL, edgeColor, nodeVisual } from "../graph/visual";
 import type { Filters } from "../graph/view";
 
-export type SideTab = "explore" | "insights";
+export type SideTab = "explore" | "insights" | "live";
 
 interface Props {
   index: GraphIndex;
@@ -20,6 +22,9 @@ interface Props {
   activeInsight?: string;
   onInsight: (id: string | undefined) => void;
   onReplay: (i: Insight) => void;
+  live?: LiveState;
+  followAgent?: boolean;
+  onFollowAgent?: (on: boolean) => void;
 }
 
 function search(index: GraphIndex, q: string): FlowNode[] {
@@ -39,7 +44,7 @@ function search(index: GraphIndex, q: string): FlowNode[] {
   return scored.sort((a, b) => a[0] - b[0]).slice(0, 30).map(([, n]) => n);
 }
 
-export function Sidebar({ index, filters, onFilters, onPick, tab, onTab, insights, activeInsight, onInsight, onReplay }: Props) {
+export function Sidebar({ index, filters, onFilters, onPick, tab, onTab, insights, activeInsight, onInsight, onReplay, live, followAgent, onFollowAgent }: Props) {
   const [q, setQ] = useState("");
   const [hl, setHl] = useState(0);
   const results = useMemo(() => search(index, q), [index, q]);
@@ -75,6 +80,11 @@ export function Sidebar({ index, filters, onFilters, onPick, tab, onTab, insight
   const worst = insights.some((i) => i.severity === "critical") ? "critical" : insights.some((i) => i.severity === "warning") ? "warning" : "info";
   const tabs = (
     <div className="side-tabs" role="tablist">
+      {live && (
+        <button className={tab === "live" ? "on" : ""} onClick={() => onTab("live")} role="tab" aria-selected={tab === "live"}>
+          <Radio size={14} /> Live
+        </button>
+      )}
       <button className={tab === "explore" ? "on" : ""} onClick={() => onTab("explore")} role="tab" aria-selected={tab === "explore"}>
         <Compass size={14} /> Explore
       </button>
@@ -83,6 +93,15 @@ export function Sidebar({ index, filters, onFilters, onPick, tab, onTab, insight
       </button>
     </div>
   );
+
+  if (tab === "live" && live) {
+    return (
+      <aside className="sidebar">
+        {tabs}
+        <LiveFeed index={index} live={live} followAgent={!!followAgent} onFollowAgent={(on) => onFollowAgent?.(on)} onNode={onPick} />
+      </aside>
+    );
+  }
 
   if (tab === "insights") {
     return (

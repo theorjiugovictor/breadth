@@ -12,8 +12,14 @@ import { TracePlayer } from "./components/TracePlayer";
 import { Legend } from "./components/Legend";
 import { loadDemo, loadInitial, parseGraph, type DemoEntry, type Loaded } from "./data";
 import { RepoForm, RepoScan } from "./scan/RepoScan";
+import { fetchInfo, useLive, type LiveState, type ServerInfo } from "./live";
 
 type Theme = "light" | "dark";
+type ChangeMark = { kind: "new" | "edited"; at: number };
+/** How long "new" / "edited" badges stay on cards after a live update. */
+const MARK_MS = 20_000;
+/** Which changed node to follow: functions first, then other leaves, then files and folders. */
+const FOLLOW_RANK: Record<string, number> = { function: 0, network_endpoint: 1, datastore: 1, queue: 1, external_api: 1, infra_resource: 1, module: 3 };
 
 function initialTheme(): Theme {
   try {
@@ -34,6 +40,8 @@ export function App() {
   const [dragging, setDragging] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const [repo, setRepo] = useState(() => new URLSearchParams(location.search).get("repo") ?? undefined);
+  const [info, setInfo] = useState<ServerInfo>();
+  const live = useLive(!!info?.live, setLoaded);
 
   const scanRepo = useCallback((r: string | undefined) => {
     const url = new URL(location.href);
@@ -57,10 +65,11 @@ export function App() {
       setBooting(false);
       return;
     }
-    loadInitial()
-      .then(({ loaded, demos }) => {
+    Promise.all([loadInitial(), fetchInfo()])
+      .then(([{ loaded, demos }, info]) => {
         setDemos(demos);
-        if (loaded) setLoaded(loaded);
+        setInfo(info);
+        if (loaded) setLoaded(info?.live ? { ...loaded, origin: "live" } : loaded);
       })
       .catch((e) => setError(String(e.message ?? e)))
       .finally(() => setBooting(false));
@@ -162,12 +171,15 @@ export function App() {
       {dragging && <div className="drop-overlay" />}
       <ReactFlowProvider>
         <Workspace
-          key={loaded.name + loaded.graph.generatedAt}
+          // A live graph changes in place: keep the workspace (focus, selection) across updates.
+          key={loaded.origin === "live" ? "live" : loaded.name + loaded.graph.generatedAt}
           graph={loaded.graph}
           name={loaded.name}
           notice={loaded.notice}
           initialTab={loaded.origin === "repo" && (loaded.graph.insights?.length ?? 0) > 0 ? "insights" : "explore"}
           demos={demos}
+          live={loaded.origin === "live" ? live : undefined}
+          llm={info?.llm ?? undefined}
           theme={theme}
           onTheme={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
           onOpenFile={() => fileInput.current?.click()}
@@ -191,13 +203,15 @@ interface WorkspaceProps {
   notice?: string;
   initialTab: SideTab;
   demos: DemoEntry[];
+  live?: LiveState;
+  llm?: { name: string; remote: boolean };
   theme: Theme;
   onTheme: () => void;
   onOpenFile: () => void;
   onDemo: (d: DemoEntry) => void;
 }
 
-function Workspace({ graph, name, notice, initialTab, demos, theme, onTheme, onOpenFile, onDemo }: WorkspaceProps) {
+function Workspace({ graph, name, notice, initialTab, demos, live, llm, theme, onTheme, onOpenFile, onDemo }: WorkspaceProps) {
   const [showNotice, setShowNotice] = useState(!!notice);
   const index = useMemo(() => buildIndex(graph), [graph]);
   const [focus, setFocus] = useState(() => defaultFocus(index));
@@ -212,9 +226,18 @@ function Workspace({ graph, name, notice, initialTab, demos, theme, onTheme, onO
   const [sideOpen, setSideOpen] = useState(true);
   const [tab, setTab] = useState<Tab>("overview");
 
-  const [sideTab, setSideTab] = useState<SideTab>(initialTab);
+  const [sideTab, setSideTab] = useState<SideTab>(live ? "live" : initialTab);
   const [activeInsight, setActiveInsight] = useState<string>();
   const pendingStep = useRef<string>();
+  const [followAgent, setFollowAgent] = useState(true);
+  const [marks, setMarks] = useState<Map<string, ChangeMark>>(new Map());
+
+  // A live graph was replaced: drop state that points at nodes that no longer exist.
+  useEffect(() => {
+    if (focus !== ROOT && !index.nodes.has(focus)) setFocus(ROOT);
+    if (execId && !index.executions.some((x) => x.id === execId)) setExecId(index.executions[0]?.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [index]);
 
   // Built-in rules always run on the loaded graph; findings from other tools in the file are kept.
   const insights: Insight[] = useMemo(() => {
@@ -360,6 +383,40 @@ function Workspace({ graph, name, notice, initialTab, demos, theme, onTheme, onO
     };
   }, [mode, exec, stepIdx, step]);
 
+  // Live: badge what just changed and follow the agent to it.
+  useEffect(() => {
+    const c = live?.change;
+    if (!c) return;
+    const now = Date.now();
+    setMarks((m) => {
+      const next = new Map(m);
+      for (const id of c.changed) if (next.get(id)?.kind !== "new") next.set(id, { kind: "edited", at: now });
+      for (const id of c.added) next.set(id, { kind: "new", at: now });
+      return next;
+    });
+    if (!followAgent || mode !== "map" || activeInsight) return;
+    const ids = [...c.added, ...c.changed].filter((id) => index.nodes.has(id));
+    const rank = (id: string) => (FOLLOW_RANK[index.nodes.get(id)!.kind] ?? 2) * 2 + (c.added.includes(id) ? 0 : 1);
+    const target = ids.sort((a, b) => rank(a) - rank(b))[0];
+    if (!target) return;
+    const parent = index.nodes.get(target)?.parent;
+    setFocus(parent && index.nodes.has(parent) ? parent : ROOT);
+    setCenterOn(target);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live?.change?.version]);
+
+  // Expire change badges.
+  useEffect(() => {
+    if (!marks.size) return;
+    const oldest = Math.min(...[...marks.values()].map((m) => m.at));
+    const t = setTimeout(
+      () => setMarks((m) => new Map([...m].filter(([, v]) => Date.now() - v.at < MARK_MS))),
+      Math.max(50, oldest + MARK_MS - Date.now()),
+    );
+    return () => clearTimeout(t);
+  }, [marks]);
+  const markKinds = useMemo(() => new Map([...marks].map(([id, m]) => [id, m.kind])), [marks]);
+
   // Keyboard: Esc closes the panel, Backspace goes up a level, arrows step through a trace.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -407,6 +464,7 @@ function Workspace({ graph, name, notice, initialTab, demos, theme, onTheme, onO
         onToggleSide={() => setSideOpen((s) => !s)}
         onOpenFile={onOpenFile}
         onDemo={onDemo}
+        live={live}
       />
       <Sidebar
         index={index}
@@ -419,6 +477,9 @@ function Workspace({ graph, name, notice, initialTab, demos, theme, onTheme, onO
         activeInsight={activeInsight}
         onInsight={selectInsight}
         onReplay={replayInsight}
+        live={live}
+        followAgent={followAgent}
+        onFollowAgent={setFollowAgent}
       />
       <main className="canvas-area">
         <Canvas
@@ -429,6 +490,8 @@ function Workspace({ graph, name, notice, initialTab, demos, theme, onTheme, onO
           centerOn={centerOn}
           highlight={highlight}
           flags={flags}
+          marks={live ? markKinds : undefined}
+          live={!!live}
           onSelect={(id) => setSelected(id === MORE_ID ? undefined : id)}
           onDrill={drill}
         />
@@ -476,6 +539,7 @@ function Workspace({ graph, name, notice, initialTab, demos, theme, onTheme, onO
           onClose={() => setSelected(undefined)}
           tab={tab}
           onTab={setTab}
+          llm={llm}
         />
       )}
     </div>

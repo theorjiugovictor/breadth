@@ -6,8 +6,10 @@ import { collectors, importOtlp, linkTracesToCode, runCollectors, type Logger } 
 import { RULES, runInsights } from "@noodles/insights";
 import type { Insight, Severity } from "@noodles/schema";
 import { loadConfig } from "./config.js";
-import { createProvider, summarizeGraph } from "./llm/provider.js";
-import { serve } from "./serve.js";
+import { createProvider, noneProvider, PRESETS, privacyNotice, resolveSettings, summarizeGraph, type LLMProvider } from "./llm/provider.js";
+import { LiveSession } from "./live.js";
+import { LOCAL_HEADER, serve } from "./serve.js";
+import { HOOK_CONFIG, hookPayload } from "./hook.js";
 
 const VERSION = "0.1.0";
 
@@ -17,6 +19,9 @@ Usage:
   noodles scan <path> [--collector code,infra] [-o flowgraph.json] [--config file] [--exclude glob]...
   noodles import-traces <otlp.json>... [--merge flowgraph.json] [-o out.json]
   noodles serve [flowgraph.json] [--port 4321] [--host 127.0.0.1] [--no-open]
+  noodles watch [path] [--port 4321] [--traces otlp.json] [-o flowgraph.json] [--llm]   live canvas while you (or an agent) code
+  noodles hook [--port 4321] [--agent name] [--print-config]   forward coding-agent hook events to \`noodles watch\`
+  noodles llm [check]                list LLM providers / test the configured one
   noodles insights <flowgraph.json> [--json] [--write] [--fail-on warning|critical] [--rules a,b]
   noodles validate <flowgraph.json>
   noodles collectors
@@ -27,10 +32,28 @@ Options:
       --config      config file (default: <path>/noodles.config.json if present)
       --exclude     extra ignore pattern, gitignore syntax (repeatable)
       --no-external hide third-party packages
-      --llm         summarise nodes with the configured LLM provider (off by default)
+      --llm         use the configured LLM: node summaries (scan), narration of changes (watch)
+      --llm-provider, --llm-model, --llm-base-url   override the LLM settings (see \`noodles llm\`)
       --no-insights do not store insights in the written graph
   -q, --quiet       less output
 `;
+
+/** LLM flags shared by scan, serve and watch. */
+const LLM_FLAGS = {
+  "llm-provider": { type: "string" },
+  "llm-model": { type: "string" },
+  "llm-base-url": { type: "string" },
+} as const;
+
+function llmFrom(config: { llm?: import("./llm/provider.js").LLMSettings }, values: Record<string, unknown>): LLMProvider {
+  return createProvider(
+    resolveSettings(config.llm, {
+      provider: values["llm-provider"] as string | undefined,
+      model: values["llm-model"] as string | undefined,
+      baseUrl: values["llm-base-url"] as string | undefined,
+    }),
+  );
+}
 
 const log: Logger & { quiet: boolean } = {
   quiet: false,
@@ -64,6 +87,7 @@ async function cmdScan(args: string[]) {
       exclude: { type: "string", multiple: true },
       "no-external": { type: "boolean" },
       llm: { type: "boolean" },
+      ...LLM_FLAGS,
       "no-insights": { type: "boolean" },
       quiet: { type: "boolean", short: "q" },
     },
@@ -86,10 +110,14 @@ async function cmdScan(args: string[]) {
   });
 
   if (values.llm) {
-    const provider = createProvider(config.llm);
-    if (provider.name === "none") log.warn('--llm given but no provider configured; set "llm": {"provider": "ollama"} in noodles.config.json');
-    const n = await summarizeGraph(graph, provider, (file, a, b) => readLines(path.join(target, file), a, b), config.llm?.limit);
-    log.info(`llm: summarised ${n} nodes with ${provider.name}`);
+    const provider = llmFrom(config, values);
+    if (provider === noneProvider) log.warn("--llm given but no provider configured; see `noodles llm`");
+    else {
+      const limit = config.llm?.limit ?? 50;
+      process.stderr.write(`noodles: ${privacyNotice(provider, `source excerpts of up to ${limit} functions`)}\n`);
+      const n = await summarizeGraph(graph, provider, (file, a, b) => readLines(path.join(target, file), a, b), limit);
+      log.info(`llm: summarised ${n} nodes with ${provider.name}`);
+    }
   }
 
   if (!values["no-insights"]) attachInsights(graph);
@@ -141,12 +169,129 @@ async function cmdServe(args: string[]) {
       port: { type: "string", short: "p", default: "4321" },
       host: { type: "string", default: "127.0.0.1" },
       "no-open": { type: "boolean" },
+      ...LLM_FLAGS,
     },
   });
   const graphFile = positionals[0] ?? "flowgraph.json";
-  readGraph(graphFile);
-  const url = await serve({ graphFile, port: Number(values.port), host: values.host!, open: !values["no-open"] });
+  const graph = readGraph(graphFile);
+  // "Explain" in the UI uses the LLM configured for the scanned project (or the current directory).
+  const codeRoot = graph.sources?.find((s) => s.collector === "code" && s.target && existsSync(s.target))?.target ?? process.cwd();
+  const llm = llmFrom(loadConfig(codeRoot), values);
+  const url = await serve({ graphFile, port: Number(values.port), host: values.host!, open: !values["no-open"], llm });
   process.stderr.write(`noodles: serving ${graphFile} at ${url}  (Ctrl+C to stop)\n`);
+  if (llm !== noneProvider) process.stderr.write(`noodles: "Explain" uses ${llm.name}${llm.remote ? " (remote: sends the node's source when you click it)" : " (local)"}\n`);
+}
+
+async function cmdWatch(args: string[]) {
+  const { values, positionals } = parseArgs({
+    args,
+    allowPositionals: true,
+    options: {
+      port: { type: "string", short: "p", default: process.env.NOODLES_PORT ?? "4321" },
+      host: { type: "string", default: "127.0.0.1" },
+      "no-open": { type: "boolean" },
+      out: { type: "string", short: "o" },
+      collector: { type: "string", short: "c" },
+      config: { type: "string" },
+      exclude: { type: "string", multiple: true },
+      traces: { type: "string", multiple: true },
+      llm: { type: "boolean" },
+      ...LLM_FLAGS,
+    },
+  });
+  const target = path.resolve(positionals[0] ?? ".");
+  if (!existsSync(target)) throw new Error(`path not found: ${target}`);
+  const config = loadConfig(target, values.config);
+  const llm = llmFrom(config, values);
+  const narrate = values.llm ? llm : noneProvider;
+  const started = Date.now();
+  process.stderr.write(`noodles: watching ${target}\n`);
+  const live = new LiveSession({
+    target,
+    collectors: values.collector?.split(",").map((x) => x.trim()).filter(Boolean) ?? config.collectors,
+    collectorOptions: { exclude: [...(config.exclude ?? []), ...(values.exclude ?? [])], include: config.include, settings: config.settings },
+    traces: values.traces,
+    out: values.out,
+    llm: narrate,
+    log: (m) => process.stderr.write(`  ${new Date().toLocaleTimeString()}  ${m}\n`),
+  });
+  await live.start();
+  const url = await serve({ live, port: Number(values.port), host: values.host!, open: !values["no-open"], llm });
+  process.stderr.write(
+    `noodles: ${live.graph.nodes.length} nodes in ${((Date.now() - started) / 1000).toFixed(1)}s; live canvas at ${url}\n` +
+      `         edits appear as they happen. Coding agent hooks: noodles hook --print-config\n`,
+  );
+  if (narrate !== noneProvider) process.stderr.write(`noodles: ${privacyNotice(narrate, "a structural summary of each change (names and files, no source)")}\n`);
+}
+
+async function cmdHook(args: string[]) {
+  const { values } = parseArgs({
+    args,
+    options: {
+      port: { type: "string", short: "p", default: process.env.NOODLES_PORT ?? "4321" },
+      agent: { type: "string" },
+      file: { type: "string", multiple: true },
+      "print-config": { type: "boolean" },
+    },
+  });
+  if (values["print-config"]) {
+    process.stdout.write(`// Add to .claude/settings.json (or .claude/settings.local.json) in your project:\n${JSON.stringify(HOOK_CONFIG, null, 2)}\n`);
+    return;
+  }
+  // A hook must never slow down or break the agent: short timeouts, always exit 0.
+  let raw: Record<string, unknown> = {};
+  if (!process.stdin.isTTY) {
+    const text = await Promise.race([
+      (async () => {
+        let t = "";
+        for await (const c of process.stdin) t += c;
+        return t;
+      })(),
+      new Promise<string>((r) => setTimeout(() => r(""), 1000)),
+    ]);
+    try {
+      raw = text.trim() ? JSON.parse(text) : {};
+    } catch {
+      raw = {};
+    }
+  }
+  if (values.file?.length) raw.files = values.file;
+  try {
+    await fetch(`http://127.0.0.1:${values.port}/api/activity`, {
+      method: "POST",
+      headers: { "content-type": "application/json", [LOCAL_HEADER]: "1" },
+      body: JSON.stringify(hookPayload(raw, values.agent)),
+      signal: AbortSignal.timeout(1500),
+    });
+  } catch {
+    /* noodles watch is not running: nothing to do */
+  }
+  process.exit(0);
+}
+
+async function cmdLlm(args: string[]) {
+  const [sub] = args;
+  const config = loadConfig(process.cwd());
+  const settings = resolveSettings(config.llm);
+  if (sub === "check") {
+    const p = createProvider(settings);
+    if (p === noneProvider) throw new Error("no LLM provider configured (set NOODLES_LLM_PROVIDER or \"llm\" in noodles.config.json)");
+    process.stderr.write(`noodles: ${privacyNotice(p, "a one-line test prompt")}\n`);
+    const started = Date.now();
+    const text = await p.complete({ system: "Reply with exactly: ok", prompt: "Say ok.", maxTokens: 20 });
+    process.stdout.write(`${p.name}: ${JSON.stringify(text)} in ${Date.now() - started} ms\n`);
+    return;
+  }
+  process.stdout.write(`LLM features are off unless you pick a provider. Current: ${settings.provider ?? "none"}${settings.model ? ` (${settings.model})` : ""}\n\n`);
+  for (const [id, p] of Object.entries(PRESETS)) {
+    const local = /127\.0\.0\.1|localhost/.test(p.baseUrl);
+    process.stdout.write(`  ${id.padEnd(18)} ${p.label.padEnd(44)} ${local ? "local " : "remote"}  ${p.keyEnv ? `$${p.keyEnv}` : ""}${p.defaultModel ? `  default model ${p.defaultModel}` : ""}\n`);
+  }
+  process.stdout.write(
+    `\nConfigure in noodles.config.json:  "llm": { "provider": "anthropic" }\n` +
+      `or per run:  NOODLES_LLM_PROVIDER=ollama NOODLES_LLM_MODEL=qwen2.5-coder noodles scan . --llm\n` +
+      `Any other OpenAI-compatible server or gateway: "provider": "openai-compatible", "baseUrl": "...", "model": "..."\n`,
+  );
 }
 
 function attachInsights(graph: FlowGraph) {
@@ -236,6 +381,12 @@ async function main(argv: string[]) {
       return cmdValidate(rest);
     case "insights":
       return cmdInsights(rest);
+    case "watch":
+      return cmdWatch(rest);
+    case "hook":
+      return cmdHook(rest);
+    case "llm":
+      return cmdLlm(rest);
     case "collectors":
       return cmdCollectors();
     case "-v":

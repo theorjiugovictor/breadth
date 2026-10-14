@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ArrowRight, ExternalLink, FolderOpen, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, ExternalLink, FolderOpen, Sparkles, X } from "lucide-react";
+import { explainNode } from "../live";
 import type { FlowEdge, FlowNode, Port, Step } from "@noodles/schema";
 import type { GraphIndex } from "../graph/model";
 import { ancestors } from "../graph/model";
@@ -20,9 +21,11 @@ interface Props {
   onClose: () => void;
   tab: Tab;
   onTab: (t: Tab) => void;
+  /** LLM provider configured on the local server (enables "Explain"). */
+  llm?: { name: string; remote: boolean };
 }
 
-export function SidePanel({ index, nodeId, execId, activeStep, onSelect, onDrill, onClose, tab, onTab: setTab }: Props) {
+export function SidePanel({ index, nodeId, execId, activeStep, onSelect, onDrill, onClose, tab, onTab: setTab, llm }: Props) {
   const node = index.nodes.get(nodeId);
   if (!node) return null;
   const { Icon, color, label } = nodeVisual(node);
@@ -55,12 +58,47 @@ export function SidePanel({ index, nodeId, execId, activeStep, onSelect, onDrill
       </div>
       <div className="panel-body">
         {tab === "overview" && activeStep?.node === node.id && <StepSummary step={activeStep} />}
+        {tab === "overview" && llm && <Explain nodeId={node.id} llm={llm} />}
         {tab === "overview" && <Overview index={index} node={node} onSelect={onSelect} onDrill={onDrill} />}
         {tab === "inputs" && <PortsTab index={index} node={node} side="input" execId={execId} activeStep={activeStep} />}
         {tab === "outputs" && <PortsTab index={index} node={node} side="output" execId={execId} activeStep={activeStep} />}
         {tab === "source" && <SourceTab index={index} node={node} />}
       </div>
     </aside>
+  );
+}
+
+function Explain({ nodeId, llm }: { nodeId: string; llm: { name: string; remote: boolean } }) {
+  const [state, setState] = useState<{ busy?: boolean; text?: string; error?: string }>({});
+  if (!state.text && !state.error) {
+    return (
+      <button
+        className="btn"
+        style={{ marginBottom: 14 }}
+        disabled={state.busy}
+        title={llm.remote ? `Sends this node's code and neighbours to ${llm.name}` : `Runs on ${llm.name}, locally`}
+        onClick={() => {
+          setState({ busy: true });
+          explainNode(nodeId)
+            .then((r) => setState({ text: r.text }))
+            .catch((e) => setState({ error: (e as Error).message }));
+        }}
+      >
+        <Sparkles size={14} /> {state.busy ? "Explaining…" : "Explain"}
+        <span className="empty-note" style={{ fontSize: 11 }}>
+          {llm.name}
+          {llm.remote ? " · sends code" : " · local"}
+        </span>
+      </button>
+    );
+  }
+  return (
+    <div className="explain">
+      <div className="h3" style={{ marginTop: 0 }}>
+        <Sparkles size={13} /> Explanation <span className="empty-note">· {llm.name}</span>
+      </div>
+      {state.error ? <p className="desc" style={{ color: "var(--err)" }}>{state.error}</p> : <p className="desc" style={{ whiteSpace: "pre-wrap" }}>{state.text}</p>}
+    </div>
   );
 }
 

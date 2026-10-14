@@ -9,7 +9,8 @@
 - **Drill down any level**: system > service > module > file > class > function. Double-click to open a node, use the breadcrumbs to go back up.
 - **Replay real runs.** Import OpenTelemetry traces and step through a request like an n8n execution, with the real input and output at every node.
 - **Problems you can see.** Rules over the graph flag N+1 queries, repeated work, missed parallelism, dead code, duplicate logic, unused infrastructure, contract drift, unhandled errors and personal data sent to third parties, and highlight them on the canvas. See [Insights](#insights).
-- **Zero config, fully local.** Nothing leaves your machine. LLM features are optional and off by default.
+- **Watch your coding agent build.** `noodles watch` keeps the canvas live while you or Claude Code (or any agent) edit: new and changed functions light up as they appear, with a feed of what each task changed. See [Live mode](#live-mode-watch-a-coding-agent).
+- **Zero config, fully local.** Nothing leaves your machine. LLM features are optional, off by default, and work with any provider: Claude, OpenAI, Gemini, Ollama, or anything OpenAI-compatible.
 
 **Try it without installing anything:** the [landing page](#publishing-the-site) has a box where you paste a public GitHub repository. It is scanned in your browser: files come straight from GitHub and are parsed in a Web Worker with tree-sitter compiled to WebAssembly. No server is involved and nothing is uploaded.
 
@@ -62,12 +63,45 @@ After the merge, each service is a single node across all layers:
 
 Every trace step lands on the function that produced it. `npm run demo:build` also writes `examples/noodles.flowgraph.json`, which is noodles scanning itself.
 
+## Live mode: watch a coding agent
+
+```sh
+cd ~/code/some-repo
+noodles watch                  # scans, serves http://127.0.0.1:4321 and keeps watching
+```
+
+Every save triggers an incremental rescan (unchanged files come from a cache), and the browser updates over Server-Sent Events without losing your place:
+
+- Functions, endpoints and files that just appeared get a **new** badge; changed ones get **edited**. A folder or file card lights up when something inside it changed.
+- With **Follow** on (the default), the canvas opens the level where the latest change happened.
+- The **Live** tab lists each change (what was added, edited or removed, and any new insights it caused, such as dead code or an N+1 query) next to the task that led to it.
+
+To attribute changes to your coding agent and show its task, connect its hooks. For Claude Code:
+
+```sh
+noodles hook --print-config    # prints the snippet for .claude/settings.json
+```
+
+```json
+{
+  "hooks": {
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "noodles hook" }] }],
+    "PostToolUse": [{ "matcher": "Edit|MultiEdit|Write|NotebookEdit", "hooks": [{ "type": "command", "command": "noodles hook" }] }]
+  }
+}
+```
+
+`noodles hook` reads the hook event on stdin, forwards it to the running `noodles watch`, and always exits 0 so it never blocks the agent. Other agents (Cursor, Aider, Codex, your own scripts) work without any setup through file watching. To label their changes, pipe `{"files": [...], "prompt": "..."}` to `noodles hook --agent Name`, or POST it to `http://127.0.0.1:4321/api/activity` with the header `x-noodles: 1`. Endpoints that change state or call an LLM require that header, so other web pages cannot trigger them.
+
 ## CLI
 
 ```
 noodles scan <path> [--collector code,infra] [-o flowgraph.json] [--config file] [--exclude glob]... [--no-external] [--llm]
 noodles import-traces <otlp.json>... [--merge flowgraph.json] [-o out.json]
 noodles serve [flowgraph.json] [--port 4321] [--host 127.0.0.1] [--no-open]
+noodles watch [path] [--port 4321] [--traces otlp.json]... [-o flowgraph.json] [--llm]
+noodles hook [--port 4321] [--agent name] [--print-config]
+noodles llm [providers|check]
 noodles insights <flowgraph.json> [--json] [--write] [--fail-on warning|critical] [--rules a,b] [--list]
 noodles validate <flowgraph.json>
 noodles collectors
@@ -99,12 +133,24 @@ Everything works without configuration. A `noodles.config.json` in the scanned d
 
 ### LLM features (off by default)
 
-There is one interface, `LLMProvider` in [`cli/src/llm/provider.ts`](cli/src/llm/provider.ts).
+Nothing is sent anywhere unless you configure a provider. With one configured you get:
 
-- The default provider is `none`.
-- The `ollama` provider talks to a local model at `http://127.0.0.1:11434`.
+- **`scan --llm`**: one-sentence descriptions for the most connected functions and modules that have no docstring.
+- **Explain**: a button in the node panel of `noodles serve` / `noodles watch` that explains what a node does and how it connects.
+- **`watch --llm`**: a one-line narration of each change in the live feed (sends names and file paths, not source).
 
-When enabled with `"llm": {"provider": "ollama", "model": "llama3.2"}` and `scan --llm`, it writes one-sentence descriptions for the most connected functions and modules that don't have a docstring. No other provider ships, so code is never sent to a remote service unless you add one yourself.
+Remote providers are announced on the terminal before the first request. Pick one in `noodles.config.json`, with environment variables (`NOODLES_LLM_PROVIDER`, `NOODLES_LLM_MODEL`, `NOODLES_LLM_BASE_URL`), or with `--llm-provider`, `--llm-model` and `--llm-base-url`:
+
+```jsonc
+{ "llm": { "provider": "anthropic" } }                                   // Claude, uses ANTHROPIC_API_KEY
+{ "llm": { "provider": "openai", "model": "gpt-4.1-mini" } }             // OPENAI_API_KEY
+{ "llm": { "provider": "gemini", "model": "gemini-2.5-flash" } }         // GEMINI_API_KEY
+{ "llm": { "provider": "ollama", "model": "qwen2.5-coder" } }            // local, nothing leaves the machine
+{ "llm": { "provider": "openai-compatible", "baseUrl": "http://localhost:4000/v1", "model": "my-model",
+           "apiKeyEnv": "GATEWAY_KEY", "headers": { "x-team": "$TEAM_ID" } } }   // LiteLLM, Azure, any gateway
+```
+
+Built-in presets: `anthropic`, `openai`, `gemini`, `ollama`, `openrouter`, `groq`, `together`, `mistral`, `deepseek`, `xai`, `fireworks`, `lmstudio`, `vllm`, `llamacpp` and `openai-compatible`. `noodles llm` lists them with the key each one reads, and `noodles llm check` sends a test prompt to the configured provider. Endpoints on `localhost` count as local and need no key.
 
 ## Using the canvas
 

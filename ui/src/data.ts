@@ -16,7 +16,7 @@ export interface Loaded {
   /** Shown once on top of the canvas (e.g. "scanned 1200 of 3400 files"). */
   notice?: string;
   /** Where it came from: a repo scanned in the browser opens on the Insights tab. */
-  origin?: "file" | "repo";
+  origin?: "file" | "repo" | "live";
 }
 
 export function parseGraph(text: string, name: string): Loaded {

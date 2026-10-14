@@ -1,7 +1,9 @@
+import { useEffect, useState } from "react";
 import { ChevronRight, Moon, PanelLeft, Play, Map as MapIcon, Sun, Upload, ChevronDown, House } from "lucide-react";
 import type { GraphIndex } from "../graph/model";
 import { ancestors, ROOT } from "../graph/model";
 import type { DemoEntry } from "../data";
+import type { LiveState } from "../live";
 
 interface Props {
   index: GraphIndex;
@@ -17,6 +19,7 @@ interface Props {
   onToggleSide: () => void;
   onOpenFile: () => void;
   onDemo: (d: DemoEntry) => void;
+  live?: LiveState;
 }
 
 export function Logo() {
@@ -55,6 +58,7 @@ export function TopBar(p: Props) {
           </span>
         ))}
       </nav>
+      {p.live && <LiveBadge live={p.live} />}
       <span className="stats">
         {p.index.graph.nodes.length} nodes · {p.index.graph.edges.length} edges
         {hasRuns ? ` · ${p.index.executions.length} runs` : ""}
@@ -102,6 +106,30 @@ export function TopBar(p: Props) {
         {p.theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
       </button>
     </header>
+  );
+}
+
+/** "Live" pill; shows what the coding agent is doing while it works. */
+function LiveBadge({ live }: { live: LiveState }) {
+  const [, tick] = useState(0);
+  const a = live.agent;
+  const fresh = !!a && Date.now() - a.at < 15_000;
+  useEffect(() => {
+    if (!fresh) return;
+    const t = setTimeout(() => tick((n) => n + 1), 15_000);
+    return () => clearTimeout(t);
+  }, [fresh, a?.at]);
+  const doing = fresh && a ? (a.files.length ? `editing ${a.files[0].split("/").pop()}` : a.event === "UserPromptSubmit" ? "got a task" : "working") : "";
+  return (
+    <span className={`live-pill${live.connected ? "" : " off"}`} title={live.connected ? "Updates as files change" : "Reconnecting to noodles watch…"}>
+      <span className={`live-dot${live.connected ? " on" : ""}`} />
+      Live
+      {doing && (
+        <span className="live-doing">
+          · {a!.agent} {doing}
+        </span>
+      )}
+    </span>
   );
 }
 

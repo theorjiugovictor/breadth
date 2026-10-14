@@ -14,11 +14,13 @@
     "build": "node scripts/build.mjs"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.133.0",
     "@noodles/collectors": "*",
+    "@noodles/insights": "*",
     "@noodles/schema": "*",
+    "ignore": "^7.0.12",
     "tree-sitter-wasms": "0.1.13",
-    "web-tree-sitter": "0.25.10",
-    "@noodles/insights": "*"
+    "web-tree-sitter": "0.25.10"
   },
   "license": "MIT"
 }

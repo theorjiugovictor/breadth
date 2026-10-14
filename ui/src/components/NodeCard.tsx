@@ -19,6 +19,8 @@ export interface CardData extends Record<string, unknown> {
   insight?: Severity;
   /** Insight badge in map mode. */
   flag?: { count: number; severity: Severity };
+  /** Live mode: appeared or changed in the latest update (a card holding changed nodes counts as edited). */
+  change?: "new" | "edited";
 }
 
 function subtitle(v: ViewNode, label: string): string {
@@ -59,7 +61,7 @@ export const NodeCard = memo(function NodeCard({ data }: NodeProps) {
   const { v } = d;
   const { Icon, color, label } = nodeVisual(v.node);
   const showPorts = !v.ghost && !v.more && ((v.node.inputs?.length ?? 0) > 0 || (v.node.outputs?.length ?? 0) > 0);
-  const cls = ["card", v.ghost && "ghost", d.selected && "selected", d.active && "active", d.visited && "visited", d.dim && "dim", d.error && "error", d.insight && `flagged sev-${d.insight}`]
+  const cls = ["card", v.ghost && "ghost", d.selected && "selected", d.active && "active", d.visited && "visited", d.dim && "dim", d.error && "error", d.insight && `flagged sev-${d.insight}`, d.change && `live-${d.change}`]
     .filter(Boolean)
     .join(" ");
   return (
@@ -67,6 +69,7 @@ export const NodeCard = memo(function NodeCard({ data }: NodeProps) {
       <Handle type="target" position={Position.Left} id="in" className="h h-main" style={{ top: 29, left: 0 }} />
       <Handle type="source" position={Position.Right} id="out" className="h h-main" style={{ top: 29, right: 0 }} />
       <div className="badges">
+        {d.change && <span className={`badge live-${d.change}`}>{d.change}</span>}
         {d.flag && (
           <span className={`badge sev-${d.flag.severity}`} title={`${d.flag.count} insight${d.flag.count === 1 ? "" : "s"}`}>
             <TriangleAlert size={10} /> {d.flag.count}

@@ -46,16 +46,21 @@ interface Props {
   highlight?: InsightHighlight;
   /** Insight counts per graph node (map mode badges). */
   flags?: Map<string, { count: number; severity: Severity }>;
+  /** Live mode: graph nodes that just appeared or changed. */
+  marks?: Map<string, "new" | "edited">;
+  /** Live mode: keep the viewport when the same level is re-laid out after an update. */
+  live?: boolean;
   onSelect: (id: string | undefined) => void;
   onDrill: (id: string) => void;
 }
 
 const SEV_RANK: Record<Severity, number> = { critical: 3, warning: 2, info: 1 };
 
-export function Canvas({ view, selected, trace, theme, centerOn, highlight, flags, onSelect, onDrill }: Props) {
+export function Canvas({ view, selected, trace, theme, centerOn, highlight, flags, marks, live, onSelect, onDrill }: Props) {
   const [positions, setPositions] = useState<Map<string, Positioned>>(new Map());
   const [layoutKey, setLayoutKey] = useState(0);
   const rf = useReactFlow();
+  const lastFit = useRef<{ focus?: string; centerOn?: string }>({});
   const viewRef = useRef(view);
 
   useEffect(() => {
@@ -74,6 +79,9 @@ export function Canvas({ view, selected, trace, theme, centerOn, highlight, flag
   // Fit (or centre on a searched node) after each new layout.
   useEffect(() => {
     if (!layoutKey) return;
+    const same = live && lastFit.current.focus === view.focus && lastFit.current.centerOn === centerOn;
+    lastFit.current = { focus: view.focus, centerOn };
+    if (same) return;
     const t = setTimeout(() => {
       const p = centerOn ? positions.get(centerOn) : undefined;
       if (p) rf.setCenter(p.x + p.width / 2, p.y + p.height / 2, { zoom: 1.1, duration: 350 });
@@ -118,8 +126,13 @@ export function Canvas({ view, selected, trace, theme, centerOn, highlight, flag
         severity: cur && SEV_RANK[cur.severity] > SEV_RANK[f.severity] ? cur.severity : f.severity,
       });
     }
-    return { active, visited, runs, errors, hl, flagged };
-  }, [trace, view, highlight, flags]);
+    const changed = new Map<string, "new" | "edited">();
+    for (const [id, kind] of marks ?? []) {
+      const r = view.repOf(id);
+      if (r && changed.get(r) !== "new") changed.set(r, r === id ? kind : "edited");
+    }
+    return { active, visited, runs, errors, hl, flagged, changed };
+  }, [trace, view, highlight, flags, marks]);
 
   const selfLoops = useMemo(() => new Set(view.edges.filter((e) => e.source === e.target).map((e) => e.source)), [view]);
 
@@ -139,6 +152,7 @@ export function Canvas({ view, selected, trace, theme, centerOn, highlight, flag
           runs: trace ? (overlay.runs.get(n.id) ?? 0) : 0,
           error: overlay.errors.has(n.id),
           hasSelfLoop: selfLoops.has(n.id),
+          change: overlay.changed.get(n.id),
         };
         return { id: n.id, type: "card", position: { x: p.x, y: p.y }, data, draggable: true, selectable: false, initialWidth: p.width, initialHeight: p.height };
       });

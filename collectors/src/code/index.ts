@@ -18,9 +18,18 @@ export interface CodeCollectorSettings {
 
 const TEST_FILE = /(^|\/)(tests?|__tests__|spec)\/|(\.|_)(test|spec)\.[jt]sx?$|(^|\/)test_[^/]+\.py$|_test\.py$/;
 
+/** Parsed files keyed by absolute path, reused while size and mtime are unchanged (live mode rescans). */
+const parseCache = new Map<string, { mtimeMs: number; size: number; model: FileModel | undefined }>();
+
 export async function parseFile(root: string, rel: string): Promise<FileModel | undefined> {
   if (!langForFile(rel)) return undefined;
-  return parseSource(rel, await fs.readFile(path.join(root, rel), "utf8"));
+  const abs = path.join(root, rel);
+  const st = await fs.stat(abs);
+  const hit = parseCache.get(abs);
+  if (hit && hit.mtimeMs === st.mtimeMs && hit.size === st.size) return hit.model;
+  const model = await parseSource(rel, await fs.readFile(abs, "utf8"));
+  parseCache.set(abs, { mtimeMs: st.mtimeMs, size: st.size, model });
+  return model;
 }
 
 export const codeCollector: Collector = {
