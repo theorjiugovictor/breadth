@@ -1,0 +1,188 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://noodles.dev/schema/flowgraph/1.0.json",
+  "title": "Noodles flowgraph",
+  "description": "Universal graph contract. Collectors produce it, the UI only reads it.",
+  "type": "object",
+  "required": ["version", "nodes", "edges"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "const": "1.0" },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "sources": {
+      "description": "Which collectors contributed to this graph (appended on merge).",
+      "type": "array",
+      "items": { "$ref": "#/$defs/source" }
+    },
+    "nodes": { "type": "array", "items": { "$ref": "#/$defs/node" } },
+    "edges": { "type": "array", "items": { "$ref": "#/$defs/edge" } },
+    "executions": { "type": "array", "items": { "$ref": "#/$defs/execution" } }
+  },
+
+  "$defs": {
+    "id": {
+      "description": "Stable, deterministic id. Convention '<namespace>:<path>', e.g. 'code:py:src/users.py#get_user', 'svc:checkout', 'tf:aws_s3_bucket.assets', 'k8s:default/Deployment/api'. Same entity => same id across runs and collectors.",
+      "type": "string",
+      "minLength": 1
+    },
+
+    "source": {
+      "type": "object",
+      "required": ["collector"],
+      "additionalProperties": false,
+      "properties": {
+        "collector": { "type": "string" },
+        "collectorVersion": { "type": "string" },
+        "target": { "type": "string" },
+        "collectedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+
+    "nodeKind": {
+      "enum": [
+        "function", "module", "service", "datastore", "queue", "external_api",
+        "network_endpoint", "infra_resource", "pipeline", "team", "system", "org"
+      ]
+    },
+    "layer": {
+      "enum": ["code", "runtime", "network", "messaging", "infra", "delivery", "org"]
+    },
+    "edgeKind": {
+      "enum": ["call", "data", "network", "event", "read", "write", "deploy", "depends_on"]
+    },
+
+    "port": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "type": { "type": "string", "description": "Free-form type label: 'str', 'Promise<User>', 'http', 'kafka:orders', 'tcp/5432'." },
+        "description": { "type": "string" },
+        "optional": { "type": "boolean" },
+        "default": { "type": "string", "description": "Default value as source text, if any." }
+      }
+    },
+
+    "sourceRef": {
+      "description": "Where the node comes from: a file location, or an external resource reference.",
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "file": { "type": "string", "description": "Path relative to the scanned root, forward slashes." },
+        "line": { "type": "integer", "minimum": 1 },
+        "endLine": { "type": "integer", "minimum": 1 },
+        "resource_ref": { "type": "string", "description": "e.g. 'aws_s3_bucket.assets', 'apps/v1/Deployment default/api', ARN, URL." },
+        "url": { "type": "string", "description": "Optional deep link (repo browser, console)." }
+      }
+    },
+
+    "metadata": {
+      "type": "object",
+      "description": "Free-form key/value. Values may be any JSON.",
+      "additionalProperties": true
+    },
+
+    "node": {
+      "type": "object",
+      "required": ["id", "name", "kind", "layer"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "kind": { "$ref": "#/$defs/nodeKind" },
+        "layer": { "$ref": "#/$defs/layer" },
+        "parent": { "$ref": "#/$defs/id", "description": "Containing node id. Drives drill-down (org > system > service > module > function)." },
+        "aliases": {
+          "description": "Other ids/keys that refer to the same entity (e.g. OTel 'service.name=checkout', 'code.function=app.users.get_user'). Merge unifies nodes whose id or aliases collide, and edges may point at an alias.",
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        },
+        "inputs": { "type": "array", "items": { "$ref": "#/$defs/port" } },
+        "outputs": { "type": "array", "items": { "$ref": "#/$defs/port" } },
+        "source": { "$ref": "#/$defs/sourceRef" },
+        "tags": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "metadata": { "$ref": "#/$defs/metadata" }
+      }
+    },
+
+    "endpoint": {
+      "type": "object",
+      "required": ["node"],
+      "additionalProperties": false,
+      "properties": {
+        "node": { "$ref": "#/$defs/id" },
+        "port": { "type": "string", "description": "Port name on that node. Omitted = the node's default port." }
+      }
+    },
+
+    "sample": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "value": { "description": "Observed payload, any JSON. Collectors must redact/truncate large values." },
+        "observedAt": { "type": "number", "description": "Epoch milliseconds." },
+        "execution": { "$ref": "#/$defs/id", "description": "Execution this sample came from, if any." },
+        "truncated": { "type": "boolean" }
+      }
+    },
+
+    "edge": {
+      "type": "object",
+      "required": ["id", "from", "to", "kind"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id", "description": "Stable id, default '<kind>:<from.node>[.port]-><to.node>[.port]'." },
+        "from": { "$ref": "#/$defs/endpoint" },
+        "to": { "$ref": "#/$defs/endpoint" },
+        "kind": { "$ref": "#/$defs/edgeKind" },
+        "protocol": { "type": "string", "description": "http, grpc, tcp, udp, kafka, sqs, sql, redis, ..." },
+        "label": { "type": "string", "description": "Short text on the edge, e.g. 'GET /users/{id}', 'topic orders'." },
+        "loop": { "type": "boolean", "description": "Happens inside a loop (rendered with a repeat marker)." },
+        "conditional": { "type": "boolean", "description": "Happens only on some branch." },
+        "count": { "type": "integer", "minimum": 0, "description": "Observed frequency (call sites, spans, flows)." },
+        "samples": { "type": "array", "items": { "$ref": "#/$defs/sample" } },
+        "metadata": { "$ref": "#/$defs/metadata" }
+      }
+    },
+
+    "status": { "enum": ["ok", "error", "unset"] },
+
+    "step": {
+      "type": "object",
+      "required": ["id", "node"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "node": { "$ref": "#/$defs/id" },
+        "parent": { "type": "string", "description": "Calling step id (span parent)." },
+        "via": { "$ref": "#/$defs/id", "description": "Edge id traversed to reach this step, if known." },
+        "input": { "description": "Any JSON." },
+        "output": { "description": "Any JSON." },
+        "start": { "type": "number", "description": "Epoch milliseconds (fractional allowed)." },
+        "end": { "type": "number", "description": "Epoch milliseconds (fractional allowed)." },
+        "status": { "$ref": "#/$defs/status" },
+        "error": { "type": "string" },
+        "metadata": { "$ref": "#/$defs/metadata" }
+      }
+    },
+
+    "execution": {
+      "type": "object",
+      "required": ["id", "steps"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id", "description": "e.g. 'otel:<traceId>'." },
+        "name": { "type": "string" },
+        "start": { "type": "number" },
+        "end": { "type": "number" },
+        "status": { "$ref": "#/$defs/status" },
+        "steps": { "type": "array", "items": { "$ref": "#/$defs/step" }, "description": "Ordered by start time." },
+        "metadata": { "$ref": "#/$defs/metadata" }
+      }
+    }
+  }
+}
