@@ -95,6 +95,12 @@ describe("insights on the shop demo", () => {
     expect(i.title).toBe("risk_score received amount as string, declared float");
   });
 
+  it("finds the copy-pasted validation in two services", () => {
+    const [i] = find("duplicate-logic");
+    expect(i.nodes.sort()).toEqual(["code:fn:services/orders/app/pricing.py#validate_items", "code:fn:services/payments/app/fraud.py#check_lines"]);
+    expect(i.confidence).toBe("high");
+  });
+
   it("does not report chatty services or long chains for a normal checkout", () => {
     expect(find("chatty-services")).toEqual([]);
     expect(find("long-hop-chain")).toEqual([]);

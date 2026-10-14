@@ -23,6 +23,8 @@ export interface Def {
   visibility?: "exported" | "public" | "internal";
   /** Declared private/protected/#name (TS). */
   private?: boolean;
+  /** Structural fingerprint of the body (functions of a meaningful size only). */
+  fingerprint?: import("./util.js").Fingerprint;
 }
 
 /** One call expression, with the callee flattened into identifier parts. */

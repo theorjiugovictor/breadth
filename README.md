@@ -8,9 +8,10 @@
 - **One graph format.** Collectors write [`flowgraph.json`](schema/flowgraph.schema.json); the UI only reads it. A new collector never needs UI changes.
 - **Drill down any level**: system > service > module > file > class > function. Double-click to open a node, use the breadcrumbs to go back up.
 - **Replay real runs.** Import OpenTelemetry traces and step through a request like an n8n execution, with the real input and output at every node.
+- **Problems you can see.** Rules over the graph flag N+1 queries, repeated work, missed parallelism, dead code, duplicate logic, unused infrastructure, contract drift, unhandled errors and personal data sent to third parties, and highlight them on the canvas. See [Insights](#insights).
 - **Zero config, fully local.** Nothing leaves your machine. LLM features are optional and off by default.
 
-Live demo: enable GitHub Pages for this repo (see [Publishing the site](#publishing-the-site)) and open `https://<owner>.github.io/noodles/app/`.
+**Try it without installing anything:** the [landing page](#publishing-the-site) has a box where you paste a public GitHub repository. It is scanned in your browser: files come straight from GitHub and are parsed in a Web Worker with tree-sitter compiled to WebAssembly. No server is involved and nothing is uploaded.
 
 ## Install
 
@@ -67,6 +68,7 @@ Every trace step lands on the function that produced it. `npm run demo:build` al
 noodles scan <path> [--collector code,infra] [-o flowgraph.json] [--config file] [--exclude glob]... [--no-external] [--llm]
 noodles import-traces <otlp.json>... [--merge flowgraph.json] [-o out.json]
 noodles serve [flowgraph.json] [--port 4321] [--host 127.0.0.1] [--no-open]
+noodles insights <flowgraph.json> [--json] [--write] [--fail-on warning|critical] [--rules a,b] [--list]
 noodles validate <flowgraph.json>
 noodles collectors
 ```
@@ -123,11 +125,48 @@ Big graphs stay readable:
 
 Recursion shows as a self-loop. Shared state (module globals, caches) and datastores are their own nodes, with read and write edges.
 
+## Insights
+
+![The N+1 finding highlighted on the canvas](docs/img/insights.png)
+
+When a graph is a graph, many problems stop hiding in code and become shapes. noodles runs a set of rules over any flowgraph. Each finding names the nodes, edges and (for runtime findings) the exact trace steps involved. Clicking it in the **Insights** tab opens the right level of the canvas, rings the nodes involved and dims everything else; runtime findings have a **Replay where it happens** button.
+
+| Rule | Category | What it looks for | Needs traces? |
+|---|---|---|---|
+| `n-plus-one` | inefficiency | A datastore read inside a loop (directly or through callees), or the same query repeated in one request | no / yes |
+| `repeated-work` | inefficiency | The same function called with identical input in one request | yes |
+| `missed-parallelism` | inefficiency | Back-to-back sibling calls where neither uses the other's output | yes |
+| `chatty-services` | inefficiency | Many calls between the same two services in one request | yes |
+| `long-hop-chain` | inefficiency | A request crossing many services in sequence | yes |
+| `dead-code` | redundancy | Functions nothing calls (entry points, framework hooks, callbacks and overrides excluded; public ones are low confidence) | no, traces add evidence |
+| `duplicate-logic` | redundancy | Functions with identical or nearly identical syntax structure (names and literals ignored; MinHash over the tree) | no |
+| `orphan-infra` | redundancy | Provisioned datastores and queues nothing reads, writes or sends traffic to | no |
+| `race-risk` | risk | Shared state with several writers (module globals; databases written by several services) | no |
+| `data-exposure` | risk | Personal or secret-looking fields (by name and value shape) sent to external APIs | yes |
+| `contract-drift` | risk | Observed values whose type contradicts the declared parameter or return type | yes |
+| `unhandled-errors` | risk | Errors that propagate all the way to the entry point; remote calls with no try/except or `.catch()` | yes / no |
+| `static-runtime-mismatch` | risk | Calls seen at runtime that the code map does not contain (getattr, registries, DI) | yes |
+
+Findings are **signals, not verdicts**. Rules see structure and flow, not the logic inside a function, and "dead" code might be called by a cron job, reflection or another repository you have not collected. Every finding carries a `confidence`.
+
+```sh
+noodles insights flowgraph.json                 # readable list
+noodles insights flowgraph.json --json          # for tooling
+noodles insights flowgraph.json --fail-on warning   # exit 1 in CI if any warning or critical finding
+noodles insights --list                         # the rules
+```
+
+`scan` and `import-traces` store findings in the graph (`insights` in the schema; `--no-insights` to skip). The UI always re-runs the built-in rules on load and keeps findings other tools wrote into the file, so you can add your own rule engines. A rule is a plain object with `run(ctx, thresholds) => Insight[]` in [`insights/src/rules`](insights/src/rules); thresholds can be tuned per rule.
+
+The shop demo is seeded with one realistic instance of each problem.
+
 ## How it fits together
 
 ```
 schema/       flowgraph.schema.json, TypeScript types, validateGraph(), mergeGraphs()
+insights/     rules over any flowgraph (pure TypeScript, runs in the CLI and the browser)
 collectors/   core/ (interface, registry, file walker), code/, otel/, infra/
+              browser.ts: the Node-free entry the in-browser repo scanner uses
               netflow/, messaging/, cicd/, org/   (stubs with a spec in their README)
 cli/          the `noodles` command and the local server
 ui/           React + React Flow (xyflow) + ELK
@@ -264,6 +303,17 @@ npm run screenshots          # serves the shop demo and captures map.png, hero-l
 ```
 
 To capture your own graph, serve it and pass the URL: `node scripts/screenshots.mjs http://127.0.0.1:4321/`. You can also take a screenshot in the browser: the toolbar's fit-view button and the theme toggle give clean framing in both themes.
+
+## Scanning a repository in the browser
+
+`app/?repo=owner/repo` (or the box on the landing page) scans a public GitHub repository without a server:
+
+1. One GitHub API request lists the files (`git/trees/HEAD?recursive=1`). Anonymous requests are limited to 60 per hour per visitor.
+2. Python, TypeScript and JavaScript files are downloaded from `raw.githubusercontent.com` (not counted against that limit). Repositories with more than 1,200 code files are sampled, application code first, with a notice.
+3. A Web Worker parses them with tree-sitter (WebAssembly), builds the graph and runs the insights.
+4. The Source tab shows the lines straight from GitHub, with a link to the file.
+
+`owner/repo`, GitHub URLs, `.git` URLs and `/tree/<branch>/<path>` (to scan a sub-folder) all work. Private repositories, traces and infrastructure need the CLI.
 
 ## Publishing the site
 

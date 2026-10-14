@@ -12,6 +12,7 @@ import { runtimeMismatch } from "./rules/runtime-mismatch.js";
 import { unhandledErrors } from "./rules/unhandled-errors.js";
 import { missedParallelism } from "./rules/missed-parallelism.js";
 import { contractDrift } from "./rules/contract-drift.js";
+import { duplicateLogic } from "./rules/duplicate-logic.js";
 
 export type { Rule, RuleOptions } from "./rule.js";
 export { Ctx } from "./context.js";
@@ -25,6 +26,7 @@ export const RULES: Rule[] = [
   chattyServices,
   longHopChain,
   deadCode,
+  duplicateLogic,
   orphanInfra,
   raceRisk,
   dataExposure,

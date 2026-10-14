@@ -1,7 +1,7 @@
 import type { Node } from "web-tree-sitter";
 import type { Port } from "@noodles/schema";
 import { emptyModel, type Def, type FileModel } from "./model.js";
-import { argIdentifiers, calleeParts, firstLine, stringLiteral, truncate, typeParts } from "./util.js";
+import { argIdentifiers, calleeParts, fingerprint, firstLine, stringLiteral, truncate, typeParts } from "./util.js";
 
 const LOOPS = new Set([
   "for_statement",
@@ -275,6 +275,13 @@ export function extractPython(path: string, root: Node): FileModel {
       isAsync: node.children[0]?.type === "async",
       decorators: decorators.length ? decorators : undefined,
     };
+    if (body) {
+      // skip the docstring so documented and undocumented copies still match
+      const first = body.namedChildren[0];
+      const doc = first?.type === "expression_statement" && first.namedChildren[0]?.type === "string" ? first : null;
+      const fp = fingerprint(body, doc);
+      if (fp.size >= MIN_FINGERPRINT) def.fingerprint = fp;
+    }
     m.defs.push(def);
     const locals = new Set(params.map((p) => p.name.replace(/^\*+/, "")));
     locals.add("self");
@@ -302,6 +309,9 @@ export function extractPython(path: string, root: Node): FileModel {
   }
   return m;
 }
+
+/** Bodies smaller than this (in syntax nodes) are too generic to call duplicates. */
+export const MIN_FINGERPRINT = 30;
 
 const MUTATORS = new Set(["append", "extend", "insert", "pop", "remove", "clear", "update", "add", "discard", "setdefault", "popitem", "sort", "reverse", "set", "put", "delete"]);
 

@@ -86,3 +86,54 @@ export function argIdentifiers(args: Node | null): string[] | undefined {
   }
   return out.length ? out : undefined;
 }
+
+const SIG_SIZE = 16;
+const SEEDS = Array.from({ length: SIG_SIZE }, (_, i) => Math.imul(0x9e3779b1, i + 1) >>> 0);
+
+function fnv(s: string, seed = 2166136261): number {
+  let h = seed >>> 0;
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619) >>> 0;
+  return h >>> 0;
+}
+
+function mix(h: number, seed: number): number {
+  let x = (h ^ seed) >>> 0;
+  x = Math.imul(x ^ (x >>> 16), 0x85ebca6b) >>> 0;
+  x = Math.imul(x ^ (x >>> 13), 0xc2b2ae35) >>> 0;
+  return (x ^ (x >>> 16)) >>> 0;
+}
+
+export interface Fingerprint {
+  /** Hash of the node-type sequence: equal for structurally identical bodies. */
+  shape: string;
+  /** Number of syntax nodes in the body. */
+  size: number;
+  /** MinHash over 4-grams of node types, for near-duplicate search. */
+  sig: number[];
+}
+
+/**
+ * Structural fingerprint of a function body: names, literals and comments are ignored, so
+ * copy-pasted logic with renamed variables still matches.
+ */
+export function fingerprint(body: Node, skip?: Node | null): Fingerprint {
+  const types: string[] = [];
+  const walk = (n: Node) => {
+    if (n.type === "comment" || (skip && n.id === skip.id)) return;
+    types.push(n.type);
+    for (const c of n.namedChildren) if (c) walk(c);
+  };
+  walk(body);
+  const shingles = new Set<number>();
+  for (let i = 0; i + 4 <= types.length; i++) shingles.add(fnv(types.slice(i, i + 4).join(" ")));
+  if (!shingles.size) shingles.add(fnv(types.join(" ")));
+  const sig = SEEDS.map((seed) => {
+    let min = 0xffffffff;
+    for (const s of shingles) {
+      const v = mix(s, seed);
+      if (v < min) min = v;
+    }
+    return min;
+  });
+  return { shape: fnv(types.join(" ")).toString(36), size: types.length, sig };
+}

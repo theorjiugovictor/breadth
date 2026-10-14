@@ -95,7 +95,9 @@ function Overview({ index, node, onSelect, onDrill }: { index: GraphIndex; node:
   const self = edges.filter((e) => e.from.node === node.id && e.to.node === node.id);
   const runs = index.stepsByNode.get(node.id);
   const stepCount = runs ? [...runs.values()].reduce((s, l) => s + l.length, 0) : 0;
-  const meta = Object.entries(node.metadata ?? {}).filter(([k, v]) => v !== undefined && k !== "lines");
+  // internal bookkeeping used by collectors and rules, not useful to read
+  const HIDDEN = new Set(["lines", "shape", "size", "sig", "referenced", "nameCalled", "guarded"]);
+  const meta = Object.entries(node.metadata ?? {}).filter(([k, v]) => v !== undefined && !HIDDEN.has(k));
 
   return (
     <>

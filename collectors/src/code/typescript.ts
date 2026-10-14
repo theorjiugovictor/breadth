@@ -1,7 +1,8 @@
 import type { Node } from "web-tree-sitter";
 import type { Port } from "@noodles/schema";
 import { emptyModel, type Def, type FileModel, type Lang } from "./model.js";
-import { argIdentifiers, calleeParts, firstLine, stringLiteral, truncate, typeParts } from "./util.js";
+import { argIdentifiers, calleeParts, fingerprint, firstLine, stringLiteral, truncate, typeParts } from "./util.js";
+import { MIN_FINGERPRINT } from "./python.js";
 
 const LOOPS = new Set(["for_statement", "for_in_statement", "while_statement", "do_statement"]);
 const CONDITIONALS = new Set(["if_statement", "else_clause", "ternary_expression", "switch_case", "switch_default", "catch_clause"]);
@@ -356,6 +357,10 @@ export function extractTypeScript(path: string, root: Node, lang: Lang): FileMod
     });
     const locals = new Set(params.map((p) => p.name.replace(/^\.\.\./, "")));
     const body = fn.childForFieldName("body");
+    if (body) {
+      const fp = fingerprint(body);
+      if (fp.size >= MIN_FINGERPRINT) m.defs[m.defs.length - 1].fingerprint = fp;
+    }
     if (body) visit(body, { def: qual, cls: type === "method" ? ctx.cls : undefined, inLoop: false, conditional: false, locals, types });
   };
 

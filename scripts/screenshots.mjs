@@ -63,6 +63,13 @@ const trace = async (page) => {
   await page.waitForTimeout(1500);
 };
 await shot("hero-light", "light", trace);
+// Insights: the N+1 finding highlighted on the canvas
+await shot("insights", "light", async (page) => {
+  await page.getByRole("tab", { name: /Insights/ }).click();
+  await page.waitForTimeout(300);
+  await page.locator(".insight", { hasText: "calls get_price in a loop" }).first().click();
+  await page.waitForTimeout(1800);
+});
 await shot("hero-dark", "dark", trace);
 
 await browser.close();

@@ -748,7 +748,18 @@ function defNode(f: FileModel, d: Def): FlowNode {
     inputs: d.params,
     outputs,
     source: { file: f.path, line: d.line, endLine: d.endLine },
-    metadata: compact({ subkind: d.type, language: f.lang, async: d.isAsync || undefined, decorators: d.decorators, qualifiedName: d.qual, visibility: d.visibility }),
+    metadata: compact({
+      subkind: d.type,
+      language: f.lang,
+      async: d.isAsync || undefined,
+      decorators: d.decorators,
+      qualifiedName: d.qual,
+      visibility: d.visibility,
+      shape: d.fingerprint?.shape,
+      size: d.fingerprint?.size,
+      // compact: base-36 MinHash values joined with "." (keeps graphs small)
+      sig: d.fingerprint?.sig.map((n) => n.toString(36)).join("."),
+    }),
   };
 }
 

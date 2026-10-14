@@ -49,7 +49,8 @@ function readGraph(file: string): FlowGraph {
 }
 
 function writeGraph(file: string, g: FlowGraph) {
-  writeFileSync(file, JSON.stringify(g, null, 1) + "\n");
+  // small graphs stay readable and diffable; big ones are written compactly
+  writeFileSync(file, JSON.stringify(g, null, g.nodes.length > 2000 ? undefined : 1) + "\n");
 }
 
 async function cmdScan(args: string[]) {
