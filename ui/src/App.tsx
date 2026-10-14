@@ -11,6 +11,7 @@ import { SidePanel, type Tab } from "./components/SidePanel";
 import { TracePlayer } from "./components/TracePlayer";
 import { Legend } from "./components/Legend";
 import { loadDemo, loadInitial, parseGraph, type DemoEntry, type Loaded } from "./data";
+import { RepoForm, RepoScan } from "./scan/RepoScan";
 
 type Theme = "light" | "dark";
 
@@ -32,6 +33,15 @@ export function App() {
   const [theme, setTheme] = useState<Theme>(initialTheme);
   const [dragging, setDragging] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const [repo, setRepo] = useState(() => new URLSearchParams(location.search).get("repo") ?? undefined);
+
+  const scanRepo = useCallback((r: string | undefined) => {
+    const url = new URL(location.href);
+    if (r) url.searchParams.set("repo", r);
+    else url.searchParams.delete("repo");
+    history.replaceState(null, "", url);
+    setRepo(r);
+  }, []);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -43,6 +53,10 @@ export function App() {
   }, [theme]);
 
   useEffect(() => {
+    if (repo) {
+      setBooting(false);
+      return;
+    }
     loadInitial()
       .then(({ loaded, demos }) => {
         setDemos(demos);
@@ -98,6 +112,26 @@ export function App() {
     <input ref={fileInput} type="file" accept=".json,application/json" style={{ display: "none" }} onChange={(e) => onFiles(e.target.files)} />
   );
 
+  if (repo && !loaded) {
+    return (
+      <RepoScan
+        key={repo}
+        input={repo}
+        onDone={setLoaded}
+        onCancel={() => {
+          scanRepo(undefined);
+          setBooting(true);
+          loadInitial()
+            .then(({ loaded, demos }) => {
+              setDemos(demos);
+              if (loaded) setLoaded(loaded);
+            })
+            .finally(() => setBooting(false));
+        }}
+      />
+    );
+  }
+
   if (booting) return <div className="center-screen empty-note">Loading…</div>;
 
   if (!loaded) {
@@ -108,11 +142,13 @@ export function App() {
         <div className="drop">
           <Logo />
           <h1>Open a flowgraph</h1>
-          <p>
-            Run <code>noodles scan .</code> then <code>noodles serve</code>, or drop a <code>flowgraph.json</code> here.
+          <p>Scan a public GitHub repository right here in the browser:</p>
+          <RepoForm onSubmit={scanRepo} autoFocus />
+          <p style={{ marginTop: 22 }}>
+            Or run <code>noodles scan .</code> then <code>noodles serve</code>, or drop a <code>flowgraph.json</code> here.
           </p>
           {error && <p style={{ color: "var(--err)", whiteSpace: "pre-wrap" }}>{error}</p>}
-          <button className="btn primary" onClick={() => fileInput.current?.click()}>
+          <button className="btn" onClick={() => fileInput.current?.click()}>
             Choose file
           </button>
         </div>
@@ -129,6 +165,8 @@ export function App() {
           key={loaded.name + loaded.graph.generatedAt}
           graph={loaded.graph}
           name={loaded.name}
+          notice={loaded.notice}
+          initialTab={loaded.origin === "repo" && (loaded.graph.insights?.length ?? 0) > 0 ? "insights" : "explore"}
           demos={demos}
           theme={theme}
           onTheme={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
@@ -150,6 +188,8 @@ function rootLabel(graph: FlowGraph, file: string): string {
 interface WorkspaceProps {
   graph: FlowGraph;
   name: string;
+  notice?: string;
+  initialTab: SideTab;
   demos: DemoEntry[];
   theme: Theme;
   onTheme: () => void;
@@ -157,7 +197,8 @@ interface WorkspaceProps {
   onDemo: (d: DemoEntry) => void;
 }
 
-function Workspace({ graph, name, demos, theme, onTheme, onOpenFile, onDemo }: WorkspaceProps) {
+function Workspace({ graph, name, notice, initialTab, demos, theme, onTheme, onOpenFile, onDemo }: WorkspaceProps) {
+  const [showNotice, setShowNotice] = useState(!!notice);
   const index = useMemo(() => buildIndex(graph), [graph]);
   const [focus, setFocus] = useState(() => defaultFocus(index));
   const [selected, setSelected] = useState<string>();
@@ -171,7 +212,7 @@ function Workspace({ graph, name, demos, theme, onTheme, onOpenFile, onDemo }: W
   const [sideOpen, setSideOpen] = useState(true);
   const [tab, setTab] = useState<Tab>("overview");
 
-  const [sideTab, setSideTab] = useState<SideTab>("explore");
+  const [sideTab, setSideTab] = useState<SideTab>(initialTab);
   const [activeInsight, setActiveInsight] = useState<string>();
   const pendingStep = useRef<string>();
 
@@ -395,6 +436,12 @@ function Workspace({ graph, name, demos, theme, onTheme, onOpenFile, onDemo }: W
           <div className="insight-banner">
             <span>{insight.title}</span>
             <button onClick={() => setActiveInsight(undefined)}>Clear</button>
+          </div>
+        )}
+        {showNotice && notice && !insight && (
+          <div className="insight-banner">
+            <span>{notice}</span>
+            <button onClick={() => setShowNotice(false)}>Dismiss</button>
           </div>
         )}
         {view.nodes.length === 0 && <div className="canvas-note">Nothing to show here with the current filters.</div>}

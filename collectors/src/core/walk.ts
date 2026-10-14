@@ -3,33 +3,9 @@ import path from "node:path";
 import ignore, { type Ignore } from "ignore";
 import { normPath } from "@noodles/schema";
 
-/** Directories nobody wants on a canvas. */
-export const DEFAULT_EXCLUDES = [
-  ".git/",
-  "node_modules/",
-  "bower_components/",
-  "vendor/",
-  ".venv/",
-  "venv/",
-  "env/",
-  ".tox/",
-  "__pycache__/",
-  ".mypy_cache/",
-  ".pytest_cache/",
-  "site-packages/",
-  "dist/",
-  "build/",
-  "out/",
-  ".next/",
-  ".nuxt/",
-  ".turbo/",
-  ".cache/",
-  "coverage/",
-  ".terraform/",
-  "*.min.js",
-  "*.bundle.js",
-  "*.d.ts",
-];
+import { DEFAULT_EXCLUDES } from "./excludes.js";
+
+export { DEFAULT_EXCLUDES };
 
 export interface WalkOptions {
   exclude?: string[];

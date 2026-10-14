@@ -100,7 +100,10 @@ export function extractPython(path: string, root: Node): FileModel {
         return;
       }
       case "decorated_definition": {
-        const decorators = node.namedChildren.filter((c) => c?.type === "decorator").map((c) => c!.text.replace(/^@/, ""));
+        const decoratorNodes = node.namedChildren.filter((c) => c?.type === "decorator");
+        const decorators = decoratorNodes.map((c) => c!.text.replace(/^@/, ""));
+        // @click.option(callback=validate): names used inside decorators are references
+        for (const d of decoratorNodes) for (const id of d!.descendantsOfType("identifier")) if (id) valueRefs.add(id.text);
         const def = node.childForFieldName("definition");
         if (def) visitDef(def, ctx, decorators);
         // Decorator expressions themselves may call things (e.g. @app.route(...)): skip, they run at import.

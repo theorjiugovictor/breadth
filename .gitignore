@@ -8,3 +8,4 @@ coverage/
 site-dist/
 examples/**/flowgraph.json
 examples/*.flowgraph.json
+ui/public/wasm/

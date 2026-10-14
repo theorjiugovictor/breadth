@@ -4,7 +4,7 @@ import type { FlowEdge, FlowNode, Port, Step } from "@noodles/schema";
 import type { GraphIndex } from "../graph/model";
 import { ancestors } from "../graph/model";
 import { EDGE_STYLE, KIND_LABEL, LAYER_LABEL, edgeColor, nodeVisual } from "../graph/visual";
-import { fetchSource } from "../data";
+import { fetchGithubSource, fetchSource } from "../data";
 import { Json } from "./Json";
 
 export type Tab = "overview" | "inputs" | "outputs" | "source";
@@ -312,10 +312,11 @@ function SourceTab({ index, node }: { index: GraphIndex; node: FlowNode }) {
     setSnippet(undefined);
     if (!src?.file || !src.line) return;
     setLoading(true);
-    fetchSource(src.file, src.line, Math.min(src.endLine ?? src.line + 30, src.line + 80))
+    const end = Math.min(src.endLine ?? src.line + 30, src.line + 80);
+    (src.url?.startsWith("https://github.com/") ? fetchGithubSource(src.url, src.line, end) : fetchSource(src.file, src.line, end))
       .then(setSnippet)
       .finally(() => setLoading(false));
-  }, [src?.file, src?.line, src?.endLine]);
+  }, [src?.file, src?.line, src?.endLine, src?.url]);
 
   if (!src) return <p className="empty-note">This node has no source location.</p>;
   const root = index.graph.sources?.find((s) => s.collector === "code")?.target;
@@ -350,14 +351,14 @@ function SourceTab({ index, node }: { index: GraphIndex; node: FlowNode }) {
         )}
       </dl>
       <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
-        {abs && src.line && (
+        {abs && src.line && !src.url && (
           <a className="btn" href={`vscode://file/${abs}:${src.line}`}>
             <ExternalLink size={13} /> Open in VS Code
           </a>
         )}
         {src.url && (
           <a className="btn" href={src.url} target="_blank" rel="noreferrer">
-            <ExternalLink size={13} /> Open link
+            <ExternalLink size={13} /> {src.url.startsWith("https://github.com/") ? "Open on GitHub" : "Open link"}
           </a>
         )}
       </div>

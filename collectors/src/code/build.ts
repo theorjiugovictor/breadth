@@ -1,4 +1,4 @@
-import path from "node:path";
+import * as posix from "./posix.js";
 import { edgeId, SCHEMA_VERSION, type EdgeKind, type FlowEdge, type FlowGraph, type FlowNode, type Port } from "@noodles/schema";
 import type { CallSite, Def, FileModel, ImportBinding } from "./model.js";
 import {
@@ -81,7 +81,7 @@ export function buildGraph(input: BuildInput): FlowGraph {
 
   const manifestDirs = new Set<string>();
   for (const f of input.otherFiles) {
-    if (SERVICE_MANIFESTS.has(path.posix.basename(f))) manifestDirs.add(path.posix.dirname(f));
+    if (SERVICE_MANIFESTS.has(posix.basename(f))) manifestDirs.add(posix.dirname(f));
   }
 
   const { parents: dirParent, collapsed } = buildDirTree(files.map((f) => f.path));
@@ -91,7 +91,7 @@ export function buildGraph(input: BuildInput): FlowGraph {
     const manifestDir = [dir, ...(collapsed.get(dir) ?? [])].find((d) => manifestDirs.has(d));
     const isService = !!manifestDir;
     const name = parentDir ? dir.slice(parentDir.length + 1) : dir;
-    const base = path.posix.basename(manifestDir ?? dir);
+    const base = posix.basename(manifestDir ?? dir);
     addNode({
       id: ids.dir(dir),
       // services are named after their manifest dir ("gateway"), plain dirs after their path ("lib/utils/")
@@ -105,8 +105,8 @@ export function buildGraph(input: BuildInput): FlowGraph {
     });
   }
   const dirOfFile = (p: string): string | undefined => {
-    let d = path.posix.dirname(p);
-    while (d !== "." && d !== "" && !dirParent.has(d)) d = path.posix.dirname(d);
+    let d = posix.dirname(p);
+    while (d !== "." && d !== "" && !dirParent.has(d)) d = posix.dirname(d);
     return d === "." || d === "" ? undefined : d;
   };
 
@@ -114,7 +114,7 @@ export function buildGraph(input: BuildInput): FlowGraph {
     const dir = dirOfFile(f.path);
     addNode({
       id: ids.file(f.path),
-      name: path.posix.basename(f.path),
+      name: posix.basename(f.path),
       description: f.doc,
       kind: "module",
       layer: "code",
@@ -136,7 +136,7 @@ export function buildGraph(input: BuildInput): FlowGraph {
   const pySuffixCache = new Map<string, string | undefined>();
   const findPyModule = (mod: string, fromFile: string): string | undefined => {
     if (pyModules.has(mod)) return pyModules.get(mod);
-    const key = `${mod}|${path.posix.dirname(fromFile)}`;
+    const key = `${mod}|${posix.dirname(fromFile)}`;
     if (pySuffixCache.has(key)) return pySuffixCache.get(key);
     const matches = [...pyModules.keys()].filter((m) => m.endsWith(`.${mod}`));
     let found: string | undefined;
@@ -156,8 +156,8 @@ export function buildGraph(input: BuildInput): FlowGraph {
       if (spec.startsWith(".")) {
         const level = spec.match(/^\.+/)![0].length;
         const rest = spec.slice(level);
-        let base = path.posix.dirname(from.path);
-        for (let i = 1; i < level; i++) base = path.posix.dirname(base);
+        let base = posix.dirname(from.path);
+        for (let i = 1; i < level; i++) base = posix.dirname(base);
         const parts = base === "." ? [] : base.split("/");
         const mod = [...parts, ...(rest ? rest.split(".") : [])].join(".");
         const p = pyModules.get(mod) ?? findPyModule(mod, from.path);
@@ -168,7 +168,7 @@ export function buildGraph(input: BuildInput): FlowGraph {
     }
     // JS / TS
     if (spec.startsWith(".") || spec.startsWith("/")) {
-      const p = resolveJsPath(path.posix.join(path.posix.dirname(from.path), spec), byPath);
+      const p = resolveJsPath(posix.join(posix.dirname(from.path), spec), byPath);
       return p ? { file: p } : undefined;
     }
     for (const alias of ["@/", "~/", "src/"]) {
@@ -493,10 +493,10 @@ export function buildGraph(input: BuildInput): FlowGraph {
 
   // ---------- HTTP routes (entry points) ----------
   const serviceOf = (file: string): string => {
-    let d = path.posix.dirname(file);
+    let d = posix.dirname(file);
     while (d !== "." && d !== "") {
-      if (manifestDirs.has(d)) return path.posix.basename(d);
-      d = path.posix.dirname(d);
+      if (manifestDirs.has(d)) return posix.basename(d);
+      d = posix.dirname(d);
     }
     return rootName;
   };
@@ -766,7 +766,7 @@ export function pyModuleName(p: string): string {
 }
 
 function resolveJsPath(p: string, files: Map<string, unknown>): string | undefined {
-  const norm = path.posix.normalize(p).replace(/^\.\//, "");
+  const norm = posix.normalize(p).replace(/^\.\//, "");
   const stripped = norm.replace(/\.(js|jsx|mjs|cjs)$/, "");
   const exts = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"];
   if (files.has(norm)) return norm;
@@ -785,11 +785,11 @@ function buildDirTree(filePaths: string[]): { parents: Map<string, string>; coll
   const children = new Map<string, Set<string>>(); // dir -> child dirs
   const hasFiles = new Set<string>();
   for (const f of filePaths) {
-    let d = path.posix.dirname(f);
+    let d = posix.dirname(f);
     if (d === ".") continue;
     hasFiles.add(d);
     while (d !== ".") {
-      const parent = path.posix.dirname(d);
+      const parent = posix.dirname(d);
       const key = parent === "." ? "" : parent;
       if (!children.has(key)) children.set(key, new Set());
       children.get(key)!.add(d);

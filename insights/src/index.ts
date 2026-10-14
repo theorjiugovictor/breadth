@@ -62,7 +62,12 @@ export function runInsights(graph: FlowGraph, opts: InsightOptions = {}): Insigh
       out.set(i.id, { ...i, nodes });
     }
   }
+  const conf = { high: 0, medium: 1, low: 2 } as const;
   return [...out.values()].sort(
-    (a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] || a.rule.localeCompare(b.rule) || a.title.localeCompare(b.title),
+    (a, b) =>
+      SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] ||
+      conf[a.confidence ?? "medium"] - conf[b.confidence ?? "medium"] ||
+      a.rule.localeCompare(b.rule) ||
+      a.title.localeCompare(b.title),
   );
 }

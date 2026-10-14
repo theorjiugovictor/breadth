@@ -1244,3 +1244,91 @@ pre,
   font-size: 11.5px;
   flex: none;
 }
+
+/* ---------- repo scan ---------- */
+.repo-form {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0 4px;
+}
+.repo-form input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  border-radius: 9px;
+  padding: 9px 12px;
+  outline: none;
+  font-family: var(--mono);
+  font-size: 12.5px;
+}
+.repo-form input:focus {
+  border-color: var(--focus);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 18%, transparent);
+}
+.repo-form .btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.scan-card {
+  text-align: left;
+  min-width: min(440px, 92vw);
+  border-style: solid;
+}
+.scan-card h1 {
+  word-break: break-word;
+}
+.scan-steps {
+  list-style: none;
+  padding: 0;
+  margin: 18px 0 14px;
+  display: grid;
+  gap: 10px;
+}
+.scan-steps li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-3);
+}
+.scan-steps li.on {
+  color: var(--text);
+  font-weight: 600;
+}
+.scan-steps li.done {
+  color: var(--text-2);
+}
+.dot-step {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong);
+  flex: none;
+}
+.scan-steps li.on .dot-step {
+  border-color: var(--accent);
+  background: var(--accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.scan-steps li.done .dot-step {
+  border-color: var(--ok);
+  background: var(--ok);
+}
+.scan-count {
+  margin-left: auto;
+  font-weight: 500;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.scan-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.scan-bar div {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 0.25s;
+}

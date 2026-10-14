@@ -13,6 +13,10 @@ export interface Loaded {
   graph: FlowGraph;
   name: string;
   warnings: string[];
+  /** Shown once on top of the canvas (e.g. "scanned 1200 of 3400 files"). */
+  notice?: string;
+  /** Where it came from: a repo scanned in the browser opens on the Insights tab. */
+  origin?: "file" | "repo";
 }
 
 export function parseGraph(text: string, name: string): Loaded {
@@ -61,4 +65,14 @@ export async function fetchSource(file: string, line: number, end: number): Prom
   if (IS_PAGES) return undefined;
   const text = await tryFetch(`./api/source?file=${encodeURIComponent(file)}&start=${Math.max(1, line - 3)}&end=${end + 3}`);
   return text ? JSON.parse(text) : undefined;
+}
+
+/** Source lines for nodes that link to GitHub (repos scanned in the browser). */
+export async function fetchGithubSource(url: string, line: number, end: number): Promise<{ lines: string[]; start: number } | undefined> {
+  const m = url.match(/^https:\/\/github\.com\/([^/]+)\/([^/]+)\/blob\/([^/]+)\/([^#]+)/);
+  if (!m) return undefined;
+  const text = await tryFetch(`https://raw.githubusercontent.com/${m[1]}/${m[2]}/${m[3]}/${m[4]}`);
+  if (!text) return undefined;
+  const start = Math.max(1, line - 3);
+  return { start, lines: text.split("\n").slice(start - 1, end + 3) };
 }

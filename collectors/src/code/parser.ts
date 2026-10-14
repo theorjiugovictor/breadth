@@ -1,33 +1,42 @@
-import { createRequire } from "node:module";
-import path from "node:path";
 import { Language, Parser } from "web-tree-sitter";
 import type { Lang } from "./model.js";
+import { extname } from "./posix.js";
 
-const require = createRequire(import.meta.url);
-
-const GRAMMAR_FILES: Record<Lang, string> = {
+export const GRAMMAR_FILES: Record<Lang, string> = {
   python: "tree-sitter-python.wasm",
   typescript: "tree-sitter-typescript.wasm",
   tsx: "tree-sitter-tsx.wasm",
   javascript: "tree-sitter-javascript.wasm",
 };
 
+/**
+ * Where tree-sitter's own runtime and the grammar .wasm files live. Node resolves them from
+ * node_modules (see parser-node.ts); the browser serves them as static files.
+ */
+export interface WasmLocator {
+  /** URL or path of web-tree-sitter's tree-sitter.wasm (undefined = let the library find it). */
+  runtime?: string;
+  grammar(file: string): string | Promise<string | Uint8Array>;
+}
+
+let locator: WasmLocator | undefined;
 let initPromise: Promise<void> | undefined;
 const languages = new Map<Lang, Promise<Language>>();
 const parsers = new Map<Lang, Parser>();
 
-function grammarPath(file: string): string {
-  const pkg = require.resolve("tree-sitter-wasms/package.json");
-  return path.join(path.dirname(pkg), "out", file);
+export function setWasmLocator(l: WasmLocator) {
+  locator = l;
 }
 
 /** Lazily initialise tree-sitter and return a parser for the language. */
 export async function getParser(lang: Lang): Promise<Parser> {
-  initPromise ??= Parser.init();
+  if (!locator) throw new Error("tree-sitter wasm locator not configured");
+  const loc = locator;
+  initPromise ??= Parser.init(loc.runtime ? { locateFile: () => loc.runtime! } : undefined);
   await initPromise;
   const cached = parsers.get(lang);
   if (cached) return cached;
-  if (!languages.has(lang)) languages.set(lang, Language.load(grammarPath(GRAMMAR_FILES[lang])));
+  if (!languages.has(lang)) languages.set(lang, Promise.resolve(loc.grammar(GRAMMAR_FILES[lang])).then((src) => Language.load(src)));
   const language = await languages.get(lang)!;
   const parser = new Parser();
   parser.setLanguage(language);
@@ -36,11 +45,9 @@ export async function getParser(lang: Lang): Promise<Parser> {
 }
 
 export function langForFile(file: string): Lang | undefined {
-  const ext = path.extname(file).toLowerCase();
-  switch (ext) {
+  switch (extname(file).toLowerCase()) {
     case ".py":
-    case ".pyi":
-      return ext === ".pyi" ? undefined : "python";
+      return "python";
     case ".ts":
     case ".mts":
     case ".cts":

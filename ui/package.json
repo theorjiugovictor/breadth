@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "build:pages": "vite build --mode pages",
+    "dev": "node scripts/copy-wasm.mjs && vite",
+    "build": "node scripts/copy-wasm.mjs && vite build",
+    "build:pages": "node scripts/copy-wasm.mjs && vite build --mode pages",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
@@ -16,7 +16,11 @@
     "lucide-react": "^0.546.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "@noodles/insights": "*"
+    "@noodles/insights": "*",
+    "@noodles/collectors": "*",
+    "ignore": "^7.0.5",
+    "web-tree-sitter": "0.25.10",
+    "tree-sitter-wasms": "0.1.13"
   },
   "devDependencies": {
     "@types/react": "^18.3.12",

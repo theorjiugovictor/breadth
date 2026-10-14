@@ -219,6 +219,78 @@
       .btn.ghost:hover {
         background: var(--bg-2);
       }
+      .scan {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        max-width: 560px;
+        margin: 0 auto;
+        background: var(--bg);
+        border: 1.5px solid var(--border);
+        border-radius: 16px;
+        padding: 7px 7px 7px 16px;
+        box-shadow: var(--shadow);
+        transition:
+          border-color 0.15s,
+          box-shadow 0.15s;
+      }
+      .scan:focus-within {
+        border-color: var(--accent);
+        box-shadow:
+          0 0 0 4px color-mix(in srgb, var(--accent) 16%, transparent),
+          var(--shadow);
+      }
+      .scan .gh {
+        color: var(--text-3);
+        flex: none;
+      }
+      .scan input {
+        flex: 1;
+        min-width: 0;
+        border: 0;
+        outline: none;
+        background: none;
+        color: var(--text);
+        font: 15px var(--mono);
+        padding: 10px 0;
+      }
+      .scan button {
+        flex: none;
+        height: 44px;
+        padding: 0 20px;
+        border: 0;
+        border-radius: 11px;
+        background: var(--accent);
+        color: #fff;
+        font: 600 15px var(--font);
+        cursor: pointer;
+      }
+      .scan button:hover {
+        filter: brightness(0.96);
+      }
+      .examples {
+        margin-top: 14px;
+        font-size: 13.5px;
+        color: var(--text-3);
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+        flex-wrap: wrap;
+      }
+      .examples a {
+        color: var(--text-2);
+        font-family: var(--mono);
+        font-size: 12.5px;
+        text-decoration: none;
+        border-bottom: 1px dashed var(--border);
+      }
+      .examples a:hover {
+        color: var(--accent-2);
+        border-color: var(--accent-2);
+      }
+      .examples .sep {
+        color: var(--border);
+      }
       .install {
         margin: 34px auto 0;
         display: inline-flex;
@@ -484,10 +556,22 @@
       <div class="wrap">
         <a class="pill" href="app/"><b>v0.1</b> Open the live demo, no install needed →</a>
         <h1>See how your system <span class="accent">flows</span>.</h1>
-        <p class="lead">noodles turns any codebase, trace and infrastructure into an n8n-style canvas. Click a node to see what goes in and what comes out.</p>
-        <div class="ctas">
-          <a class="btn primary" href="app/">
-            Open live demo
+        <p class="lead">noodles turns any codebase, trace and infrastructure into an n8n-style canvas, and points out the N+1 queries, dead code and risky data flows hiding in it.</p>
+        <form class="scan" id="scan" action="app/" method="get" autocomplete="off">
+          <svg class="gh" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 0-.8.4-1.3.7-1.6-2.7-.3-5.5-1.3-5.5-6 0-1.2.5-2.3 1.3-3.1-.2-.4-.6-1.6 0-3.2 0 0 1-.3 3.4 1.2a11.5 11.5 0 0 1 6 0C17.3 4.7 18.3 5 18.3 5c.7 1.6.2 2.8.1 3.2.8.8 1.3 1.9 1.3 3.1 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .5Z" /></svg>
+          <input name="repo" id="repo" placeholder="github.com/owner/repo" aria-label="Public GitHub repository" spellcheck="false" required />
+          <button type="submit">Scan repo</button>
+        </form>
+        <div class="examples">
+          Try:
+          <a href="app/?repo=pallets/flask">pallets/flask</a>
+          <a href="app/?repo=encode/httpx">encode/httpx</a>
+          <a href="app/?repo=honojs/hono">honojs/hono</a>
+          <span class="sep">·</span> runs in your browser, nothing is uploaded
+        </div>
+        <div class="ctas" style="margin-top: 26px">
+          <a class="btn ghost" href="app/">
+            Open the demo
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
           </a>
           <a class="btn ghost" href="https://github.com/theorjiugovictor/noodles">
@@ -537,6 +621,13 @@
             </div>
             <h3>Replay real runs</h3>
             <p>Import OpenTelemetry traces and step through a request like an n8n execution, with the real payload at every node.</p>
+          </div>
+          <div class="card">
+            <div class="ic" style="background: color-mix(in srgb, #f59e0b 16%, transparent); color: #d97706">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2Z" /></svg>
+            </div>
+            <h3>Problems you can see</h3>
+            <p>Rules over the graph flag N+1 queries, repeated work, missed parallelism, dead code, unused infrastructure, contract drift and personal data leaving for third parties, right on the canvas.</p>
           </div>
           <div class="card">
             <div class="ic" style="background: color-mix(in srgb, #0e9f6e 14%, transparent); color: #0e9f6e">
@@ -633,6 +724,11 @@
                 b.textContent = "Copy";
               }, 1400);
             });
+        });
+        document.getElementById("scan").addEventListener("submit", function (e) {
+          e.preventDefault();
+          var v = document.getElementById("repo").value.trim();
+          if (v) location.href = "app/?repo=" + encodeURIComponent(v);
         });
         var nav = document.getElementById("nav");
         addEventListener(
