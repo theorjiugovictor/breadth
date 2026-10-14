@@ -33,7 +33,7 @@ async function scan(target: string, options: CollectorOptions): Promise<Found> {
   for (const rel of files) {
     let text: string;
     try {
-      text = await fs.readFile(path.join(root, rel), "utf8");
+      text = options.overlay?.get(path.join(root, rel)) ?? (await fs.readFile(path.join(root, rel), "utf8"));
     } catch {
       continue;
     }

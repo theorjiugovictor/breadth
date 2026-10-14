@@ -1,6 +1,8 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { parseArgs } from "node:util";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { assertValidGraph, mergeGraphs, validateGraph, type FlowGraph } from "@noodles/schema";
 import { collectors, importOtlp, linkTracesToCode, runCollectors, type Logger } from "@noodles/collectors";
 import { RULES, runInsights } from "@noodles/insights";
@@ -9,7 +11,9 @@ import { loadConfig } from "./config.js";
 import { createProvider, noneProvider, PRESETS, privacyNotice, resolveSettings, summarizeGraph, type LLMProvider } from "./llm/provider.js";
 import { LiveSession } from "./live.js";
 import { LOCAL_HEADER, serve } from "./serve.js";
-import { HOOK_CONFIG, hookPayload } from "./hook.js";
+import { hookPayload, hookReply } from "./hook.js";
+import { integrations, renderConfig, writeConfig } from "./connect.js";
+import { runMcp } from "./mcp.js";
 
 const VERSION = "0.1.0";
 
@@ -20,7 +24,10 @@ Usage:
   noodles import-traces <otlp.json>... [--merge flowgraph.json] [-o out.json]
   noodles serve [flowgraph.json] [--port 4321] [--host 127.0.0.1] [--no-open]
   noodles watch [path] [--port 4321] [--traces otlp.json] [-o flowgraph.json] [--llm]   live canvas while you (or an agent) code
-  noodles hook [--port 4321] [--agent name] [--print-config]   forward coding-agent hook events to \`noodles watch\`
+  noodles connect <agent>... [--write]   hooks + MCP for claude, copilot, cursor, gemini, windsurf, antigravity, codex
+  noodles hook [--port 4321] [--agent name]   (run by agent hooks) forward an agent's prompt and edits to \`noodles watch\`
+  noodles mcp [path] [--port 4321]   MCP server (stdio): the graph as tools for any coding agent
+  noodles editor install             editor extension: show unsaved edits live (VS Code, Cursor, Windsurf, Antigravity)
   noodles llm [check]                list LLM providers / test the configured one
   noodles insights <flowgraph.json> [--json] [--write] [--fail-on warning|critical] [--rules a,b]
   noodles validate <flowgraph.json>
@@ -234,10 +241,7 @@ async function cmdHook(args: string[]) {
       "print-config": { type: "boolean" },
     },
   });
-  if (values["print-config"]) {
-    process.stdout.write(`// Add to .claude/settings.json (or .claude/settings.local.json) in your project:\n${JSON.stringify(HOOK_CONFIG, null, 2)}\n`);
-    return;
-  }
+  if (values["print-config"]) return cmdConnect(["claude", "--no-mcp", "--port", values.port!]);
   // A hook must never slow down or break the agent: short timeouts, always exit 0.
   let raw: Record<string, unknown> = {};
   if (!process.stdin.isTTY) {
@@ -266,7 +270,101 @@ async function cmdHook(args: string[]) {
   } catch {
     /* noodles watch is not running: nothing to do */
   }
-  process.exit(0);
+  process.stdout.write(hookReply(raw, values.agent), () => process.exit(0));
+}
+
+async function cmdConnect(args: string[]) {
+  const { values, positionals } = parseArgs({
+    args,
+    allowPositionals: true,
+    options: {
+      write: { type: "boolean", short: "w" },
+      dir: { type: "string", default: "." },
+      port: { type: "string", short: "p", default: process.env.NOODLES_PORT ?? "4321" },
+      "no-mcp": { type: "boolean" },
+      "no-hooks": { type: "boolean" },
+    },
+  });
+  const all = integrations(values.port);
+  const wanted = positionals.length === 0 || positionals.includes("all") ? undefined : positionals.map((p) => p.toLowerCase().replace(/[^a-z]/g, ""));
+  const aliases: Record<string, string> = { claudecode: "claude", vscode: "copilot", githubcopilot: "copilot", geminicli: "gemini", cascade: "windsurf", openai: "codex" };
+  if (!positionals.length) {
+    process.stdout.write(
+      `Usage: noodles connect <agent>... [--write] [--port 4321] [--no-mcp] [--no-hooks]\n\n` +
+        `Agents: ${all.map((a) => a.id).join(", ")}, all\n\n` +
+        `Without --write, prints what to add. With --write, merges it into the project's config files (run it in the project).\n` +
+        `Hooks report the agent's prompts and edits to \`noodles watch\`; the MCP server gives the agent the graph as tools.\n`,
+    );
+    return;
+  }
+  const chosen = wanted ? wanted.map((w) => all.find((a) => a.id === (aliases[w] ?? w)) ?? fail(w)) : all;
+  function fail(w: string): never {
+    throw new Error(`unknown agent "${w}". Known: ${all.map((a) => a.id).join(", ")}`);
+  }
+  const dir = path.resolve(values.dir!);
+  for (const a of chosen) {
+    process.stdout.write(`\n${a.name}\n${"-".repeat(a.name.length)}\n`);
+    const files = [...(values["no-hooks"] ? [] : [a.hooks]), ...(values["no-mcp"] ? [] : [a.mcp])];
+    for (const cf of files) {
+      if (values.write) {
+        const r = writeConfig(dir, cf);
+        const shown = r.file.startsWith(process.cwd() + path.sep) ? path.relative(process.cwd(), r.file) : r.file;
+        process.stdout.write(`  ${r.status.padEnd(9)} ${shown}${r.reason ? ` (${r.reason})` : ""}\n`);
+        if (r.status === "skipped") process.stdout.write(renderConfig(cf).replace(/^/gm, "    "));
+      } else process.stdout.write(renderConfig(cf));
+    }
+    for (const n of a.notes) process.stdout.write(`  note: ${n}\n`);
+  }
+  process.stdout.write(`\nThen run \`noodles watch${values.port !== "4321" ? ` --port ${values.port}` : ""}\` in the project and let the agent work.\n`);
+}
+
+const EDITORS = ["code", "code-insiders", "cursor", "windsurf", "antigravity", "codium"];
+
+async function cmdEditor(args: string[]) {
+  const { values, positionals } = parseArgs({ args, allowPositionals: true, options: { editor: { type: "string", multiple: true } } });
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const vsix = [path.join(here, "noodles-live.vsix"), path.join(here, "..", "dist", "noodles-live.vsix")].find((f) => existsSync(f));
+  if (!vsix) throw new Error("noodles-live.vsix not found: run `npm run build` in the noodles repo first");
+  if (positionals[0] === "path") return void process.stdout.write(`${vsix}\n`);
+  if (positionals[0] !== "install") {
+    process.stdout.write(
+      `Usage: noodles editor install [--editor code|cursor|windsurf|antigravity]...\n       noodles editor path\n\n` +
+        `Installs the noodles live extension, which sends unsaved edits to \`noodles watch\` so the canvas updates before files are saved.\n`,
+    );
+    return;
+  }
+  const targets = values.editor?.length ? values.editor : EDITORS;
+  let installed = 0;
+  for (const cli of targets) {
+    const r = spawnSync(cli, ["--install-extension", vsix, "--force"], { encoding: "utf8", shell: process.platform === "win32" });
+    if (r.error) {
+      if (values.editor?.length) process.stdout.write(`  ${cli}: not found on PATH\n`);
+      continue;
+    }
+    installed++;
+    process.stdout.write(`  ${cli}: ${r.status === 0 ? "installed" : `failed (${(r.stderr || r.stdout).trim().split("\n").pop()})`}\n`);
+  }
+  if (!installed)
+    process.stdout.write(`No editor command found on PATH (${targets.join(", ")}).\nInstall it from the editor instead: Extensions › … › Install from VSIX, and pick\n  ${vsix}\n`);
+}
+
+async function cmdMcp(args: string[]) {
+  const { values, positionals } = parseArgs({
+    args,
+    allowPositionals: true,
+    options: {
+      port: { type: "string", short: "p", default: process.env.NOODLES_PORT ?? "4321" },
+      config: { type: "string" },
+    },
+  });
+  const root = path.resolve(positionals[0] ?? process.env.NOODLES_ROOT ?? ".");
+  const config = loadConfig(root, values.config);
+  await runMcp({
+    root,
+    port: values.port!,
+    version: VERSION,
+    collectorOptions: { exclude: config.exclude, include: config.include, settings: config.settings },
+  });
 }
 
 async function cmdLlm(args: string[]) {
@@ -385,6 +483,12 @@ async function main(argv: string[]) {
       return cmdWatch(rest);
     case "hook":
       return cmdHook(rest);
+    case "connect":
+      return cmdConnect(rest);
+    case "mcp":
+      return cmdMcp(rest);
+    case "editor":
+      return cmdEditor(rest);
     case "llm":
       return cmdLlm(rest);
     case "collectors":

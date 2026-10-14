@@ -9,7 +9,7 @@
 - **Drill down any level**: system > service > module > file > class > function. Double-click to open a node, use the breadcrumbs to go back up.
 - **Replay real runs.** Import OpenTelemetry traces and step through a request like an n8n execution, with the real input and output at every node.
 - **Problems you can see.** Rules over the graph flag N+1 queries, repeated work, missed parallelism, dead code, duplicate logic, unused infrastructure, contract drift, unhandled errors and personal data sent to third parties, and highlight them on the canvas. See [Insights](#insights).
-- **Watch your coding agent build.** `noodles watch` keeps the canvas live while you or Claude Code (or any agent) edit: new and changed functions light up as they appear, with a feed of what each task changed. See [Live mode](#live-mode-watch-a-coding-agent).
+- **Watch your coding agent build.** `noodles watch` keeps the canvas live while you or your agent edit: Claude Code, Copilot, Cursor, Gemini CLI, Windsurf, Antigravity, Codex or anything else. New and changed functions light up as they appear, even before they are saved, with a feed of what each task changed. An MCP server gives the agent the same graph as tools. See [Live mode](#live-mode-watch-a-coding-agent).
 - **Zero config, fully local.** Nothing leaves your machine. LLM features are optional, off by default, and work with any provider: Claude, OpenAI, Gemini, Ollama, or anything OpenAI-compatible.
 
 **Try it without installing anything:** the [landing page](#publishing-the-site) has a box where you paste a public GitHub repository. It is scanned in your browser: files come straight from GitHub and are parsed in a Web Worker with tree-sitter compiled to WebAssembly. No server is involved and nothing is uploaded.
@@ -76,22 +76,60 @@ Every save triggers an incremental rescan (unchanged files come from a cache), a
 - With **Follow** on (the default), the canvas opens the level where the latest change happened.
 - The **Live** tab lists each change (what was added, edited or removed, and any new insights it caused, such as dead code or an N+1 query) next to the task that led to it.
 
-To attribute changes to your coding agent and show its task, connect its hooks. For Claude Code:
+This works with any agent or editor, because it watches the files. Three optional add-ons do more:
+
+| | What it adds | Setup |
+| --- | --- | --- |
+| **Hooks** | The agent's task (your prompt) in the feed, and its edits credited to it | `noodles connect <agent> --write` |
+| **Editor extension** | Edits appear before they are saved (agents in the editor often leave files unsaved while you review) | `noodles editor install` |
+| **MCP server** | The agent can ask noodles about the code (callers, impact of a change, insights) and report what it is working on | written by `noodles connect` too |
+
+### Connect your agent
+
+Run this in your project. It merges into the agent's project config files and keeps your own entries; run it again at any time. Leave out `--write` to just print what to add.
 
 ```sh
-noodles hook --print-config    # prints the snippet for .claude/settings.json
+noodles connect claude --write        # or: copilot cursor gemini windsurf antigravity codex, or all
 ```
 
-```json
-{
-  "hooks": {
-    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "noodles hook" }] }],
-    "PostToolUse": [{ "matcher": "Edit|MultiEdit|Write|NotebookEdit", "hooks": [{ "type": "command", "command": "noodles hook" }] }]
-  }
-}
+| Agent | Hooks file | Task (prompt) | Edits | MCP config |
+| --- | --- | --- | --- | --- |
+| Claude Code | `.claude/settings.json` | `UserPromptSubmit` | `PostToolUse` (Edit, Write, …) | `.mcp.json` |
+| GitHub Copilot (VS Code agent mode) | `.github/hooks/noodles.json` | `UserPromptSubmit` | `PostToolUse` | `.vscode/mcp.json` |
+| Cursor | `.cursor/hooks.json` | `beforeSubmitPrompt` | `afterFileEdit` | `.cursor/mcp.json` |
+| Gemini CLI | `.gemini/settings.json` | `BeforeAgent` | `AfterTool` (write_file, replace) | `.gemini/settings.json` |
+| Windsurf (Cascade) | `.windsurf/hooks.json` | `pre_user_prompt` | `post_write_code` | `~/.codeium/windsurf/mcp_config.json` (printed, not written) |
+| Antigravity | `.agents/hooks.json` | via MCP `noodles_report_task` | `PostToolUse` (write_to_file, replace_file_content, …) | Agent panel › MCP servers › raw config (printed) |
+| Codex | `.codex/hooks.json` | `UserPromptSubmit` | `PostToolUse` (apply_patch) | `.codex/config.toml` |
+
+Notes:
+- Every hook runs `noodles hook`, which reads the event on stdin, recognises the agent from its format, forwards the event to `noodles watch` and exits 0 straight away. If `noodles watch` is not running it does nothing, so the agent is never blocked.
+- VS Code also runs the hooks in `.claude/settings.json`. When both are configured, noodles shows each prompt once.
+- Copilot hooks are a VS Code preview feature. Codex asks you to trust new hooks once (`/hooks`).
+- Any other tool can report too: pipe `{"files": [...], "prompt": "..."}` to `noodles hook --agent Name`, or POST it to `http://127.0.0.1:4321/api/activity` with the header `x-noodles: 1`. Endpoints that change state or call an LLM require that header, so other web pages cannot trigger them.
+
+### See edits before they are saved
+
+```sh
+noodles editor install                # VS Code, Cursor, Windsurf, Antigravity (whichever is on PATH)
 ```
 
-`noodles hook` reads the hook event on stdin, forwards it to the running `noodles watch`, and always exits 0 so it never blocks the agent. Other agents (Cursor, Aider, Codex, your own scripts) work without any setup through file watching. To label their changes, pipe `{"files": [...], "prompt": "..."}` to `noodles hook --agent Name`, or POST it to `http://127.0.0.1:4321/api/activity` with the header `x-noodles: 1`. Endpoints that change state or call an LLM require that header, so other web pages cannot trigger them.
+The **noodles live** extension sends unsaved editor buffers to `noodles watch` (only to `127.0.0.1`, and only while it runs). The canvas then follows typing and agent edits that are still waiting for review. Changes scanned from unsaved text are tagged **unsaved** in the feed. When a buffer is saved or closed, the file on disk is used again. If your editor's command is not on PATH, use *Extensions › … › Install from VSIX* with the file from `noodles editor path`.
+
+### MCP: the graph as tools for the agent
+
+`noodles mcp` is a Model Context Protocol server (stdio). Its tools work for any MCP-capable agent:
+
+| Tool | What the agent gets |
+| --- | --- |
+| `noodles_report_task` | Puts a one-line summary of the task in the live feed (the only way to get Antigravity's task in) |
+| `noodles_overview` | Top-level structure, counts and the main insights of the repository |
+| `noodles_find` | Functions, classes, files, endpoints and datastores by name or path |
+| `noodles_node` | Where a node lives, its inputs and outputs, callers, callees, data reads and writes, and insights |
+| `noodles_impact` | Everything that depends on a node, up to N hops, and the endpoints it is reachable from |
+| `noodles_insights` | Findings, optionally for one file or folder |
+
+MCP does not replace hooks. An MCP server hears from the agent only when the agent decides to call a tool, so it cannot observe edits; hooks and file watching capture those. What MCP adds is the other direction: the agent can use the graph instead of reading every file, and can say what it is doing. When `noodles watch` is running, the tools read its live graph. Otherwise they scan the project themselves.
 
 ## CLI
 
@@ -100,7 +138,10 @@ noodles scan <path> [--collector code,infra] [-o flowgraph.json] [--config file]
 noodles import-traces <otlp.json>... [--merge flowgraph.json] [-o out.json]
 noodles serve [flowgraph.json] [--port 4321] [--host 127.0.0.1] [--no-open]
 noodles watch [path] [--port 4321] [--traces otlp.json]... [-o flowgraph.json] [--llm]
-noodles hook [--port 4321] [--agent name] [--print-config]
+noodles connect <agent>... [--write] [--port 4321] [--no-mcp] [--no-hooks]
+noodles editor install [--editor code|cursor|windsurf|antigravity]
+noodles mcp [path] [--port 4321]
+noodles hook [--port 4321] [--agent name]
 noodles llm [providers|check]
 noodles insights <flowgraph.json> [--json] [--write] [--fail-on warning|critical] [--rules a,b] [--list]
 noodles validate <flowgraph.json>

@@ -30,6 +30,7 @@ export interface ActivityEntry {
   insightsResolved?: InsightRef[];
   narration?: string;
   message?: string;
+  unsaved?: boolean;
 }
 
 export interface GraphChange {

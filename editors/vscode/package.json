@@ -1,0 +1,23 @@
+{
+  "name": "noodles-live",
+  "displayName": "noodles live",
+  "description": "Streams unsaved edits (yours or your coding agent's) to `noodles watch`, so the live canvas updates as code is typed, not only when it is saved.",
+  "version": "0.1.0",
+  "publisher": "noodles",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/theorjiugovictor/noodles" },
+  "engines": { "vscode": "^1.80.0" },
+  "categories": ["Visualization", "Other"],
+  "main": "./extension.js",
+  "activationEvents": ["onStartupFinished"],
+  "contributes": {
+    "commands": [{ "command": "noodles.openCanvas", "title": "noodles: Open live canvas" }],
+    "configuration": {
+      "title": "noodles",
+      "properties": {
+        "noodles.port": { "type": "number", "default": 4321, "description": "Port of `noodles watch`." },
+        "noodles.streamUnsaved": { "type": "boolean", "default": true, "description": "Send unsaved editor contents to `noodles watch` (localhost only)." }
+      }
+    }
+  }
+}

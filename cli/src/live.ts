@@ -31,6 +31,8 @@ export interface ActivityEntry {
   /** One-sentence LLM narration of the change (optional). */
   narration?: string;
   message?: string;
+  /** Some of the files were scanned from unsaved editor buffers. */
+  unsaved?: boolean;
 }
 
 /** What coding-agent hooks send (Claude Code hook JSON is normalised into this by `noodles hook`). */
@@ -55,7 +57,15 @@ export interface LiveOptions {
   log?: (msg: string) => void;
 }
 
+/** An editor buffer: unsaved text, or null once it is saved or closed. */
+export interface BufferUpdate {
+  path: string;
+  text: string | null;
+}
+
 const MAX_ACTIVITY = 300;
+const MAX_BUFFERS = 200;
+const MAX_BUFFER_BYTES = 2_000_000;
 const MAX_REFS = 40;
 
 /**
@@ -78,6 +88,9 @@ export class LiveSession {
   private nextId = 1;
   private ig = ignore();
   private llm: LLMProvider;
+  /** Unsaved editor contents by absolute path (from the editor extension). */
+  private overlay = new Map<string, string>();
+  private lastTask?: { prompt: string; at: number };
 
   constructor(private opts: LiveOptions) {
     this.target = path.resolve(opts.target);
@@ -127,7 +140,7 @@ export class LiveSession {
   }
 
   private async build(): Promise<FlowGraph> {
-    let graph = await runCollectors(this.target, this.opts.collectors, this.opts.collectorOptions);
+    let graph = await runCollectors(this.target, this.opts.collectors, { ...this.opts.collectorOptions, overlay: this.overlay });
     for (const t of this.opts.traces ?? []) {
       const traces = importOtlp([{ name: t, text: readFileSync(t, "utf8") }]);
       graph = mergeGraphs(graph, linkTracesToCode(traces, graph));
@@ -186,7 +199,11 @@ export class LiveSession {
     // Interesting first: functions/classes before files, files before directories.
     const rank = (r: NodeRef) => (r.kind === "function" ? 0 : r.kind === "network_endpoint" || r.kind === "datastore" ? 1 : 2);
     const refs = (ids: string[], g: (id: string) => NodeRef) => ids.map(g).sort((a, b) => rank(a) - rank(b)).slice(0, MAX_REFS);
-    const agent = this.lastAgent && Date.now() - this.lastAgent.at < 60_000 ? this.lastAgent.name : undefined;
+    // Credit the agent that last reported activity, but only for its own files when it named
+    // any: a person typing elsewhere at the same time is not the agent.
+    const last = this.lastAgent;
+    const agent =
+      last && Date.now() - last.at < 60_000 && (!last.files.size || files.some((f) => last.files.has(f))) ? last.name : undefined;
     const iref = (i: { id: string; title: string; severity: string; nodes: string[] }): InsightRef => ({ id: i.id, title: i.title, severity: i.severity, nodes: i.nodes.slice(0, 4) });
     const entry: ActivityEntry = {
       id: this.nextId++,
@@ -194,6 +211,7 @@ export class LiveSession {
       kind: "change",
       agent,
       files: files.slice(0, 20),
+      unsaved: files.some((f) => this.overlay.has(path.join(this.target, f))) || undefined,
       version: this.version,
       added: refs(diff.added, ref(this.graph)),
       changed: refs(diff.changed, ref(this.graph)),
@@ -224,16 +242,43 @@ export class LiveSession {
   /** Hook events from coding agents: attribute upcoming changes, show tasks, rescan promptly. */
   agentActivity(a: AgentActivity) {
     const name = (a.agent ?? "agent").slice(0, 40);
-    if (a.prompt) {
-      this.push({ id: this.nextId++, at: Date.now(), kind: "task", agent: name, prompt: a.prompt.slice(0, 500) });
+    // Some editors run more than one agent's hooks for the same prompt (VS Code runs Claude
+    // Code's too): show it once.
+    const prompt = a.prompt?.trim().slice(0, 500);
+    if (prompt && !(this.lastTask?.prompt === prompt && Date.now() - this.lastTask.at < 10_000)) {
+      this.lastTask = { prompt, at: Date.now() };
+      this.push({ id: this.nextId++, at: Date.now(), kind: "task", agent: name, prompt });
     }
     const files = (a.files ?? []).map((f) => path.relative(this.target, path.resolve(this.target, f)).split(path.sep).join("/")).filter((f) => f && !f.startsWith(".."));
-    this.lastAgent = { name, at: Date.now(), files: new Set(files) };
+    // A task starts a new attribution window; edits add their files to it.
+    const same = this.lastAgent?.name === name && Date.now() - this.lastAgent.at < 60_000;
+    this.lastAgent = { name, at: Date.now(), files: new Set([...(same && files.length ? this.lastAgent!.files : []), ...files]) };
     this.send(event("agent", { agent: name, tool: a.tool, event: a.event, files, at: Date.now() }));
     if (files.length) {
       for (const f of files) if (!this.ignored(f)) this.changedFiles.add(f);
       this.schedule(150);
     }
+  }
+
+  /** Unsaved editor buffers: rescan with their text, so the canvas follows typing and agent edits before saving. */
+  setBuffers(updates: BufferUpdate[]) {
+    let touched = false;
+    for (const u of updates) {
+      if (typeof u?.path !== "string") continue;
+      const abs = path.resolve(this.target, u.path);
+      const rel = path.relative(this.target, abs).split(path.sep).join("/");
+      if (!rel || rel.startsWith("..") || path.isAbsolute(rel) || this.ignored(rel)) continue;
+      if (u.text == null) {
+        if (!this.overlay.delete(abs)) continue;
+      } else {
+        if (u.text.length > MAX_BUFFER_BYTES || (!this.overlay.has(abs) && this.overlay.size >= MAX_BUFFERS)) continue;
+        if (this.overlay.get(abs) === u.text) continue;
+        this.overlay.set(abs, u.text);
+      }
+      this.changedFiles.add(rel);
+      touched = true;
+    }
+    if (touched) this.schedule(250);
   }
 
   private async narrate(entry: ActivityEntry) {

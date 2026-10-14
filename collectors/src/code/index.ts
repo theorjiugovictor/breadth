@@ -21,9 +21,11 @@ const TEST_FILE = /(^|\/)(tests?|__tests__|spec)\/|(\.|_)(test|spec)\.[jt]sx?$|(
 /** Parsed files keyed by absolute path, reused while size and mtime are unchanged (live mode rescans). */
 const parseCache = new Map<string, { mtimeMs: number; size: number; model: FileModel | undefined }>();
 
-export async function parseFile(root: string, rel: string): Promise<FileModel | undefined> {
+export async function parseFile(root: string, rel: string, overlay?: Map<string, string>): Promise<FileModel | undefined> {
   if (!langForFile(rel)) return undefined;
   const abs = path.join(root, rel);
+  const unsaved = overlay?.get(abs);
+  if (unsaved !== undefined) return parseSource(rel, unsaved);
   const st = await fs.stat(abs);
   const hit = parseCache.get(abs);
   if (hit && hit.mtimeMs === st.mtimeMs && hit.size === st.size) return hit.model;
@@ -54,7 +56,7 @@ export const codeCollector: Collector = {
     const models: FileModel[] = [];
     for (const rel of codeFiles) {
       try {
-        const m = await parseFile(root, rel);
+        const m = await parseFile(root, rel, options.overlay);
         if (m) models.push(m);
       } catch (err) {
         options.log?.warn(`code: failed to parse ${rel}: ${(err as Error).message}`);

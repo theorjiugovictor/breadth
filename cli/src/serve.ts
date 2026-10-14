@@ -97,6 +97,14 @@ export async function serve(opts: ServeOptions): Promise<string> {
             return json(res, 202, { ok: true });
           }
           return json(res, 200, opts.live.activity);
+        case "/api/buffers": {
+          if (!opts.live) return json(res, 404, { error: "not a live session" });
+          if (req.method !== "POST") return json(res, 405, { error: "POST only" });
+          if (req.headers[LOCAL_HEADER] !== "1") return json(res, 403, { error: `missing ${LOCAL_HEADER} header` });
+          const body = JSON.parse(await readBody(req, 8_000_000)) as { files?: unknown };
+          opts.live.setBuffers(Array.isArray(body.files) ? body.files : []);
+          return json(res, 202, { ok: true });
+        }
         case "/api/explain": {
           if (req.headers[LOCAL_HEADER] !== "1") return json(res, 403, { error: `missing ${LOCAL_HEADER} header` });
           if (llm === noneProvider) return json(res, 400, { error: "no LLM provider configured (see `noodles llm providers`)" });

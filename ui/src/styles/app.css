@@ -1577,3 +1577,14 @@ pre,
   margin-bottom: 14px;
   background: var(--surface-3);
 }
+.act-unsaved {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--sev-warning);
+  border: 1px solid color-mix(in srgb, var(--sev-warning) 45%, var(--border));
+  border-radius: 5px;
+  padding: 0 4px;
+  flex: none;
+}

@@ -40,7 +40,8 @@ export function LiveFeed({ index, live, followAgent, onFollowAgent, onNode }: Pr
       {live.activity.length === 0 && (
         <div className="empty-note" style={{ padding: "4px 4px" }}>
           Nothing yet. Edit a file, or let your coding agent work: every change appears here and on the canvas as it happens. Run{" "}
-          <code>noodles hook --print-config</code> to connect Claude Code, so tasks and edits are attributed to it.
+          <code>noodles connect claude --write</code> (or copilot, cursor, gemini, windsurf, antigravity, codex) so tasks and edits are credited to
+          the agent, and <code>noodles editor install</code> to see edits before they are saved.
         </div>
       )}
       {live.activity.map((a) => (
@@ -79,6 +80,11 @@ function Entry({ a, index, now, onNode }: { a: ActivityEntry; index: GraphIndex;
         <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={files.join("\n")}>
           {a.agent ? <b>{a.agent}</b> : "Edited"} {files.length ? files.slice(0, 2).map((f) => f.split("/").pop()).join(", ") + (files.length > 2 ? ` +${files.length - 2}` : "") : ""}
         </span>
+        {a.unsaved && (
+          <span className="act-unsaved" title="Scanned from the editor before saving">
+            unsaved
+          </span>
+        )}
         <span className="act-time">{ago(a.at, now)}</span>
       </div>
       {a.narration && (

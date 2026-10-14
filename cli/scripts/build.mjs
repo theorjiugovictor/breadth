@@ -27,4 +27,7 @@ await build({
 const ui = join(cli, "..", "ui", "dist");
 if (existsSync(ui)) cpSync(ui, join(dist, "ui"), { recursive: true });
 else console.warn("ui/dist not found: run `npm run build -w ui` first so `noodles serve` has a UI");
-console.log("built cli/dist/noodles.mjs");
+// The editor extension (unsaved edits for live mode), installed by `noodles editor install`.
+const { buildVsix } = await import("../../scripts/vsix.mjs");
+buildVsix(join(dist, "noodles-live.vsix"));
+console.log("built cli/dist/noodles.mjs and cli/dist/noodles-live.vsix");

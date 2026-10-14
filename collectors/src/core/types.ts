@@ -13,6 +13,11 @@ export interface CollectorOptions {
   /** Collector-specific settings from the config file, keyed by collector name. */
   settings?: Record<string, unknown>;
   log?: Logger;
+  /**
+   * Unsaved editor contents by absolute path (live mode). Collectors read these instead of
+   * the file on disk, so edits show up before they are saved.
+   */
+  overlay?: Map<string, string>;
 }
 
 /**
