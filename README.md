@@ -2,7 +2,7 @@
 
 **The understanding layer for AI-written systems.**
 
-Writing code used to be the slow part of software, so understanding kept pace. Now an agent writes 2,000 lines in minutes, and the team's mental model of the system falls further behind with every merge. That gap is **comprehension debt**: code that works and ships, but that nobody can explain. It grows like tech debt, and it stays invisible until an incident.
+Writing code used to be the slow part of software, so understanding kept pace. Now an agent writes 2,000 lines in minutes, and the team's mental model of the system falls further behind with every merge. That gap is **comprehension debt** and epistemic stress: code that works and ships, but that nobody can explain. It grows like tech debt, and it stays invisible until an incident.
 
 breadth keeps people in the loop. It maps what a system actually does (calls, data reads and writes, endpoints, messages, infrastructure, real traces) and shows every change as a change in behaviour, not in lines.
 
