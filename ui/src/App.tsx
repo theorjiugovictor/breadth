@@ -174,12 +174,18 @@ function Workspace({ graph, name, demos, theme, onTheme, onOpenFile, onDemo }: W
   const exec = index.executions.find((x) => x.id === execId);
   const step = mode === "trace" ? exec?.steps[stepIdx] : undefined;
 
-  const goTo = useCallback(
+  const goTo = useCallback((id: string) => {
+    setFocus(id);
+    setCenterOn(undefined);
+  }, []);
+
+  /** Open a node: the panel closes so the new level gets the full canvas. */
+  const drill = useCallback(
     (id: string) => {
-      setFocus(id);
-      setCenterOn(undefined);
+      if (mode === "map") setSelected(undefined);
+      goTo(id);
     },
-    [],
+    [goTo, mode],
   );
 
   /** Show a node: open its parent level, select it, centre on it. */
@@ -298,7 +304,7 @@ function Workspace({ graph, name, demos, theme, onTheme, onOpenFile, onDemo }: W
           theme={theme}
           centerOn={centerOn}
           onSelect={(id) => setSelected(id === MORE_ID ? undefined : id)}
-          onDrill={goTo}
+          onDrill={drill}
         />
         {view.nodes.length === 0 && <div className="canvas-note">Nothing to show here with the current filters.</div>}
         {view.hidden > 0 && <div className="canvas-note">{view.hidden} less connected nodes are grouped. Search or drill in to see them.</div>}
@@ -328,7 +334,7 @@ function Workspace({ graph, name, demos, theme, onTheme, onOpenFile, onDemo }: W
           execId={mode === "trace" ? execId : undefined}
           activeStep={step}
           onSelect={reveal}
-          onDrill={goTo}
+          onDrill={drill}
           onClose={() => setSelected(undefined)}
           tab={tab}
           onTab={setTab}

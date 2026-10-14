@@ -98,6 +98,8 @@ describe("url helpers", () => {
     expect(parseUrl("https://api.x.com:443/v1/a?b=1")).toEqual({ host: "api.x.com", path: "/v1/a" });
     expect(parseUrl("{ORDERS_SERVICE_URL}/orders/{id}")).toEqual({ host: "orders", path: "/orders/{id}" });
     expect(parseUrl("{process.env.PAYMENTS_URL}/pay")).toEqual({ host: "payments", path: "/pay" });
+    expect(parseUrl("http://localhost:{port}/x")).toEqual({ host: "localhost", path: "/x" });
+    expect(parseUrl("http://127.0.0.1:3000/")).toEqual({ host: "localhost", path: "/" });
     expect(normRoute("/users/:id/")).toBe("/users/{}");
     expect(normRoute("/users/{user_id}")).toBe("/users/{}");
   });

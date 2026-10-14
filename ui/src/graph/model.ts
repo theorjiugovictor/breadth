@@ -81,8 +81,11 @@ export function defaultFocus(index: GraphIndex): string {
   let focus = ROOT;
   for (let i = 0; i < 10; i++) {
     const kids = childrenOf(index, focus);
-    if (kids.length !== 1 || !(index.children.get(kids[0])?.length)) break;
-    focus = kids[0];
+    // Descend when exactly one node here has children; leaf siblings (external APIs,
+    // datastores) still appear as context nodes one level down.
+    const containers = kids.filter((k) => index.children.get(k)?.length);
+    if (containers.length !== 1 || kids.length > 8) break;
+    focus = containers[0];
   }
   return focus;
 }

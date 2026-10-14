@@ -47,9 +47,42 @@ export async function layoutView(view: View): Promise<Map<string, Positioned>> {
     width: CARD_WIDTH,
     height: cardHeight(n),
   }));
+  // Flow edges (calls, events, data) decide the left-to-right order; structural edges and
+  // edges to context nodes may be reversed first when ELK has to break cycles.
+  const priority = (e: View["edges"][number]) => {
+    const ghost = byId.get(e.source)?.ghost || byId.get(e.target)?.ghost;
+    const flow = e.kind === "call" || e.kind === "event" || e.kind === "data" || e.kind === "write";
+    return (flow ? 10 : e.kind === "network" ? 4 : 1) - (ghost ? 1 : 0) + (e.protocols.includes("http") ? 5 : 0);
+  };
+  // Break cycles ourselves: add edges from most to least important and reverse (for layout only)
+  // any edge that would close a cycle. ELK then lays out a DAG where flow edges point right.
+  const succ = new Map<string, Set<string>>();
+  const reaches = (from: string, to: string): boolean => {
+    const stack = [from];
+    const seen = new Set<string>();
+    while (stack.length) {
+      const n = stack.pop()!;
+      if (n === to) return true;
+      if (seen.has(n)) continue;
+      seen.add(n);
+      for (const m of succ.get(n) ?? []) stack.push(m);
+    }
+    return false;
+  };
+  const link = (a: string, b: string) => {
+    if (!succ.has(a)) succ.set(a, new Set());
+    succ.get(a)!.add(b);
+  };
   const edges = view.edges
     .filter((e) => e.source !== e.target && byId.has(e.source) && byId.has(e.target))
-    .map((e) => ({ id: e.id, sources: [e.source], targets: [e.target] }));
+    .map((e, i) => ({ e, i, p: priority(e) }))
+    .sort((a, b) => b.p - a.p || a.i - b.i)
+    .map(({ e }) => {
+      const reverse = reaches(e.target, e.source);
+      if (reverse) link(e.target, e.source);
+      else link(e.source, e.target);
+      return { id: e.id, sources: [reverse ? e.target : e.source], targets: [reverse ? e.source : e.target] };
+    });
 
   const res = await elk.layout({
     id: "root",

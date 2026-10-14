@@ -1,6 +1,6 @@
 {
  "version": "1.0",
- "generatedAt": "2026-10-14T08:47:26.506Z",
+ "generatedAt": "2026-10-14T09:00:13.273Z",
  "nodes": [
   {
    "id": "code:repo:noodles",
@@ -9,7 +9,7 @@
    "layer": "code",
    "description": "Source tree of noodles",
    "metadata": {
-    "files": 54
+    "files": 57
    }
   },
   {
@@ -959,11 +959,11 @@
    "source": {
     "file": "collectors/src/code/build.ts",
     "line": 1,
-    "endLine": 825
+    "endLine": 826
    },
    "metadata": {
     "language": "typescript",
-    "lines": 825,
+    "lines": 826,
     "subkind": "file"
    }
   },
@@ -2389,7 +2389,7 @@
    "source": {
     "file": "collectors/src/code/build.ts",
     "line": 801,
-    "endLine": 813
+    "endLine": 814
    },
    "metadata": {
     "subkind": "function",
@@ -2420,8 +2420,8 @@
    ],
    "source": {
     "file": "collectors/src/code/build.ts",
-    "line": 815,
-    "endLine": 824
+    "line": 816,
+    "endLine": 825
    },
    "metadata": {
     "subkind": "function",
@@ -2438,11 +2438,11 @@
    "source": {
     "file": "collectors/src/code/code.test.ts",
     "line": 1,
-    "endLine": 105
+    "endLine": 107
    },
    "metadata": {
     "language": "typescript",
-    "lines": 105,
+    "lines": 107,
     "subkind": "file"
    }
   },
@@ -4500,6 +4500,66 @@
    }
   },
   {
+   "id": "code:file:collectors/src/infra/infra.test.ts",
+   "name": "infra.test.ts",
+   "kind": "module",
+   "layer": "code",
+   "parent": "code:dir:collectors/src/infra",
+   "source": {
+    "file": "collectors/src/infra/infra.test.ts",
+    "line": 1,
+    "endLine": 75
+   },
+   "metadata": {
+    "language": "typescript",
+    "lines": 75,
+    "subkind": "file"
+   }
+  },
+  {
+   "id": "code:fn:collectors/src/infra/infra.test.ts#edge",
+   "name": "edge",
+   "kind": "function",
+   "layer": "code",
+   "parent": "code:file:collectors/src/infra/infra.test.ts",
+   "aliases": [
+    "src:collectors/src/infra/infra.test.ts#edge"
+   ],
+   "inputs": [
+    {
+     "name": "g",
+     "type": "FlowGraph"
+    },
+    {
+     "name": "kind",
+     "type": "string"
+    },
+    {
+     "name": "from",
+     "type": "string"
+    },
+    {
+     "name": "to",
+     "type": "string"
+    }
+   ],
+   "outputs": [
+    {
+     "name": "return"
+    }
+   ],
+   "source": {
+    "file": "collectors/src/infra/infra.test.ts",
+    "line": 9,
+    "endLine": 9
+   },
+   "metadata": {
+    "subkind": "function",
+    "language": "typescript",
+    "qualifiedName": "edge"
+   }
+  },
+  {
    "id": "code:file:collectors/src/infra/k8s.ts",
    "name": "k8s.ts",
    "kind": "module",
@@ -5619,11 +5679,11 @@
    "source": {
     "file": "collectors/src/otel/index.ts",
     "line": 1,
-    "endLine": 599
+    "endLine": 607
    },
    "metadata": {
     "language": "typescript",
-    "lines": 599,
+    "lines": 607,
     "subkind": "file"
    }
   },
@@ -6636,7 +6696,7 @@
    "source": {
     "file": "collectors/src/otel/index.ts",
     "line": 530,
-    "endLine": 564
+    "endLine": 572
    },
    "metadata": {
     "subkind": "function",
@@ -6698,8 +6758,8 @@
    ],
    "source": {
     "file": "collectors/src/otel/index.ts",
-    "line": 570,
-    "endLine": 576
+    "line": 578,
+    "endLine": 584
    },
    "metadata": {
     "subkind": "function",
@@ -7563,6 +7623,142 @@
    }
   },
   {
+   "id": "code:file:scripts/build-pages.mjs",
+   "name": "build-pages.mjs",
+   "kind": "module",
+   "layer": "code",
+   "parent": "code:dir:scripts",
+   "source": {
+    "file": "scripts/build-pages.mjs",
+    "line": 1,
+    "endLine": 35
+   },
+   "metadata": {
+    "language": "javascript",
+    "lines": 35,
+    "subkind": "file"
+   }
+  },
+  {
+   "id": "code:file:scripts/screenshots.mjs",
+   "name": "screenshots.mjs",
+   "kind": "module",
+   "layer": "code",
+   "parent": "code:dir:scripts",
+   "source": {
+    "file": "scripts/screenshots.mjs",
+    "line": 1,
+    "endLine": 71
+   },
+   "metadata": {
+    "language": "javascript",
+    "lines": 71,
+    "subkind": "file"
+   }
+  },
+  {
+   "id": "code:fn:scripts/screenshots.mjs#shot",
+   "name": "shot",
+   "kind": "function",
+   "layer": "code",
+   "parent": "code:file:scripts/screenshots.mjs",
+   "aliases": [
+    "src:scripts/screenshots.mjs#shot"
+   ],
+   "inputs": [
+    {
+     "name": "name"
+    },
+    {
+     "name": "theme"
+    },
+    {
+     "name": "steps"
+    }
+   ],
+   "outputs": [
+    {
+     "name": "return"
+    }
+   ],
+   "source": {
+    "file": "scripts/screenshots.mjs",
+    "line": 31,
+    "endLine": 40
+   },
+   "metadata": {
+    "subkind": "function",
+    "language": "javascript",
+    "async": true,
+    "qualifiedName": "shot"
+   }
+  },
+  {
+   "id": "code:fn:scripts/screenshots.mjs#dblclick",
+   "name": "dblclick",
+   "kind": "function",
+   "layer": "code",
+   "parent": "code:file:scripts/screenshots.mjs",
+   "aliases": [
+    "src:scripts/screenshots.mjs#dblclick"
+   ],
+   "inputs": [
+    {
+     "name": "page"
+    },
+    {
+     "name": "name"
+    }
+   ],
+   "outputs": [
+    {
+     "name": "return"
+    }
+   ],
+   "source": {
+    "file": "scripts/screenshots.mjs",
+    "line": 42,
+    "endLine": 50
+   },
+   "metadata": {
+    "subkind": "function",
+    "language": "javascript",
+    "async": true,
+    "qualifiedName": "dblclick"
+   }
+  },
+  {
+   "id": "code:fn:scripts/screenshots.mjs#trace",
+   "name": "trace",
+   "kind": "function",
+   "layer": "code",
+   "parent": "code:file:scripts/screenshots.mjs",
+   "aliases": [
+    "src:scripts/screenshots.mjs#trace"
+   ],
+   "inputs": [
+    {
+     "name": "page"
+    }
+   ],
+   "outputs": [
+    {
+     "name": "return"
+    }
+   ],
+   "source": {
+    "file": "scripts/screenshots.mjs",
+    "line": 59,
+    "endLine": 64
+   },
+   "metadata": {
+    "subkind": "function",
+    "language": "javascript",
+    "async": true,
+    "qualifiedName": "trace"
+   }
+  },
+  {
    "id": "code:file:ui/src/App.tsx",
    "name": "App.tsx",
    "kind": "module",
@@ -7571,11 +7767,11 @@
    "source": {
     "file": "ui/src/App.tsx",
     "line": 1,
-    "endLine": 340
+    "endLine": 346
    },
    "metadata": {
     "language": "tsx",
-    "lines": 340,
+    "lines": 346,
     "subkind": "file"
    }
   },
@@ -7785,7 +7981,7 @@
    "source": {
     "file": "ui/src/App.tsx",
     "line": 159,
-    "endLine": 339
+    "endLine": 345
    },
    "metadata": {
     "subkind": "function",
@@ -7815,8 +8011,8 @@
    ],
    "source": {
     "file": "ui/src/App.tsx",
-    "line": 249,
-    "endLine": 264
+    "line": 255,
+    "endLine": 270
    },
    "metadata": {
     "subkind": "function",
@@ -7881,11 +8077,11 @@
    "source": {
     "file": "ui/src/components/FlowEdge.tsx",
     "line": 1,
-    "endLine": 69
+    "endLine": 76
    },
    "metadata": {
     "language": "tsx",
-    "lines": 69,
+    "lines": 76,
     "subkind": "file"
    }
   },
@@ -8897,11 +9093,11 @@
    "source": {
     "file": "ui/src/graph/layout.ts",
     "line": 1,
-    "endLine": 80
+    "endLine": 113
    },
    "metadata": {
     "language": "typescript",
-    "lines": 80,
+    "lines": 113,
     "subkind": "file"
    }
   },
@@ -9037,13 +9233,115 @@
    "source": {
     "file": "ui/src/graph/layout.ts",
     "line": 43,
-    "endLine": 79
+    "endLine": 112
    },
    "metadata": {
     "subkind": "function",
     "language": "typescript",
     "async": true,
     "qualifiedName": "layoutView"
+   }
+  },
+  {
+   "id": "code:fn:ui/src/graph/layout.ts#layoutView.priority",
+   "name": "priority",
+   "kind": "function",
+   "layer": "code",
+   "parent": "code:fn:ui/src/graph/layout.ts#layoutView",
+   "aliases": [
+    "src:ui/src/graph/layout.ts#layoutView.priority"
+   ],
+   "inputs": [
+    {
+     "name": "e",
+     "type": "View[\"edges\"][number]"
+    }
+   ],
+   "outputs": [
+    {
+     "name": "return"
+    }
+   ],
+   "source": {
+    "file": "ui/src/graph/layout.ts",
+    "line": 52,
+    "endLine": 56
+   },
+   "metadata": {
+    "subkind": "function",
+    "language": "typescript",
+    "qualifiedName": "layoutView.priority"
+   }
+  },
+  {
+   "id": "code:fn:ui/src/graph/layout.ts#layoutView.reaches",
+   "name": "reaches",
+   "kind": "function",
+   "layer": "code",
+   "parent": "code:fn:ui/src/graph/layout.ts#layoutView",
+   "aliases": [
+    "src:ui/src/graph/layout.ts#layoutView.reaches"
+   ],
+   "inputs": [
+    {
+     "name": "from",
+     "type": "string"
+    },
+    {
+     "name": "to",
+     "type": "string"
+    }
+   ],
+   "outputs": [
+    {
+     "name": "return",
+     "type": "boolean"
+    }
+   ],
+   "source": {
+    "file": "ui/src/graph/layout.ts",
+    "line": 60,
+    "endLine": 71
+   },
+   "metadata": {
+    "subkind": "function",
+    "language": "typescript",
+    "qualifiedName": "layoutView.reaches"
+   }
+  },
+  {
+   "id": "code:fn:ui/src/graph/layout.ts#layoutView.link",
+   "name": "link",
+   "kind": "function",
+   "layer": "code",
+   "parent": "code:fn:ui/src/graph/layout.ts#layoutView",
+   "aliases": [
+    "src:ui/src/graph/layout.ts#layoutView.link"
+   ],
+   "inputs": [
+    {
+     "name": "a",
+     "type": "string"
+    },
+    {
+     "name": "b",
+     "type": "string"
+    }
+   ],
+   "outputs": [
+    {
+     "name": "return"
+    }
+   ],
+   "source": {
+    "file": "ui/src/graph/layout.ts",
+    "line": 72,
+    "endLine": 75
+   },
+   "metadata": {
+    "subkind": "function",
+    "language": "typescript",
+    "qualifiedName": "layoutView.link"
    }
   },
   {
@@ -9055,11 +9353,11 @@
    "source": {
     "file": "ui/src/graph/model.ts",
     "line": 1,
-    "endLine": 102
+    "endLine": 105
    },
    "metadata": {
     "language": "typescript",
-    "lines": 102,
+    "lines": 105,
     "subkind": "file"
    }
   },
@@ -9225,7 +9523,7 @@
    "source": {
     "file": "ui/src/graph/model.ts",
     "line": 80,
-    "endLine": 88
+    "endLine": 91
    },
    "metadata": {
     "subkind": "function",
@@ -9261,8 +9559,8 @@
    ],
    "source": {
     "file": "ui/src/graph/model.ts",
-    "line": 91,
-    "endLine": 101
+    "line": 94,
+    "endLine": 104
    },
    "metadata": {
     "subkind": "function",
@@ -10143,6 +10441,21 @@
    }
   },
   {
+   "id": "code:global:collectors/src/infra/index.ts#infraCollector",
+   "name": "infraCollector",
+   "kind": "datastore",
+   "layer": "code",
+   "parent": "code:file:collectors/src/infra/index.ts",
+   "description": "Module-level shared state",
+   "source": {
+    "file": "collectors/src/infra/index.ts",
+    "line": 54
+   },
+   "metadata": {
+    "subkind": "global"
+   }
+  },
+  {
    "id": "code:pkg:yaml",
    "name": "yaml",
    "kind": "module",
@@ -10193,6 +10506,81 @@
    "source": {
     "file": "schema/src/validate.ts",
     "line": 14
+   },
+   "metadata": {
+    "subkind": "global"
+   }
+  },
+  {
+   "id": "code:global:scripts/build-pages.mjs#index",
+   "name": "index",
+   "kind": "datastore",
+   "layer": "code",
+   "parent": "code:file:scripts/build-pages.mjs",
+   "description": "Module-level shared state",
+   "source": {
+    "file": "scripts/build-pages.mjs",
+    "line": 22
+   },
+   "metadata": {
+    "subkind": "global"
+   }
+  },
+  {
+   "id": "code:global:scripts/screenshots.mjs#browser",
+   "name": "browser",
+   "kind": "datastore",
+   "layer": "code",
+   "parent": "code:file:scripts/screenshots.mjs",
+   "description": "Module-level shared state",
+   "source": {
+    "file": "scripts/screenshots.mjs",
+    "line": 30
+   },
+   "metadata": {
+    "subkind": "global"
+   }
+  },
+  {
+   "id": "code:global:scripts/screenshots.mjs#server",
+   "name": "server",
+   "kind": "datastore",
+   "layer": "code",
+   "parent": "code:file:scripts/screenshots.mjs",
+   "description": "Module-level shared state",
+   "source": {
+    "file": "scripts/screenshots.mjs",
+    "line": 20
+   },
+   "metadata": {
+    "subkind": "global"
+   }
+  },
+  {
+   "id": "code:global:scripts/screenshots.mjs#url",
+   "name": "url",
+   "kind": "datastore",
+   "layer": "code",
+   "parent": "code:file:scripts/screenshots.mjs",
+   "description": "Module-level shared state",
+   "source": {
+    "file": "scripts/screenshots.mjs",
+    "line": 19
+   },
+   "metadata": {
+    "subkind": "global"
+   }
+  },
+  {
+   "id": "code:global:scripts/screenshots.mjs#outDirs",
+   "name": "outDirs",
+   "kind": "datastore",
+   "layer": "code",
+   "parent": "code:file:scripts/screenshots.mjs",
+   "description": "Module-level shared state",
+   "source": {
+    "file": "scripts/screenshots.mjs",
+    "line": 27
    },
    "metadata": {
     "subkind": "global"
@@ -12641,7 +13029,7 @@
     "file": "collectors/src/code/build.ts",
     "lines": [
      806,
-     810
+     811
     ]
    },
    "conditional": true
@@ -12690,7 +13078,7 @@
     "node": "code:pkg:vitest"
    },
    "kind": "call",
-   "count": 56,
+   "count": 58,
    "label": "describe, it, expect",
    "metadata": {
     "file": "collectors/src/code/code.test.ts",
@@ -12807,13 +13195,15 @@
     "node": "code:fn:collectors/src/code/build.ts#parseUrl"
    },
    "kind": "call",
-   "count": 3,
+   "count": 5,
    "metadata": {
     "file": "collectors/src/code/code.test.ts",
     "lines": [
      98,
      99,
-     100
+     100,
+     101,
+     102
     ]
    }
   },
@@ -12830,8 +13220,8 @@
    "metadata": {
     "file": "collectors/src/code/code.test.ts",
     "lines": [
-     101,
-     102
+     103,
+     104
     ]
    }
   },
@@ -15230,6 +15620,147 @@
    "conditional": true
   },
   {
+   "id": "call:code:fn:collectors/src/infra/infra.test.ts#edge->code:pkg:@noodles/schema",
+   "from": {
+    "node": "code:fn:collectors/src/infra/infra.test.ts#edge"
+   },
+   "to": {
+    "node": "code:pkg:@noodles/schema"
+   },
+   "kind": "call",
+   "count": 1,
+   "label": "FlowGraph.edges.find",
+   "metadata": {
+    "file": "collectors/src/infra/infra.test.ts",
+    "lines": [
+     9
+    ]
+   }
+  },
+  {
+   "id": "call:code:file:collectors/src/infra/infra.test.ts->code:pkg:vitest",
+   "from": {
+    "node": "code:file:collectors/src/infra/infra.test.ts"
+   },
+   "to": {
+    "node": "code:pkg:vitest"
+   },
+   "kind": "call",
+   "count": 33,
+   "label": "describe, it, expect",
+   "metadata": {
+    "file": "collectors/src/infra/infra.test.ts",
+    "lines": [
+     11,
+     14,
+     15,
+     18,
+     20,
+     21,
+     22,
+     23,
+     24,
+     27
+    ]
+   }
+  },
+  {
+   "id": "read:code:global:collectors/src/infra/index.ts#infraCollector->code:file:collectors/src/infra/infra.test.ts",
+   "from": {
+    "node": "code:global:collectors/src/infra/index.ts#infraCollector"
+   },
+   "to": {
+    "node": "code:file:collectors/src/infra/infra.test.ts"
+   },
+   "kind": "read",
+   "count": 1,
+   "metadata": {
+    "file": "collectors/src/infra/infra.test.ts",
+    "lines": [
+     12
+    ]
+   }
+  },
+  {
+   "id": "call:code:file:collectors/src/infra/infra.test.ts->code:pkg:@noodles/schema",
+   "from": {
+    "node": "code:file:collectors/src/infra/infra.test.ts"
+   },
+   "to": {
+    "node": "code:pkg:@noodles/schema"
+   },
+   "kind": "call",
+   "count": 1,
+   "label": "validateGraph",
+   "metadata": {
+    "file": "collectors/src/infra/infra.test.ts",
+    "lines": [
+     15
+    ]
+   }
+  },
+  {
+   "id": "call:code:file:collectors/src/infra/infra.test.ts->code:fn:collectors/src/infra/infra.test.ts#edge",
+   "from": {
+    "node": "code:file:collectors/src/infra/infra.test.ts"
+   },
+   "to": {
+    "node": "code:fn:collectors/src/infra/infra.test.ts#edge"
+   },
+   "kind": "call",
+   "count": 10,
+   "metadata": {
+    "file": "collectors/src/infra/infra.test.ts",
+    "lines": [
+     23,
+     24,
+     30,
+     31,
+     32,
+     40,
+     41,
+     42,
+     43,
+     44
+    ]
+   }
+  },
+  {
+   "id": "call:code:file:collectors/src/infra/infra.test.ts->code:fn:collectors/src/infra/terraform.ts#parseTerraform",
+   "from": {
+    "node": "code:file:collectors/src/infra/infra.test.ts"
+   },
+   "to": {
+    "node": "code:fn:collectors/src/infra/terraform.ts#parseTerraform"
+   },
+   "kind": "call",
+   "count": 2,
+   "metadata": {
+    "file": "collectors/src/infra/infra.test.ts",
+    "lines": [
+     56,
+     70
+    ]
+   }
+  },
+  {
+   "id": "call:code:file:collectors/src/infra/infra.test.ts->code:fn:collectors/src/infra/k8s.ts#parseK8s",
+   "from": {
+    "node": "code:file:collectors/src/infra/infra.test.ts"
+   },
+   "to": {
+    "node": "code:fn:collectors/src/infra/k8s.ts#parseK8s"
+   },
+   "kind": "call",
+   "count": 1,
+   "metadata": {
+    "file": "collectors/src/infra/infra.test.ts",
+    "lines": [
+     71
+    ]
+   }
+  },
+  {
    "id": "call:code:fn:collectors/src/infra/k8s.ts#parseK8s->code:pkg:yaml",
    "from": {
     "node": "code:fn:collectors/src/infra/k8s.ts#parseK8s"
@@ -17078,12 +17609,13 @@
     "node": "code:pkg:@noodles/schema"
    },
    "kind": "call",
-   "count": 1,
-   "label": "FlowGraph.nodes.filter",
+   "count": 2,
+   "label": "FlowGraph.nodes.filter, FlowGraph.nodes.flatMap",
    "metadata": {
     "file": "collectors/src/otel/index.ts",
     "lines": [
-     531
+     531,
+     564
     ]
    }
   },
@@ -17120,8 +17652,8 @@
    "metadata": {
     "file": "collectors/src/otel/index.ts",
     "lines": [
-     583,
-     590
+     591,
+     598
     ]
    }
   },
@@ -17138,7 +17670,7 @@
    "metadata": {
     "file": "collectors/src/otel/index.ts",
     "lines": [
-     596
+     604
     ]
    }
   },
@@ -17741,6 +18273,147 @@
    }
   },
   {
+   "id": "write:code:file:scripts/build-pages.mjs->code:global:scripts/build-pages.mjs#index",
+   "from": {
+    "node": "code:file:scripts/build-pages.mjs"
+   },
+   "to": {
+    "node": "code:global:scripts/build-pages.mjs#index"
+   },
+   "kind": "write",
+   "count": 1,
+   "loop": true,
+   "metadata": {
+    "file": "scripts/build-pages.mjs",
+    "lines": [
+     30
+    ]
+   }
+  },
+  {
+   "id": "read:code:global:scripts/screenshots.mjs#browser->code:fn:scripts/screenshots.mjs#shot",
+   "from": {
+    "node": "code:global:scripts/screenshots.mjs#browser"
+   },
+   "to": {
+    "node": "code:fn:scripts/screenshots.mjs#shot"
+   },
+   "kind": "read",
+   "count": 2,
+   "metadata": {
+    "file": "scripts/screenshots.mjs",
+    "lines": [
+     32,
+     32
+    ]
+   }
+  },
+  {
+   "id": "call:code:file:scripts/screenshots.mjs->code:fn:scripts/screenshots.mjs#shot",
+   "from": {
+    "node": "code:file:scripts/screenshots.mjs"
+   },
+   "to": {
+    "node": "code:fn:scripts/screenshots.mjs#shot"
+   },
+   "kind": "call",
+   "count": 3,
+   "metadata": {
+    "file": "scripts/screenshots.mjs",
+    "lines": [
+     53,
+     65,
+     66
+    ]
+   }
+  },
+  {
+   "id": "call:code:file:scripts/screenshots.mjs->code:fn:scripts/screenshots.mjs#dblclick",
+   "from": {
+    "node": "code:file:scripts/screenshots.mjs"
+   },
+   "to": {
+    "node": "code:fn:scripts/screenshots.mjs#dblclick"
+   },
+   "kind": "call",
+   "count": 2,
+   "metadata": {
+    "file": "scripts/screenshots.mjs",
+    "lines": [
+     54,
+     55
+    ]
+   }
+  },
+  {
+   "id": "read:code:global:scripts/screenshots.mjs#browser->code:file:scripts/screenshots.mjs",
+   "from": {
+    "node": "code:global:scripts/screenshots.mjs#browser"
+   },
+   "to": {
+    "node": "code:file:scripts/screenshots.mjs"
+   },
+   "kind": "read",
+   "count": 1,
+   "metadata": {
+    "file": "scripts/screenshots.mjs",
+    "lines": [
+     68
+    ]
+   }
+  },
+  {
+   "id": "read:code:global:scripts/screenshots.mjs#server->code:file:scripts/screenshots.mjs",
+   "from": {
+    "node": "code:global:scripts/screenshots.mjs#server"
+   },
+   "to": {
+    "node": "code:file:scripts/screenshots.mjs"
+   },
+   "kind": "read",
+   "count": 1,
+   "metadata": {
+    "file": "scripts/screenshots.mjs",
+    "lines": [
+     69
+    ]
+   }
+  },
+  {
+   "id": "read:code:global:scripts/screenshots.mjs#url->code:fn:scripts/screenshots.mjs#shot",
+   "from": {
+    "node": "code:global:scripts/screenshots.mjs#url"
+   },
+   "to": {
+    "node": "code:fn:scripts/screenshots.mjs#shot"
+   },
+   "kind": "read",
+   "count": 1,
+   "metadata": {
+    "file": "scripts/screenshots.mjs",
+    "lines": [
+     34
+    ]
+   }
+  },
+  {
+   "id": "read:code:global:scripts/screenshots.mjs#outDirs->code:fn:scripts/screenshots.mjs#shot",
+   "from": {
+    "node": "code:global:scripts/screenshots.mjs#outDirs"
+   },
+   "to": {
+    "node": "code:fn:scripts/screenshots.mjs#shot"
+   },
+   "kind": "read",
+   "count": 1,
+   "metadata": {
+    "file": "scripts/screenshots.mjs",
+    "lines": [
+     38
+    ]
+   }
+  },
+  {
    "id": "call:code:fn:ui/src/App.tsx#App->code:pkg:react",
    "from": {
     "node": "code:fn:ui/src/App.tsx#App"
@@ -17898,7 +18571,7 @@
     "node": "code:pkg:react"
    },
    "kind": "call",
-   "count": 20,
+   "count": 21,
    "label": "useMemo, useState, useCallback, …",
    "metadata": {
     "file": "ui/src/App.tsx",
@@ -17980,7 +18653,7 @@
    "metadata": {
     "file": "ui/src/App.tsx",
     "lines": [
-     201
+     207
     ]
    }
   },
@@ -17997,7 +18670,7 @@
    "metadata": {
     "file": "ui/src/App.tsx",
     "lines": [
-     217
+     223
     ]
    },
    "conditional": true
@@ -18015,7 +18688,7 @@
    "metadata": {
     "file": "ui/src/App.tsx",
     "lines": [
-     273
+     279
     ]
    }
   },
@@ -18032,7 +18705,7 @@
    "metadata": {
     "file": "ui/src/App.tsx",
     "lines": [
-     278
+     284
     ]
    }
   },
@@ -18049,7 +18722,7 @@
    "metadata": {
     "file": "ui/src/App.tsx",
     "lines": [
-     292
+     298
     ]
    }
   },
@@ -18066,7 +18739,7 @@
    "metadata": {
     "file": "ui/src/App.tsx",
     "lines": [
-     294
+     300
     ]
    }
   },
@@ -18083,7 +18756,7 @@
    "metadata": {
     "file": "ui/src/App.tsx",
     "lines": [
-     305
+     311
     ]
    }
   },
@@ -18100,7 +18773,7 @@
    "metadata": {
     "file": "ui/src/App.tsx",
     "lines": [
-     307
+     313
     ]
    }
   },
@@ -18117,7 +18790,7 @@
    "metadata": {
     "file": "ui/src/App.tsx",
     "lines": [
-     324
+     330
     ]
    }
   },
@@ -18306,9 +18979,9 @@
    "metadata": {
     "file": "ui/src/components/FlowEdge.tsx",
     "lines": [
-     38,
-     43,
-     56
+     45,
+     50,
+     63
     ]
    }
   },
@@ -18325,7 +18998,7 @@
    "metadata": {
     "file": "ui/src/components/FlowEdge.tsx",
     "lines": [
-     40
+     47
     ]
    },
    "conditional": true
@@ -18343,7 +19016,7 @@
    "metadata": {
     "file": "ui/src/components/FlowEdge.tsx",
     "lines": [
-     48
+     55
     ]
    }
   },
@@ -19286,12 +19959,13 @@
     "node": "code:pkg:lucide-react"
    },
    "kind": "call",
-   "count": 8,
-   "label": "PanelLeft, ChevronRight, ChevronDown, …",
+   "count": 9,
+   "label": "PanelLeft, House, ChevronRight, …",
    "metadata": {
     "file": "ui/src/components/TopBar.tsx",
     "lines": [
      39,
+     47,
      51,
      80,
      85,
@@ -19539,6 +20213,62 @@
    }
   },
   {
+   "id": "call:code:fn:ui/src/graph/layout.ts#layoutView->code:fn:ui/src/graph/layout.ts#layoutView.priority",
+   "from": {
+    "node": "code:fn:ui/src/graph/layout.ts#layoutView"
+   },
+   "to": {
+    "node": "code:fn:ui/src/graph/layout.ts#layoutView.priority"
+   },
+   "kind": "call",
+   "count": 1,
+   "loop": true,
+   "metadata": {
+    "file": "ui/src/graph/layout.ts",
+    "lines": [
+     78
+    ]
+   }
+  },
+  {
+   "id": "call:code:fn:ui/src/graph/layout.ts#layoutView->code:fn:ui/src/graph/layout.ts#layoutView.reaches",
+   "from": {
+    "node": "code:fn:ui/src/graph/layout.ts#layoutView"
+   },
+   "to": {
+    "node": "code:fn:ui/src/graph/layout.ts#layoutView.reaches"
+   },
+   "kind": "call",
+   "count": 1,
+   "loop": true,
+   "metadata": {
+    "file": "ui/src/graph/layout.ts",
+    "lines": [
+     81
+    ]
+   }
+  },
+  {
+   "id": "call:code:fn:ui/src/graph/layout.ts#layoutView->code:fn:ui/src/graph/layout.ts#layoutView.link",
+   "from": {
+    "node": "code:fn:ui/src/graph/layout.ts#layoutView"
+   },
+   "to": {
+    "node": "code:fn:ui/src/graph/layout.ts#layoutView.link"
+   },
+   "kind": "call",
+   "count": 2,
+   "loop": true,
+   "metadata": {
+    "file": "ui/src/graph/layout.ts",
+    "lines": [
+     82,
+     83
+    ]
+   },
+   "conditional": true
+  },
+  {
    "id": "call:code:fn:ui/src/graph/layout.ts#layoutView->code:pkg:elkjs",
    "from": {
     "node": "code:fn:ui/src/graph/layout.ts#layoutView"
@@ -19552,7 +20282,7 @@
    "metadata": {
     "file": "ui/src/graph/layout.ts",
     "lines": [
-     54
+     87
     ]
    }
   },
@@ -19641,8 +20371,8 @@
    "metadata": {
     "file": "ui/src/graph/model.ts",
     "lines": [
-     93,
-     95
+     96,
+     98
     ]
    },
    "loop": true
@@ -20035,7 +20765,7 @@
   {
    "collector": "code",
    "target": "/home/user/noodles",
-   "collectedAt": "2026-10-14T08:47:26.506Z"
+   "collectedAt": "2026-10-14T09:00:13.273Z"
   }
  ]
 }

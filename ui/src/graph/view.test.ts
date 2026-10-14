@@ -28,8 +28,8 @@ const g: FlowGraph = {
 describe("computeView", () => {
   const idx = buildIndex(g);
 
-  it("starts at the root level when there are several roots", () => {
-    expect(defaultFocus(idx)).toBe(ROOT);
+  it("opens the only container when its siblings are leaves", () => {
+    expect(defaultFocus(idx)).toBe("sys");
   });
 
   it("lifts edges to visible ancestors and folds them", () => {

@@ -800,10 +800,11 @@ function looksLikeUrl(s?: string): boolean {
 /** Pull a host (or a service name guessed from a placeholder like {ORDERS_URL}) and a path out of a URL literal. */
 export function parseUrl(url?: string): { host?: string; path?: string } {
   if (!url) return {};
-  const abs = url.match(/^https?:\/\/([^/{}?#]+|\{[^}]+\})(\/[^?#]*)?/);
+  const abs = url.match(/^https?:\/\/([^/{}?#:]+|\{[^}]+\})(?::(?:\d+|\{[^}]*\}))?(\/[^?#]*)?/);
   if (abs) {
     const rawHost = abs[1];
-    const host = rawHost.startsWith("{") ? serviceFromPlaceholder(rawHost) : rawHost.replace(/:\d+$/, "");
+    let host = rawHost.startsWith("{") ? serviceFromPlaceholder(rawHost) : rawHost.replace(/:\d*$/, "");
+    if (host === "127.0.0.1" || host === "0.0.0.0" || host === "[::1]") host = "localhost";
     return { host, path: abs[2] || "/" };
   }
   const ph = url.match(/^\{([^}]+)\}(\/[^?#]*)?/);

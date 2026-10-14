@@ -1,4 +1,4 @@
-# Noodles: v1 plan (proposal, waiting for approval)
+# Noodles: v1 plan (approved, implemented)
 
 Noodles turns a codebase or a distributed system into an n8n-style canvas. Everything
 goes through one contract, `flowgraph.json`, defined in
