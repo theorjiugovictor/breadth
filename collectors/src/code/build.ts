@@ -84,12 +84,14 @@ export function buildGraph(input: BuildInput): FlowGraph {
     if (SERVICE_MANIFESTS.has(path.posix.basename(f))) manifestDirs.add(path.posix.dirname(f));
   }
 
-  const dirParent = buildDirTree(files.map((f) => f.path));
+  const { parents: dirParent, collapsed } = buildDirTree(files.map((f) => f.path));
   // dirParent maps a visible dir (after chain collapsing) to its parent visible dir ('' = root).
   for (const [dir, parentDir] of dirParent) {
-    const isService = manifestDirs.has(dir) || [...manifestDirs].some((m) => m !== "." && m === dir);
+    // A collapsed chain (schema > src shown as "schema/src") is a service if any dir in it has a manifest.
+    const manifestDir = [dir, ...(collapsed.get(dir) ?? [])].find((d) => manifestDirs.has(d));
+    const isService = !!manifestDir;
     const name = parentDir ? dir.slice(parentDir.length + 1) : dir;
-    const base = path.posix.basename(dir);
+    const base = path.posix.basename(manifestDir ?? dir);
     addNode({
       id: ids.dir(dir),
       name: name + "/",
@@ -710,9 +712,9 @@ function resolveJsPath(p: string, files: Map<string, unknown>): string | undefin
 
 /**
  * Directory nodes, with single-child chains collapsed ("src/app" instead of "src" > "app").
- * Returns visible dir -> parent visible dir ('' for top level).
+ * Returns visible dir -> parent visible dir ('' for top level), and the dirs folded into each visible dir.
  */
-function buildDirTree(filePaths: string[]): Map<string, string> {
+function buildDirTree(filePaths: string[]): { parents: Map<string, string>; collapsed: Map<string, string[]> } {
   const children = new Map<string, Set<string>>(); // dir -> child dirs
   const hasFiles = new Set<string>();
   for (const f of filePaths) {
@@ -728,17 +730,23 @@ function buildDirTree(filePaths: string[]): Map<string, string> {
     }
   }
   const out = new Map<string, string>();
+  const collapsed = new Map<string, string[]>();
   const visit = (dir: string, visibleParent: string) => {
     for (const child of [...(children.get(dir) ?? [])].sort()) {
       let cur = child;
+      const folded: string[] = [];
       // collapse: a dir with no files and exactly one child dir merges with that child
-      while (!hasFiles.has(cur) && (children.get(cur)?.size ?? 0) === 1) cur = [...children.get(cur)!][0];
+      while (!hasFiles.has(cur) && (children.get(cur)?.size ?? 0) === 1) {
+        folded.push(cur);
+        cur = [...children.get(cur)!][0];
+      }
       out.set(cur, visibleParent);
+      if (folded.length) collapsed.set(cur, folded);
       visit(cur, cur);
     }
   };
   visit("", "");
-  return out;
+  return { parents: out, collapsed };
 }
 
 function commonPrefix(a: string, b: string): number {

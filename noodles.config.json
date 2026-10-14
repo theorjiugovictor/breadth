@@ -1,0 +1,3 @@
+{
+  "exclude": ["collectors/test/fixtures/", "examples/", "site/"]
+}

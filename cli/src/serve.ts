@@ -39,6 +39,10 @@ export async function serve(opts: ServeOptions): Promise<string> {
 
   const server = createServer((req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
+    if (url.pathname === "/api/source") {
+      sendSource(graphPath, url, res);
+      return;
+    }
     if (url.pathname === "/flowgraph.json") {
       res.writeHead(200, { "content-type": TYPES[".json"], "cache-control": "no-store" });
       res.end(readFileSync(graphPath));
@@ -63,6 +67,31 @@ export async function serve(opts: ServeOptions): Promise<string> {
   const link = `http://${opts.host === "0.0.0.0" ? "localhost" : opts.host}:${port}/`;
   if (opts.open) openBrowser(link);
   return link;
+}
+
+/**
+ * Source snippets for the Source tab. Only files under a scanned root (sources[].target
+ * of the code collector) are readable, and only on the loopback interface.
+ */
+function sendSource(graphPath: string, url: URL, res: import("node:http").ServerResponse) {
+  try {
+    const graph = JSON.parse(readFileSync(graphPath, "utf8")) as { sources?: { collector: string; target?: string }[] };
+    const roots = (graph.sources ?? []).filter((s) => s.collector === "code" && s.target).map((s) => path.resolve(s.target!));
+    const rel = url.searchParams.get("file") ?? "";
+    const start = Math.max(1, Number(url.searchParams.get("start") ?? 1));
+    const end = Math.min(start + 400, Number(url.searchParams.get("end") ?? start + 40));
+    for (const root of roots) {
+      const file = path.resolve(root, rel);
+      if (!file.startsWith(root + path.sep) || !existsSync(file) || !statSync(file).isFile()) continue;
+      const lines = readFileSync(file, "utf8").split("\n").slice(start - 1, end);
+      res.writeHead(200, { "content-type": TYPES[".json"] });
+      res.end(JSON.stringify({ path: file, start, lines }));
+      return;
+    }
+  } catch {
+    /* fall through */
+  }
+  res.writeHead(404).end();
 }
 
 function openBrowser(url: string) {
