@@ -14,15 +14,15 @@ import { LOCAL_HEADER, serve } from "./serve.js";
 import { hookPayload, hookReply } from "./hook.js";
 import { integrations, renderConfig, writeConfig } from "./connect.js";
 import { runMcp } from "./mcp.js";
-import { diffRefs, loadGraph, renderMarkdown, renderText } from "./diff.js";
+import { applyPlans, diffRefs, loadGraph, parsePlanArgs, renderMarkdown, renderText } from "./diff.js";
 
 const VERSION = "0.1.0";
 
 const HELP = `breadth ${VERSION}: turn any codebase or system into an n8n-style canvas
 
 Usage:
-  breadth scan <path> [--collector code,infra] [-o flowgraph.json] [--config file] [--exclude glob]...
-  breadth diff [path] [--base ref] [--head ref] [-o diff.json] [--markdown pr.md] [--fail-on high]   what a change does, in behaviour
+  breadth scan <path> [--collector code,infra] [-o flowgraph.json] [--config file] [--exclude glob]... [--plan [dir=]plan.json]
+  breadth diff [path] [--base ref] [--head ref] [-o diff.json] [--markdown pr.md] [--fail-on high] [--plan [dir=]plan.json]   what a change does, in behaviour
   breadth diff before.json after.json
   breadth import-traces <otlp.json>... [--merge flowgraph.json] [-o out.json]
   breadth serve [flowgraph.json] [--port 4321] [--host 127.0.0.1] [--no-open]
@@ -45,6 +45,8 @@ Options:
       --llm         use the configured LLM: node summaries (scan), narration of changes (watch)
       --llm-provider, --llm-model, --llm-base-url   override the LLM settings (see \`breadth llm\`)
       --no-insights do not store insights in the written graph
+      --plan        a Terraform plan (terraform show -json tfplan) for the root module in dir:
+                    marks what applying it creates, changes, replaces or destroys (repeatable)
   -q, --quiet       less output
 `;
 
@@ -100,6 +102,7 @@ async function cmdScan(args: string[]) {
       ...LLM_FLAGS,
       "no-insights": { type: "boolean" },
       quiet: { type: "boolean", short: "q" },
+      plan: { type: "string", multiple: true },
     },
   });
   log.quiet = !!values.quiet;
@@ -118,6 +121,7 @@ async function cmdScan(args: string[]) {
     settings,
     log,
   });
+  for (const w of applyPlans(graph, parsePlanArgs(values.plan))) log.warn(w);
 
   if (values.llm) {
     const provider = llmFrom(config, values);
@@ -424,14 +428,17 @@ async function cmdDiff(args: string[]) {
       collector: { type: "string", short: "c" },
       config: { type: "string" },
       exclude: { type: "string", multiple: true },
+      plan: { type: "string", multiple: true },
     },
   });
+  const plans = parsePlanArgs(values.plan);
   let before: FlowGraph;
   let after: FlowGraph;
   let report: ChangeReport;
   if (positionals.length === 2 && positionals.every((p) => p.endsWith(".json"))) {
     before = loadGraph(positionals[0]);
     after = loadGraph(positionals[1]);
+    for (const w of applyPlans(after, plans)) log.warn(w);
     report = describeChanges(withoutRemoved(before), withoutRemoved(after), { base: values.base ?? path.basename(positionals[0]), head: values.head ?? path.basename(positionals[1]) });
   } else {
     const target = path.resolve(positionals[0] ?? ".");
@@ -442,7 +449,8 @@ async function cmdDiff(args: string[]) {
       base: values.base,
       head: values.head,
       collectors: values.collector?.split(",").map((x) => x.trim()).filter(Boolean) ?? config.collectors,
-      collectorOptions: { exclude: [...(config.exclude ?? []), ...(values.exclude ?? [])], include: config.include, settings: config.settings },
+      collectorOptions: { exclude: [...(config.exclude ?? []), ...(values.exclude ?? [])], include: config.include, settings: config.settings, log: { info() {}, warn: (m) => log.warn(m) } },
+      plans,
     }));
   }
   const md = renderMarkdown(report, before, after, { link: values.link });

@@ -1,5 +1,5 @@
 name: breadth PR map
-description: "Comment on pull requests with what the change does in behaviour (new database writes, external API calls, endpoints, removed paths, new loops doing I/O), with a picture."
+description: "Comment on pull requests with what the change does in behaviour (new database writes, external API calls, endpoints, removed paths, new loops doing I/O, infrastructure opened to the internet or destroyed), with a picture."
 author: breadth
 branding:
   icon: git-pull-request
@@ -15,6 +15,9 @@ inputs:
   comment:
     description: "Post the summary as a pull request comment (updated in place on every push)."
     default: "true"
+  terraform-plan:
+    description: "Terraform plans in JSON (`terraform show -json tfplan > plan.json`), one per line, each `plan.json` or `dir=plan.json` for the root module in dir. Adds what applying the change replaces or destroys."
+    default: ""
   fail-on:
     description: "Fail the check when the change has a behaviour change of this severity or higher (high, medium or low). Empty never fails."
     default: ""
@@ -53,17 +56,23 @@ runs:
         INPUT_PATH: ${{ inputs.path }}
         INPUT_BASE: ${{ inputs.base }}
         INPUT_FAIL_ON: ${{ inputs['fail-on'] }}
+        INPUT_TERRAFORM_PLAN: ${{ inputs['terraform-plan'] }}
       run: |
         base="$INPUT_BASE"
         if [ -z "$base" ] && [ -n "$GITHUB_BASE_REF" ]; then
           git fetch --no-tags origin "$GITHUB_BASE_REF" >/dev/null 2>&1 || true
           base=$(git merge-base HEAD "origin/$GITHUB_BASE_REF" 2>/dev/null || echo "origin/$GITHUB_BASE_REF")
         fi
+        plans=()
+        while IFS= read -r p; do
+          p="${p#"${p%%[![:space:]]*}"}"; p="${p%"${p##*[![:space:]]}"}"
+          [ -n "$p" ] && plans+=(--plan "$p")
+        done <<< "$INPUT_TERRAFORM_PLAN"
         md="$RUNNER_TEMP/breadth-diff.md"
         graph="$RUNNER_TEMP/breadth-diff.flowgraph.json"
         set +e
         node "$GITHUB_ACTION_PATH/cli/dist/breadth.mjs" diff "$INPUT_PATH" ${base:+--base "$base"} \
-          --markdown "$md" -o "$graph" ${INPUT_FAIL_ON:+--fail-on "$INPUT_FAIL_ON"}
+          --markdown "$md" -o "$graph" ${INPUT_FAIL_ON:+--fail-on "$INPUT_FAIL_ON"} "${plans[@]}"
         code=$?
         set -e
         if [ "$code" != 0 ] && [ "$code" != 2 ]; then exit "$code"; fi

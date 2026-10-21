@@ -54,6 +54,7 @@ spec:
   template:
     metadata: { labels: { app: orders, tier: backend } }
     spec:
+      serviceAccountName: orders
       containers:
         - name: orders
           image: ghcr.io/example/shop-orders:2.0.1
@@ -77,6 +78,7 @@ spec:
   template:
     metadata: { labels: { app: payments, tier: backend } }
     spec:
+      serviceAccountName: payments
       containers:
         - name: payments
           image: ghcr.io/example/shop-payments:1.1.0

@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
-import { scanSources, setWasmLocator } from "@breadth/collectors/browser";
+import { scanSources, scanTerraformSources, setWasmLocator } from "@breadth/collectors/browser";
 import { runInsights } from "@breadth/insights";
-import type { FlowGraph } from "@breadth/schema";
+import { mergeGraphs, type FlowGraph } from "@breadth/schema";
 import { downloadFiles, listRepo, ScanError, repoLabel, type RepoRef } from "./github";
 
 export type ScanMessage =
@@ -17,27 +17,33 @@ self.onmessage = async (e: MessageEvent<{ repo: RepoRef; wasmBase: string }>) =>
   try {
     post({ type: "progress", phase: "list" });
     const listing = await listRepo(repo);
-    if (!listing.code.length) throw new ScanError(`No Python, TypeScript or JavaScript files found in ${repoLabel(repo)}.`);
-    const total = listing.code.length;
+    if (!listing.code.length && !listing.terraform.length) throw new ScanError(`No Python, TypeScript, JavaScript or Terraform files found in ${repoLabel(repo)}.`);
+    const wanted = [...listing.code, ...listing.terraform];
+    const total = wanted.length;
     post({ type: "progress", phase: "download", done: 0, total });
-    const files = await downloadFiles(repo, listing.ref, listing.code, (done) => {
+    const downloaded = await downloadFiles(repo, listing.ref, wanted, (done) => {
       if (done % 10 === 0 || done === total) post({ type: "progress", phase: "download", done, total });
     });
+    const isTf = new Set(listing.terraform.map((f) => f.path));
+    const files = downloaded.filter((f) => !isTf.has(f.path));
     post({ type: "progress", phase: "parse", done: 0, total: files.length });
     const rootName = repo.subpath ? repo.subpath.split("/").pop()! : repo.repo;
-    const graph = await scanSources(files, {
+    const code = await scanSources(files, {
       rootName,
       otherFiles: listing.others,
       onProgress: (done, t) => {
         if (done % 20 === 0 || done === t) post({ type: "progress", phase: "parse", done, total: t });
       },
     });
+    const tf = downloaded.filter((f) => isTf.has(f.path));
+    const graph = tf.length ? mergeGraphs(code, scanTerraformSources(tf, rootName)) : code;
     // Deep links to GitHub for the Source tab.
     const blob = `https://github.com/${repo.owner}/${repo.repo}/blob/${listing.ref}/`;
     for (const n of graph.nodes) {
-      if (n.source?.file && n.id.startsWith("code:")) n.source.url = `${blob}${n.source.file}${n.source.line ? `#L${n.source.line}` : ""}`;
+      if (n.source?.file && (n.id.startsWith("code:") || n.id.startsWith("tf:"))) n.source.url = `${blob}${n.source.file}${n.source.line ? `#L${n.source.line}` : ""}`;
     }
     graph.sources = [{ collector: "code", target: `https://github.com/${repo.owner}/${repo.repo}`, collectedAt: new Date().toISOString() }];
+    if (tf.length) graph.sources.push({ collector: "infra", target: `https://github.com/${repo.owner}/${repo.repo}`, collectedAt: new Date().toISOString() });
     post({ type: "progress", phase: "insights" });
     graph.insights = runInsights(graph);
     const notes: string[] = [];

@@ -13,7 +13,8 @@ export interface GraphDiff {
 
 /** What identifies a node's meaning, ignoring line numbers (edits above a function move it). */
 function signature(n: FlowNode): string {
-  return JSON.stringify([n.name, n.kind, n.parent, n.inputs, n.outputs, n.description, n.metadata?.shape, n.metadata?.size, n.metadata?.decorators]);
+  const m = n.metadata;
+  return JSON.stringify([n.name, n.kind, n.parent, n.inputs, n.outputs, n.description, m?.shape, m?.size, m?.decorators, m?.public, m?.encrypted, m?.iam_broad, m?.settings, m?.plan_action]);
 }
 
 /** Differences between two versions of a graph (used by live mode). */

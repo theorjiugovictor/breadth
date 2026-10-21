@@ -13,6 +13,7 @@ import { unhandledErrors } from "./rules/unhandled-errors.js";
 import { missedParallelism } from "./rules/missed-parallelism.js";
 import { contractDrift } from "./rules/contract-drift.js";
 import { duplicateLogic } from "./rules/duplicate-logic.js";
+import { broadIam, internetExposed, publicData, unencryptedStorage } from "./rules/infra-posture.js";
 
 export type { Rule, RuleOptions } from "./rule.js";
 export { Ctx } from "./context.js";
@@ -29,6 +30,10 @@ export const RULES: Rule[] = [
   deadCode,
   duplicateLogic,
   orphanInfra,
+  internetExposed,
+  publicData,
+  unencryptedStorage,
+  broadIam,
   raceRisk,
   dataExposure,
   contractDrift,
