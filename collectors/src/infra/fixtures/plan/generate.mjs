@@ -1,5 +1,5 @@
 // Generates plan.json, shaped like `terraform show -json tfplan` for the shop's AWS platform.
-// Run: node examples/shop/infra/terraform/generate.mjs
+// Run: node collectors/src/infra/fixtures/plan/generate.mjs
 import { writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";

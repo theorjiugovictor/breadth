@@ -27,6 +27,7 @@ try {
   const head = join(tmp, "shop");
   cpSync(join(root, "examples/shop"), head, { recursive: true });
   cpSync(join(root, "examples/shop-pr/services"), join(head, "services"), { recursive: true });
+  cpSync(join(root, "examples/shop-pr/infra"), join(head, "infra"), { recursive: true });
   run("scan", "examples/shop", "-o", join(tmp, "before.json"), "-q");
   run("scan", head, "-o", join(tmp, "after.json"), "-q");
   run("diff", join(tmp, "before.json"), join(tmp, "after.json"), "--base", "main", "--head", "add-bulk-refunds", "-o", "examples/shop-pr.flowgraph.json", "--markdown", "examples/shop-pr.md");

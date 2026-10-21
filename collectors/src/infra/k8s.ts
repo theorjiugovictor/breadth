@@ -106,6 +106,7 @@ export function k8sGraph(objects: K8sObject[]): { nodes: FlowNode[]; edges: Flow
           image: containers.map((c) => c.image).filter(Boolean).join(", ") || undefined,
           replicas: o.spec?.replicas,
           namespace: ns(o),
+          serviceAccount: spec.serviceAccountName ?? spec.serviceAccount,
         }),
       });
     } else if (o.kind === "Service") {

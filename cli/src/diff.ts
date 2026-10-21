@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { BehaviorChange, FlowGraph, FlowNode } from "@breadth/schema";
-import { runCollectors, type CollectorOptions } from "@breadth/collectors";
+import { applyPlan, runCollectors, type CollectorOptions } from "@breadth/collectors";
 import { describeChanges, runInsights, type ChangeReport } from "@breadth/insights";
 
 /** Marker so the GitHub Action updates its own comment instead of adding a new one each push. */
@@ -65,6 +65,36 @@ export function loadGraph(file: string): FlowGraph {
   return JSON.parse(readFileSync(file, "utf8")) as FlowGraph;
 }
 
+/** `--plan [dir=]plan.json`: a `terraform show -json` plan, optionally for the root module in dir. */
+export interface PlanArg {
+  dir?: string;
+  file: string;
+}
+
+export function parsePlanArgs(values: string[] | undefined): PlanArg[] {
+  return (values ?? []).map((v) => {
+    const i = v.indexOf("=");
+    return i > 0 ? { dir: v.slice(0, i).replace(/^\.\//, "").replace(/\/+$/, "") || ".", file: v.slice(i + 1) } : { file: v };
+  });
+}
+
+/** Mark the graph's Terraform resources with what each plan does to them. Returns warnings. */
+export function applyPlans(graph: FlowGraph, plans: PlanArg[]): string[] {
+  const warnings: string[] = [];
+  for (const p of plans) {
+    let doc: Record<string, unknown>;
+    try {
+      doc = JSON.parse(readFileSync(p.file, "utf8"));
+    } catch (err) {
+      throw new Error(`could not read the plan ${p.file} (make it with \`terraform show -json tfplan > ${path.basename(p.file)}\`): ${(err as Error).message}`);
+    }
+    if (!Array.isArray(doc.resource_changes)) throw new Error(`${p.file} is not a Terraform plan in JSON (expected resource_changes; make it with \`terraform show -json tfplan\`)`);
+    const n = applyPlan(graph, doc, p.dir);
+    if (!n && doc.resource_changes.length) warnings.push(`the plan ${p.file} matched no Terraform resource in the scan${p.dir ? ` under ${p.dir}` : ""}`);
+  }
+  return warnings;
+}
+
 /** Diff two scans: the base ref's files against the working tree (or another ref). */
 export async function diffRefs(opts: {
   target: string;
@@ -72,6 +102,8 @@ export async function diffRefs(opts: {
   head?: string;
   collectors?: string[];
   collectorOptions: CollectorOptions;
+  /** Terraform plans for the head version. */
+  plans?: PlanArg[];
 }): Promise<{ before: FlowGraph; after: FlowGraph; report: ChangeReport }> {
   const root = repoRoot(opts.target);
   const sub = path.relative(root, path.resolve(opts.target));
@@ -86,6 +118,7 @@ export async function diffRefs(opts: {
     };
     const before = await at(base);
     const after = await at(opts.head);
+    if (opts.plans?.length) for (const w of applyPlans(after, opts.plans)) opts.collectorOptions.log?.warn(w);
     const report = describeChanges(before, after, { base: shortRef(root, base), head: opts.head ? shortRef(root, opts.head) : "working tree" });
     return { before, after, report };
   } finally {

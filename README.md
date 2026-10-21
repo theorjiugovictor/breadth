@@ -57,7 +57,7 @@ Then switch the top bar to **Trace**, pick an execution and press play (or use �
 npm run demo        # builds the demo graphs and serves the shop example
 ```
 
-`examples/shop` is a small shop with four services: a TypeScript gateway (Express), orders (Python/FastAPI), payments (Python/Flask) and notifier (TypeScript, Kafka consumer). It also includes Postgres, Kafka, a Terraform plan, Kubernetes manifests and two recorded checkouts (one paid, one declined) in [`examples/shop/traces/checkout.otlp.json`](examples/shop/traces/checkout.otlp.json).
+`examples/shop` is a small shop with four services: a TypeScript gateway (Express), orders (Python/FastAPI), payments (Python/Flask) and notifier (TypeScript, Kafka consumer). It also includes Postgres, Kafka, the Terraform for its AWS platform, Kubernetes manifests and two recorded checkouts (one paid, one declined) in [`examples/shop/traces/checkout.otlp.json`](examples/shop/traces/checkout.otlp.json).
 
 After the merge, each service is a single node across all layers:
 
@@ -79,11 +79,11 @@ breadth scans both versions (the base is read with `git archive`, so your workin
 
 | Severity | Examples |
 | --- | --- |
-| High | a call to a check removed (`auth`, `verify`, `risk`, `limit`, …), new writes to a datastore, new external API calls, a new loop calling something that does I/O, a changed signature with callers, new or removed endpoints and services, a removed function that unchanged code still calls |
-| Medium | new reads, new publishes and consumers, calls between services, removed call paths, shared state modified |
-| Low | new packages, new findings of low severity |
+| High | a call to a check removed (`auth`, `verify`, `risk`, `limit`, …), new writes to a datastore, new external API calls, a new loop calling something that does I/O, a changed signature with callers, new or removed endpoints and services, a removed function that unchanged code still calls. Infrastructure: something newly reachable from the internet (a database port, SSH), a store made public, encryption at rest or deletion protection turned off, a role granted `*` or `s3:*` on everything, new write access through IAM, a datastore removed, renamed or (with a plan) replaced |
+| Medium | new reads, new publishes and consumers, calls between services, removed call paths, shared state modified. Infrastructure: new firewall paths between workloads, new read access through IAM, changed sizes and versions (`instance_class db.t4g.medium → db.r6g.large`) |
+| Low | new packages, new findings of low severity, new IAM attachments, routes and other plumbing |
 
-New insights (an N+1 query, an unhandled external call) are listed as changes too. The output is a terminal summary, a PR-ready markdown comment with a Mermaid picture (`--markdown`), JSON (`--json`), or a diff graph (`-o`). In the canvas, a diff graph opens on a **Changes** tab: new nodes are green, removed ones red and dashed, edited ones amber, and clicking a change shows it in place. The [live demo](https://theorjiugovictor.github.io/noodles/app/?graph=graphs/shop-pr.json) has one: an agent-written "bulk refunds" PR that also quietly drops the fraud check.
+New insights (an N+1 query, an unhandled external call) are listed as changes too. The output is a terminal summary, a PR-ready markdown comment with a Mermaid picture (`--markdown`), JSON (`--json`), or a diff graph (`-o`). In the canvas, a diff graph opens on a **Changes** tab: new nodes are green, removed ones red and dashed, edited ones amber, and clicking a change shows it in place. The [live demo](https://theorjiugovictor.github.io/noodles/app/?graph=graphs/shop-pr.json) has one: an agent-written "bulk refunds" PR that also quietly drops the fraud check, grants itself `s3:*` on everything and opens Postgres to the internet.
 
 ### In GitHub Actions
 
@@ -108,6 +108,32 @@ jobs:
 ```
 
 The action posts one comment per pull request and updates it on every push, writes the same summary to the job page, and uploads the diff graph as an artifact. Pull requests from forks get a read-only token, so for those the summary is on the job page only.
+
+### Terraform
+
+breadth reads `.tf` files directly, so a Terraform pull request gets the same comment with no extra setup:
+
+> - 🔴 postgresql is now reachable from the internet (tcp/5432): PostgreSQL (5432)
+> - 🔴 shop-payments is now allowed s3:* on *
+> - 🔴 payments can now write to shop-refund-receipts (IAM: s3:*)
+> - 🔴 encryption at rest is turned off for orders (aws_db_instance)
+> - 🟠 orders (aws_db_instance): instance_class db.t4g.medium → db.r6g.large
+
+The configuration alone does not say what an apply will *do* to existing resources. A rename or an engine change can mean a database is destroyed and recreated. To get that too, make a plan in the workflow and pass it in:
+
+```yaml
+      - uses: hashicorp/setup-terraform@v3
+      - run: |
+          terraform -chdir=infra/prod init -input=false
+          terraform -chdir=infra/prod plan -input=false -out=tfplan
+          terraform -chdir=infra/prod show -json tfplan > "$RUNNER_TEMP/prod.plan.json"
+      - uses: theorjiugovictor/noodles@main
+        with:
+          terraform-plan: |
+            infra/prod=${{ runner.temp }}/prod.plan.json
+```
+
+The comment then says `applying the plan replaces orders-db because engine changed: the data in it is lost unless restored from a backup`. On the command line this is `breadth diff --plan infra/prod=plan.json` (also `breadth scan --plan`). Leave out the `dir=` and breadth matches the plan to the root module it fits best. A `terraform show -json` plan saved in the repository next to the `.tf` files is picked up on its own.
 
 ## Live mode: watch a coding agent
 
@@ -277,6 +303,10 @@ When a graph is a graph, many problems stop hiding in code and become shapes. br
 | `dead-code` | redundancy | Functions nothing calls (entry points, framework hooks, callbacks and overrides excluded; public ones are low confidence) | no, traces add evidence |
 | `duplicate-logic` | redundancy | Functions with identical or nearly identical syntax structure (names and literals ignored; MinHash over the tree) | no |
 | `orphan-infra` | redundancy | Provisioned datastores and queues nothing reads, writes or sends traffic to | no |
+| `internet-exposed` | risk | Firewall / security group rules that let any address reach a database, a remote shell, an admin port or anything that is not a load balancer | no |
+| `public-data` | risk | Public S3 buckets (ACL or bucket policy), publicly accessible databases, GCS buckets shared with `allUsers`, public Azure containers | no |
+| `unencrypted-storage` | risk | Databases, volumes and file systems without encryption at rest | no |
+| `broad-iam` | risk | IAM roles allowed `*`, `service:*` on every resource, or `NotAction` | no |
 | `race-risk` | risk | Shared state with several writers (module globals; databases written by several services) | no |
 | `data-exposure` | risk | Personal or secret-looking fields (by name and value shape) sent to external APIs | yes |
 | `contract-drift` | risk | Observed values whose type contradicts the declared parameter or return type | yes |
@@ -365,11 +395,24 @@ Conventions:
 |---|---|---|
 | `code` | ✅ | Python, TypeScript, JavaScript (tree-sitter, WASM, no native build). Modules, classes, functions, params as inputs, return types as outputs, call edges (imports, re-exports, `self`/`this`, typed locals, attributes), loops, recursion, globals, DB/HTTP/queue clients, HTTP routes |
 | `otel` | ✅ | OTLP JSON traces: services, endpoints, call edges with protocols, datastores, topics, external APIs, one replayable execution per trace |
-| `infra` | ✅ | Terraform/OpenTofu `show -json` (state or plan) and raw `.tfstate`; Kubernetes YAML (workloads, Services, Ingress, ConfigMaps/Secrets by key only, PVCs, NetworkPolicies) |
+| `infra` | ✅ | Terraform/OpenTofu configuration (`.tf`, `.tofu`, `terraform.tfvars`), `show -json` plans and state, and raw `.tfstate`; Kubernetes YAML (workloads, Services, Ingress, ConfigMaps/Secrets by key only, PVCs, NetworkPolicies). [More below](#terraform-and-opentofu) |
 | `netflow` | stub | VPC flow logs, service mesh: [spec](collectors/src/netflow/README.md) |
 | `messaging` | stub | Kafka, SQS/SNS, RabbitMQ, AsyncAPI: [spec](collectors/src/messaging/README.md) |
 | `cicd` | stub | GitHub Actions, GitLab CI, Argo CD: [spec](collectors/src/cicd/README.md) |
 | `org` | stub | CODEOWNERS, Backstage: [spec](collectors/src/org/README.md) |
+
+### Terraform and OpenTofu
+
+The `infra` collector reads `.tf` source with its own HCL parser. It needs no `terraform init`, no providers and no credentials, and it also runs in the browser.
+
+- **Root modules.** Every folder of `.tf` files that no other folder calls as a module is a root (`envs/prod`, `envs/staging`). Their node ids carry the folder: `tf:envs/prod/aws_db_instance.main`. Local modules (`source = "./modules/db"`) are followed, with their inputs wired through. Registry and git modules become a module node without contents.
+- **Values.** Literals, variable defaults, `terraform.tfvars` / `*.auto.tfvars`, locals, string templates, conditionals, `for` expressions and the common functions are evaluated, so `"${local.name}-orders"` shows up as `shop-orders`. Whatever only an apply knows (ids, ARNs, values from `-var-file`) stays unknown. Resources with `count = 0` or an empty `for_each` are left out.
+- **Edges.** References between resources, including through module outputs, become `depends_on` edges. Load balancer listeners and target groups become traffic. Security group rules, `aws_vpc_security_group_ingress_rule`, GCP firewalls (by target tag) and Azure network security groups become `network` edges between the workloads behind them, or from the `Internet` node.
+- **IAM.** Role policies (inline, attached, `aws_iam_policy_document`, `jsonencode`, and AWS managed policies such as `AdministratorAccess`) become `read`, `write` or `event` edges. They run from the workload that assumes the role: a Lambda function, an ECS service (its task role, not the execution role), an EC2 instance through its instance profile, or a Kubernetes Deployment through EKS Pod Identity or IRSA when its manifests are scanned too.
+- **Security posture.** Public stores (S3 ACLs and bucket policies, unless a public access block overrides them; `publicly_accessible` databases; GCS `allUsers`; public Azure containers) and storage without encryption at rest are marked on the node. The `internet-exposed`, `public-data`, `unencrypted-storage` and `broad-iam` [insights](#insights) report them.
+- **Plans.** With a `terraform show -json` plan, each resource is marked with what applying does to it (`create`, `update`, `replace`, `delete`, and the attributes that force a replacement).
+
+JSON-syntax configuration (`.tf.json`) and `-var-file` values are not read. Resources whose names come from `for_each` keys keep their address as the name.
 
 ## Write a collector
 
@@ -445,11 +488,11 @@ To capture your own graph, serve it and pass the URL: `node scripts/screenshots.
 `app/?repo=owner/repo` (or the box on the landing page) scans a public GitHub repository without a server:
 
 1. One GitHub API request lists the files (`git/trees/HEAD?recursive=1`). Anonymous requests are limited to 60 per hour per visitor.
-2. Python, TypeScript and JavaScript files are downloaded from `raw.githubusercontent.com` (not counted against that limit). Repositories with more than 1,200 code files are sampled, application code first, with a notice.
-3. A Web Worker parses them with tree-sitter (WebAssembly), builds the graph and runs the insights.
+2. Python, TypeScript, JavaScript and Terraform files are downloaded from `raw.githubusercontent.com` (not counted against that limit). Repositories with more than 1,200 code files are sampled, application code first, with a notice.
+3. A Web Worker parses them with tree-sitter (WebAssembly) and the Terraform reader, builds the graph and runs the insights.
 4. The Source tab shows the lines straight from GitHub, with a link to the file.
 
-`owner/repo`, GitHub URLs, `.git` URLs and `/tree/<branch>/<path>` (to scan a sub-folder) all work. Private repositories, traces and infrastructure need the CLI.
+`owner/repo`, GitHub URLs, `.git` URLs and `/tree/<branch>/<path>` (to scan a sub-folder) all work. Private repositories, traces, plans and Kubernetes manifests need the CLI.
 
 ## Publishing the site
 

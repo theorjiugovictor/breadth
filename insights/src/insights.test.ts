@@ -61,7 +61,7 @@ describe("insights on the shop demo", () => {
 
   it("finds unused infrastructure but not the database or Kafka", () => {
     const ids = find("orphan-infra").map((i) => i.nodes[0]).sort();
-    expect(ids).toEqual(["tf:aws_s3_bucket.invoices_legacy", "tf:aws_sqs_queue.invoice_jobs"]);
+    expect(ids).toEqual(["tf:infra/terraform/aws_s3_bucket.invoices_legacy", "tf:infra/terraform/aws_sqs_queue.invoice_jobs"]);
   });
 
   it("finds dead code but not entry points, callbacks or code reached at runtime", () => {

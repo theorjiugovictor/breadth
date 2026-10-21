@@ -1,5 +1,5 @@
 import ignore from "ignore";
-import { DEFAULT_EXCLUDES, langForFile, SERVICE_MANIFESTS } from "@breadth/collectors/browser";
+import { DEFAULT_EXCLUDES, langForFile, SERVICE_MANIFESTS, TF_FILE, TFVARS_FILE } from "@breadth/collectors/browser";
 
 export interface RepoRef {
   owner: string;
@@ -36,6 +36,8 @@ interface TreeEntry {
 export interface RepoListing {
   ref: string;
   code: { path: string; size: number }[];
+  /** Terraform / OpenTofu configuration (.tf, .tofu, terraform.tfvars). */
+  terraform: { path: string; size: number }[];
   others: string[];
   skipped: number;
   truncated: boolean;
@@ -65,12 +67,15 @@ export async function listRepo(r: RepoRef, signal?: AbortSignal): Promise<RepoLi
   const ig = ignore().add(DEFAULT_EXCLUDES);
   const prefix = r.subpath ? `${r.subpath.replace(/\/$/, "")}/` : "";
   const code: { path: string; size: number }[] = [];
+  const terraform: { path: string; size: number }[] = [];
   const others: string[] = [];
   for (const e of body.tree) {
     if (e.type !== "blob" || !e.path.startsWith(prefix)) continue;
     if (ig.ignores(e.path)) continue;
     if (langForFile(e.path)) {
       if ((e.size ?? 0) <= MAX_BYTES) code.push({ path: e.path, size: e.size ?? 0 });
+    } else if (TF_FILE.test(e.path) || TFVARS_FILE.test(e.path)) {
+      if ((e.size ?? 0) <= MAX_BYTES && terraform.length < MAX_FILES) terraform.push({ path: e.path, size: e.size ?? 0 });
     } else if (SERVICE_MANIFESTS.has(e.path.split("/").pop()!)) others.push(e.path);
   }
   // Large repos: keep application code first (not tests or docs), shallow before deep, small before big.
@@ -80,7 +85,7 @@ export async function listRepo(r: RepoRef, signal?: AbortSignal): Promise<RepoLi
     skipped = code.length - MAX_FILES;
     code.length = MAX_FILES;
   }
-  return { ref: body.sha ?? ref, code, others, skipped, truncated: body.truncated };
+  return { ref: body.sha ?? ref, code, terraform, others, skipped, truncated: body.truncated };
 }
 
 /** Download files from raw.githubusercontent.com (not counted against the API limit). */
