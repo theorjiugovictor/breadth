@@ -14,7 +14,8 @@ import { LOCAL_HEADER, serve } from "./serve.js";
 import { hookPayload, hookReply } from "./hook.js";
 import { integrations, renderConfig, writeConfig } from "./connect.js";
 import { runMcp } from "./mcp.js";
-import { applyPlans, diffRefs, loadGraph, parsePlanArgs, renderMarkdown, renderText } from "./diff.js";
+import { applyPlans, diffRefs, loadGraph, parsePlanArgs, renderMarkdown, renderText, repoRoot, scan as scanForDiff, shortRef } from "./diff.js";
+import { behaviourUnits, computeDebt, LEDGER_FILE, loadLedger, markReviewed, saveLedger, unitsInDiff, type Unit } from "./ledger.js";
 import { checkIntent } from "./intent.js";
 
 const VERSION = "0.1.0";
@@ -25,6 +26,8 @@ Usage:
   breadth scan <path> [--collector code,infra] [-o flowgraph.json] [--config file] [--exclude glob]... [--plan [dir=]plan.json]
   breadth diff [path] [--base ref] [--head ref] [-o diff.json] [--markdown pr.md] [--fail-on high] [--plan [dir=]plan.json] [--intent "what was asked"]   what a change does, in behaviour
   breadth diff before.json after.json
+  breadth review [path] --changed | --from diff.json | --nodes ids | --all [--by name]   record what you reviewed (.breadth/ledger.json)
+  breadth debt [path] [--record] [--json] [--fail-above 30]   comprehension debt: behaviour nobody has reviewed, per service
   breadth import-traces <otlp.json>... [--merge flowgraph.json] [-o out.json]
   breadth serve [flowgraph.json] [--port 4321] [--host 127.0.0.1] [--no-open]
   breadth watch [path] [--port 4321] [--traces otlp.json] [-o flowgraph.json] [--llm]   live canvas while you (or an agent) code
@@ -473,7 +476,18 @@ async function cmdDiff(args: string[]) {
       }
     }
   }
-  const md = renderMarkdown(report, before, after, { link: values.link });
+  // Comprehension ledger in the repository: how much of this change nobody has reviewed yet.
+  let comprehension: string | undefined;
+  const ledgerFile = positionals.length === 2 ? undefined : ledgerPath(path.resolve(positionals[0] ?? "."));
+  if (ledgerFile && existsSync(ledgerFile)) {
+    const ledger = loadLedger(ledgerFile);
+    const afterUnits = behaviourUnits(after);
+    const touched = unitsInDiff(afterUnits, report, after).filter((u) => ledger.reviewed[u.id]?.fp !== u.fp);
+    const was = computeDebt(behaviourUnits(before), ledger).debt;
+    const now = computeDebt(afterUnits, ledger).debt;
+    comprehension = `🧠 ${touched.length} behaviour${touched.length === 1 ? "" : "s"} in this change ${touched.length === 1 ? "is" : "are"} not in the comprehension ledger yet. Unreviewed behaviour overall: ${was}% → ${now}%. After reviewing, record it with \`breadth review --changed\`.`;
+  }
+  const md = renderMarkdown(report, before, after, { link: values.link, comprehension });
   if (values.out) {
     writeFileSync(values.out, JSON.stringify(diffGraph(before, after, report)) + "\n");
     process.stderr.write(`breadth: wrote the diff graph to ${values.out} (open it with \`breadth serve ${values.out}\`)\n`);
@@ -490,6 +504,116 @@ async function cmdDiff(args: string[]) {
     if (limit === undefined) throw new Error("--fail-on takes high, medium or low");
     if (report.changes.some((c) => rank[c.severity] <= limit)) process.exitCode = 2;
   }
+}
+
+/** The ledger file for a path: <repo root>/.breadth/ledger.json, or next to the path outside git. */
+function ledgerPath(target: string, explicit?: string): string {
+  if (explicit) return path.resolve(explicit);
+  try {
+    return path.join(repoRoot(target), LEDGER_FILE);
+  } catch {
+    return path.join(target, LEDGER_FILE);
+  }
+}
+
+async function scanTarget(target: string, values: { config?: string; collector?: string; exclude?: string[] }): Promise<FlowGraph> {
+  const config = loadConfig(target, values.config);
+  return scanForDiff(target, values.collector?.split(",").map((x) => x.trim()).filter(Boolean) ?? config.collectors, {
+    exclude: [...(config.exclude ?? []), ...(values.exclude ?? [])],
+    include: config.include,
+    settings: config.settings,
+  });
+}
+
+async function cmdReview(args: string[]) {
+  const { values, positionals } = parseArgs({
+    args,
+    allowPositionals: true,
+    options: {
+      all: { type: "boolean" },
+      changed: { type: "boolean" },
+      base: { type: "string" },
+      from: { type: "string" },
+      nodes: { type: "string" },
+      by: { type: "string" },
+      ledger: { type: "string" },
+      config: { type: "string" },
+      collector: { type: "string", short: "c" },
+      exclude: { type: "string", multiple: true },
+    },
+  });
+  const target = path.resolve(positionals[0] ?? ".");
+  const file = ledgerPath(target, values.ledger);
+  const ledger = loadLedger(file);
+  if (!values.all && !values.changed && !values.from && !values.nodes) throw new Error("say what was reviewed: --changed (this branch's changes), --from diff.json, --nodes id,id or --all (adopt everything as reviewed)");
+  process.stderr.write(`breadth: scanning ${target}\n`);
+  const graph = await scanTarget(target, values);
+  const units = behaviourUnits(graph);
+  let picked: Unit[];
+  if (values.all) picked = [...units.values()];
+  else if (values.nodes) picked = values.nodes.split(",").map((id) => units.get(id.trim())).filter((u): u is Unit => !!u);
+  else if (values.from) {
+    const d = loadGraph(values.from);
+    if (!d.diff) throw new Error(`${values.from} is not a diff graph (make one with breadth diff -o)`);
+    picked = unitsInDiff(units, d.diff, d);
+  } else {
+    const config = loadConfig(target, values.config);
+    const { after, report } = await diffRefs({ target, base: values.base, collectors: config.collectors, collectorOptions: { exclude: config.exclude, include: config.include, settings: config.settings } });
+    picked = unitsInDiff(behaviourUnits(after), report, after);
+  }
+  const n = markReviewed(ledger, picked, values.by ?? process.env.GIT_AUTHOR_NAME ?? process.env.USER);
+  saveLedger(file, ledger);
+  const d = computeDebt(units, ledger);
+  process.stderr.write(`breadth: ${n} behaviour${n === 1 ? "" : "s"} marked as reviewed (${picked.length - n} already were). Unreviewed: ${d.unreviewed} of ${d.units} (${d.debt}% weighted). Ledger: ${path.relative(process.cwd(), file)}\n`);
+}
+
+async function cmdDebt(args: string[]) {
+  const { values, positionals } = parseArgs({
+    args,
+    allowPositionals: true,
+    options: {
+      json: { type: "boolean" },
+      record: { type: "boolean" },
+      top: { type: "string", default: "10" },
+      "fail-above": { type: "string" },
+      ledger: { type: "string" },
+      config: { type: "string" },
+      collector: { type: "string", short: "c" },
+      exclude: { type: "string", multiple: true },
+    },
+  });
+  const target = path.resolve(positionals[0] ?? ".");
+  const file = ledgerPath(target, values.ledger);
+  const ledger = loadLedger(file);
+  const graph = positionals[0]?.endsWith(".json") ? loadGraph(positionals[0]) : await scanTarget(target, values);
+  const d = computeDebt(behaviourUnits(graph), ledger);
+  const last = ledger.history[ledger.history.length - 1];
+  if (values.record) {
+    let ref: string | undefined;
+    try {
+      ref = shortRef(repoRoot(target), "HEAD");
+    } catch {
+      /* not a git checkout */
+    }
+    ledger.history.push({ at: new Date().toISOString(), ref, units: d.units, unreviewed: d.unreviewed, debt: d.debt });
+    saveLedger(file, ledger);
+  }
+  if (values.json) {
+    process.stdout.write(JSON.stringify({ ...d, open: d.open.map((u) => ({ id: u.id, name: u.node.name, service: u.service, weight: u.weight, file: u.node.source?.file, line: u.node.source?.line })), previous: last }, null, 2) + "\n");
+  } else {
+    const trend = last ? ` (${d.debt >= last.debt ? "+" : ""}${Math.round((d.debt - last.debt) * 10) / 10} since ${last.ref ?? last.at.slice(0, 10)})` : "";
+    const out = [`Comprehension debt: ${d.debt}% of behaviour, weighted by risk, has not been reviewed${trend}`, `${d.unreviewed} of ${d.units} behaviours unreviewed${Object.keys(ledger.reviewed).length ? "" : " (the ledger is empty: start with \`breadth review --all\` to adopt today's code)"}`, ""];
+    const w = Math.max(8, ...d.byService.map((s) => s.service.length));
+    out.push(`  ${"service".padEnd(w)}  unreviewed   debt`);
+    for (const s of d.byService) out.push(`  ${s.service.padEnd(w)}  ${`${s.unreviewed}/${s.units}`.padStart(10)}  ${`${s.debt}%`.padStart(5)}`);
+    const top = d.open.slice(0, Number(values.top));
+    if (top.length) {
+      out.push("", "Riskiest unreviewed behaviour:");
+      for (const u of top) out.push(`  ${"●".repeat(u.weight).padEnd(3)} ${u.node.name}${u.node.source?.file ? `  ${u.node.source.file}${u.node.source.line ? `:${u.node.source.line}` : ""}` : ""}`);
+    }
+    process.stdout.write(out.join("\n") + "\n");
+  }
+  if (values["fail-above"] !== undefined && d.debt > Number(values["fail-above"])) process.exitCode = 2;
 }
 
 async function cmdInsights(args: string[]) {
@@ -569,6 +693,10 @@ async function main(argv: string[]) {
       return cmdWatch(rest);
     case "diff":
       return cmdDiff(rest);
+    case "review":
+      return cmdReview(rest);
+    case "debt":
+      return cmdDebt(rest);
     case "hook":
       return cmdHook(rest);
     case "connect":

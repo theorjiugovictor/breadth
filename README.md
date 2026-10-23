@@ -161,6 +161,56 @@ The configuration alone does not say what an apply will *do* to existing resourc
 
 The comment then says `applying the plan replaces orders-db because engine changed: the data in it is lost unless restored from a backup`. On the command line this is `breadth diff --plan infra/prod=plan.json` (also `breadth scan --plan`). Leave out the `dir=` and breadth matches the plan to the root module it fits best. A `terraform show -json` plan saved in the repository next to the `.tf` files is picked up on its own.
 
+## Comprehension debt
+
+Code that works but nobody has looked at is the debt breadth exists for, so it can measure it. A **behaviour unit** is a function, an endpoint or a significant infrastructure resource. Its fingerprint covers what it does: signature, calls, reads, writes, publishes, settings and exposure. Line numbers and formatting don't count. `breadth review` records the fingerprints someone reviewed in `.breadth/ledger.json`. Commit that file so the team shares it. When behaviour changes, its fingerprint changes and it counts as unreviewed again.
+
+```sh
+breadth review --all                 # once: adopt today's code as known
+breadth debt                         # unreviewed behaviour per service, riskiest first
+breadth review --changed --by alice  # after reviewing a branch: record what it changed
+breadth debt --record                # add a snapshot to the history (shows the trend)
+breadth debt --fail-above 30         # exit 2 in CI above 30%
+```
+
+```
+Comprehension debt: 28.8% of behaviour, weighted by risk, has not been reviewed (+28.8 since 4f2c1a9)
+16 of 67 behaviours unreviewed
+
+  service         unreviewed   debt
+  payments              6/10  63.2%
+  orders                6/22  31.8%
+  infrastructure        4/24    25%
+
+Riskiest unreviewed behaviour:
+  ●●● refund  services/orders/app/payments.py:14
+  ●●● mark_refunded  services/orders/app/repository.py:50
+```
+
+Units that do I/O, hold data or widen access weigh three times plain logic. When the repository has a ledger, the PR comment adds a line such as `🧠 15 behaviours in this change are not in the comprehension ledger yet. Unreviewed behaviour overall: 0% → 28.8%`.
+
+To record reviews automatically, run the action in `review` mode when a pull request is approved. It records the branch's changes as reviewed by the approver and pushes the ledger to the branch:
+
+```yaml
+on:
+  pull_request_review:
+    types: [submitted]
+jobs:
+  record:
+    if: github.event.review.state == 'approved'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+      - uses: theorjiugovictor/noodles@main
+        with:
+          mode: review
+```
+
 ## Live mode: watch a coding agent
 
 ```sh

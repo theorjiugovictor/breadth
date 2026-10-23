@@ -198,7 +198,7 @@ export function mermaid(report: ChangeReport, before: FlowGraph, after: FlowGrap
 }
 
 /** The PR comment: behaviour first, structure second, details folded away. */
-export function renderMarkdown(report: ChangeReport, before: FlowGraph, after: FlowGraph, opts: { title?: string; link?: string } = {}): string {
+export function renderMarkdown(report: ChangeReport, before: FlowGraph, after: FlowGraph, opts: { title?: string; link?: string; comprehension?: string } = {}): string {
   const c = report.counts;
   const attention = report.changes.filter((x) => x.severity === "high");
   const other = report.changes.filter((x) => x.severity !== "high");
@@ -240,6 +240,7 @@ export function renderMarkdown(report: ChangeReport, before: FlowGraph, after: F
     const details = [...list("Added", report.added), ...list("Removed", report.removed), ...list("Changed", report.changed)];
     if (details.length) out.push("<details><summary>All structural changes</summary>", "", ...details, "</details>", "");
   }
+  if (opts.comprehension) out.push(opts.comprehension, "");
   out.push(
     `<sub>breadth compared ${report.base ?? "base"} → ${report.head ?? "head"} by scanning both versions. It maps structure and data flow; dynamic calls and runtime-only behaviour are not visible.${opts.link ? ` [Open the map](${opts.link})` : ""}</sub>`,
   );
