@@ -369,8 +369,42 @@ export function terraformGraph(resources: TfResource[], sourceFile: string, root
         settings: settingsOf(v),
         plan_action: r.action,
         plan_reason: r.reason,
+        aws_ref: awsRef(r),
       }),
     });
+  }
+
+  // Environment variables of Lambda functions and ECS tasks: values, and the resources they name.
+  const envOf = (r: TfResource): Record<string, unknown> | undefined => {
+    if (r.type === "aws_lambda_function") return ((r.values.environment as Json[] | undefined)?.[0]?.variables as Json | undefined) ?? undefined;
+    if (r.type === "aws_ecs_task_definition" && typeof r.values.container_definitions === "string") {
+      try {
+        const defs = JSON.parse(r.values.container_definitions) as Json[];
+        return Object.fromEntries(defs.flatMap((d) => ((d.environment as Json[] | undefined) ?? []).map((e) => [String(e.name), e.value])));
+      } catch {
+        return undefined;
+      }
+    }
+    return undefined;
+  };
+  for (const r of resources) {
+    const vars = envOf(r);
+    if (!vars) continue;
+    const env: Record<string, string> = {};
+    const envRefs: Record<string, string> = {};
+    for (const [k, v] of Object.entries(vars)) {
+      if (isKnown(v)) env[k] = v;
+      else if (typeof v === "string" && markerRef(v)) {
+        const a = resolveRef(v);
+        if (a && nodes.has(idOf(a))) envRefs[k] = idOf(a);
+      }
+    }
+    // An ECS service runs its task definition's environment.
+    const holders = r.type === "aws_ecs_task_definition" ? [r.address, ...resources.filter((x) => x.type === "aws_ecs_service" && resolveValue(x.values.task_definition) === r.address).map((x) => x.address)] : [r.address];
+    for (const h of holders) {
+      const n = nodes.get(idOf(h));
+      if (n) n.metadata = compact({ ...n.metadata, env: Object.keys(env).length ? env : undefined, env_refs: Object.keys(envRefs).length ? envRefs : undefined });
+    }
   }
 
   const addEdge = (kind: EdgeKind, from: string, to: string, extra: Partial<FlowEdge> = {}) => {
@@ -478,6 +512,23 @@ export function terraformGraph(resources: TfResource[], sourceFile: string, root
   iamEdges(resources, { resolveValue, resolveRef, byAddress, idOf, nodes, edges });
 
   return { nodes: [...nodes.values()], edges: [...edges.values()] };
+}
+
+/** "s3:shop-receipts": how code names the resource (see code/cloud.ts), to match the two. */
+const AWS_REF: Record<string, [string, string]> = {
+  aws_s3_bucket: ["s3", "bucket"],
+  aws_dynamodb_table: ["dynamodb", "name"],
+  aws_sqs_queue: ["sqs", "name"],
+  aws_sns_topic: ["sns", "name"],
+  aws_secretsmanager_secret: ["secretsmanager", "name"],
+  aws_lambda_function: ["lambda", "function_name"],
+  aws_kinesis_stream: ["kinesis", "name"],
+};
+
+function awsRef(r: TfResource): string | undefined {
+  const m = AWS_REF[r.type];
+  const name = m && r.values[m[1]];
+  return m && isKnown(name) ? `${m[0]}:${name}` : undefined;
 }
 
 /* ---------------- IAM: who may read or write what ---------------- */
@@ -667,6 +718,10 @@ function iamEdges(resources: TfResource[], ctx: IamCtx) {
         }
       }
     }
+    for (const w of workloads) {
+      const wn = ctx.nodes.get(ctx.idOf(w));
+      if (wn) wn.metadata = { ...wn.metadata, iam_roles: [...new Set([...((wn.metadata?.iam_roles as string[] | undefined) ?? []), roleNode.id])] };
+    }
     roleNode.metadata = compact({
       ...roleNode.metadata,
       iam_broad: broad.size ? [...broad].sort() : undefined,
@@ -725,7 +780,9 @@ export function linkIamToKubernetes(graph: { nodes: FlowNode[]; edges: FlowEdge[
   graph.edges = [...out.values()];
   for (const n of graph.nodes) {
     const ids = workloads.get(n.id);
-    if (ids) n.metadata = { ...n.metadata, used_by: ids.map((id) => graph.nodes.find((x) => x.id === id)?.name ?? id).sort() };
+    if (!ids) continue;
+    n.metadata = { ...n.metadata, used_by: ids.map((id) => graph.nodes.find((x) => x.id === id)?.name ?? id).sort() };
+    for (const w of graph.nodes.filter((x) => ids.includes(x.id))) w.metadata = { ...w.metadata, iam_roles: [...new Set([...((w.metadata?.iam_roles as string[] | undefined) ?? []), n.id])] };
   }
 }
 

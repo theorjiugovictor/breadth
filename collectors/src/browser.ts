@@ -3,6 +3,7 @@ export { scanSources, parseSource, type SourceFile, type ScanOptions } from "./c
 export { setWasmLocator, langForFile, GRAMMAR_FILES, type WasmLocator } from "./code/parser.js";
 export { SERVICE_MANIFESTS } from "./code/build.js";
 export { DEFAULT_EXCLUDES } from "./core/excludes.js";
+export { linkCodeToInfra } from "./link.js";
 export { TF_FILE, TFVARS_FILE, ANY_TFVARS_FILE } from "./infra/terraform-hcl.js";
 
 import { mergeGraphs, SCHEMA_VERSION, type FlowGraph } from "@breadth/schema";

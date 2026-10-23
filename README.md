@@ -307,6 +307,7 @@ When a graph is a graph, many problems stop hiding in code and become shapes. br
 | `public-data` | risk | Public S3 buckets (ACL or bucket policy), publicly accessible databases, GCS buckets shared with `allUsers`, public Azure containers | no |
 | `unencrypted-storage` | risk | Databases, volumes and file systems without encryption at rest | no |
 | `broad-iam` | risk | IAM roles allowed `*`, `service:*` on every resource, or `NotAction` | no |
+| `iam-usage` | risk | Code that reads or writes an S3 bucket, DynamoDB table, SQS queue, SNS topic or Kinesis stream its IAM role does not allow (AccessDenied waiting to happen), and grants the code never uses | no |
 | `race-risk` | risk | Shared state with several writers (module globals; databases written by several services) | no |
 | `data-exposure` | risk | Personal or secret-looking fields (by name and value shape) sent to external APIs | yes |
 | `contract-drift` | risk | Observed values whose type contradicts the declared parameter or return type | yes |
@@ -414,6 +415,8 @@ The `infra` collector reads `.tf` source with its own HCL parser. It needs no `t
 
 - **Instances.** A resource with a known `count` or `for_each` (up to 25 instances) becomes one node per instance, `aws_sqs_queue.jobs["emails"]`, with its own name. `dynamic` blocks expand the same way. When the keys are only known at apply time, one node stands for all of them.
 - **JSON syntax.** `.tf.json` and `.tfvars.json` are read like native syntax.
+
+- **Code to infrastructure.** AWS SDK calls in code (boto3, AWS SDK for JavaScript v2 and v3) that name their resource, such as `s3.put_object(Bucket=...)`, `new PutObjectCommand({ Bucket })` or `table.query(...)` on a `dynamodb.Table("orders")`, are matched with the Terraform resource. The name can be a literal, a constant or an environment variable. Environment variables are resolved through the service's Kubernetes Deployment (values and ConfigMaps), Lambda `environment` or ECS container definitions, including Terraform references such as `BUCKET = aws_s3_bucket.receipts.bucket`. The code's reads and writes then land on the Terraform node, so a PR comment says `store_receipt now writes to shop-refund-receipts (s3:PutObject)` and the `iam-usage` insight can check them against IAM.
 
 Two settings in `breadth.config.json` cover what a CLI flag would otherwise pass:
 

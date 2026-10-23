@@ -7,6 +7,7 @@ import { messagingCollector } from "../messaging/index.js";
 import { netflowCollector } from "../netflow/index.js";
 import { orgCollector } from "../org/index.js";
 import type { Collector, CollectorOptions } from "./types.js";
+import { linkCodeToInfra } from "../link.js";
 
 export const collectors: Collector[] = [
   codeCollector,
@@ -49,6 +50,8 @@ export async function runCollectors(target: string, names: string[] | undefined,
     graphs.push(g);
   }
   const merged = graphs.length === 1 ? graphs[0] : mergeGraphs(...graphs);
+  const linked = linkCodeToInfra(merged);
+  if (linked) options.log?.info(`linked ${linked} resource${linked === 1 ? "" : "s"} used in code to the infrastructure that defines ${linked === 1 ? "it" : "them"}`);
   assertValidGraph(merged, "merged graph");
   return merged;
 }

@@ -163,10 +163,23 @@ export function k8sGraph(objects: K8sObject[]): { nodes: FlowNode[]; edges: Flow
     if (def) addEdge("network", idOf(ing), idOf({ kind: "Service", metadata: { name: def, namespace: ns(ing) } }), { protocol: "http", label: "default" });
   }
   // Workload -> ConfigMaps / Secrets / PVCs, and env URLs pointing at other services
+  // Non-secret environment of each workload (literal values and ConfigMap data), to match the
+  // names code reads from the environment ($RECEIPTS_BUCKET) with the resources they name.
+  const configMaps = new Map(objects.filter((o) => o.kind === "ConfigMap").map((o) => [`${ns(o)}/${o.metadata.name}`, ((o as Json).data ?? {}) as Record<string, unknown>]));
   for (const w of workloads) {
     const spec = podSpec(w) ?? {};
     const refs = new Set<string>();
+    const env: Record<string, string> = {};
     for (const c of [...(spec.containers ?? []), ...(spec.initContainers ?? [])]) {
+      for (const ef of c.envFrom ?? []) {
+        for (const [k, v] of Object.entries(configMaps.get(`${ns(w)}/${ef.configMapRef?.name}`) ?? {})) if (typeof v === "string") env[`${ef.prefix ?? ""}${k}`] = v;
+      }
+      for (const e of c.env ?? []) {
+        if (typeof e.value === "string") env[e.name] = e.value;
+        const key = e.valueFrom?.configMapKeyRef;
+        const v = key && configMaps.get(`${ns(w)}/${key.name}`)?.[key.key];
+        if (typeof v === "string") env[e.name] = v;
+      }
       for (const ef of c.envFrom ?? []) {
         if (ef.configMapRef?.name) refs.add(`ConfigMap/${ef.configMapRef.name}`);
         if (ef.secretRef?.name) refs.add(`Secret/${ef.secretRef.name}`);
@@ -192,6 +205,8 @@ export function k8sGraph(objects: K8sObject[]): { nodes: FlowNode[]; edges: Flow
       const [kind, name] = r.split("/");
       addEdge("depends_on", idOf(w), idOf({ kind, metadata: { name, namespace: ns(w) } }));
     }
+    const node = nodes.get(idOf(w));
+    if (node && Object.keys(env).length) node.metadata = { ...node.metadata, env };
   }
   // NetworkPolicy ingress rules -> network edges between selected workloads
   for (const np of objects.filter((o) => o.kind === "NetworkPolicy")) {

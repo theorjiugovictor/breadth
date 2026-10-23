@@ -1,7 +1,7 @@
 import type { Node } from "web-tree-sitter";
 import type { Port } from "@breadth/schema";
 import { emptyModel, type Def, type FileModel } from "./model.js";
-import { argIdentifiers, calleeParts, fingerprint, firstLine, stringLiteral, truncate, typeParts } from "./util.js";
+import { argIdentifiers, calleeParts, collectConstants, fingerprint, firstLine, namedArgs, stringLiteral, truncate, typeParts } from "./util.js";
 
 const LOOPS = new Set([
   "for_statement",
@@ -147,6 +147,7 @@ export function extractPython(path: string, root: Node): FileModel {
               firstArg: first ? stringLiteral(first) : undefined,
               receiver: parts.length > 1 ? ctx.types.get(parts[0]) : undefined,
               argNames: argIdentifiers(args),
+              kwargs: namedArgs(args),
             });
             // obj.append(x) / obj.update(...) on a global mutates it.
             if (parts.length === 2 && tracked(parts[0], ctx) && ctx.def && MUTATORS.has(parts[1])) {
@@ -307,6 +308,7 @@ export function extractPython(path: string, root: Node): FileModel {
     else if (parent?.visibility === "internal") d.visibility = "internal";
     else d.visibility = "public";
   }
+  m.constants = collectConstants(root, "assignment", "left", "right");
   return m;
 }
 

@@ -130,3 +130,61 @@ resource "aws_iam_role_policy" "app" {
     expect(r.changes[0]).toMatchObject({ severity: "high", text: "applying the plan replaces orders because engine changed: the data in it is lost unless restored from a backup" });
   });
 });
+
+describe("IAM compared with what the code does", () => {
+  it("finds code the role does not allow, and grants the code never uses", async () => {
+    const { scanSources, linkCodeToInfra } = await import("@breadth/collectors/browser");
+    const code = await scanSources(
+      [
+        {
+          path: "api/handler.py",
+          text: `
+import os, boto3
+s3 = boto3.client("s3")
+def handler(event, context):
+    s3.put_object(Bucket=os.environ["BUCKET"], Key="k", Body=b"")
+`,
+        },
+      ],
+      { rootName: "repo", otherFiles: ["api/requirements.txt"] },
+    );
+    const infra = scanTerraformSources(
+      [
+        {
+          path: "main.tf",
+          text: `
+resource "aws_s3_bucket" "files" { bucket = "files" }
+resource "aws_sqs_queue" "jobs" { name = "jobs" }
+resource "aws_iam_role" "api" { name = "api" }
+resource "aws_lambda_function" "api" {
+  function_name = "api"
+  role          = aws_iam_role.api.arn
+  environment {
+    variables = { BUCKET = aws_s3_bucket.files.id }
+  }
+}
+resource "aws_iam_role_policy" "api" {
+  role   = aws_iam_role.api.name
+  policy = jsonencode({ Statement = [
+    { Effect = "Allow", Action = ["s3:GetObject"], Resource = "\${aws_s3_bucket.files.arn}/*" },
+    { Effect = "Allow", Action = ["sqs:SendMessage"], Resource = aws_sqs_queue.jobs.arn },
+  ] })
+}`,
+        },
+      ],
+      "repo",
+    );
+    const { mergeGraphs } = await import("@breadth/schema");
+    const g = mergeGraphs(code, infra);
+    linkCodeToInfra(g);
+    const titles = runInsights(g, { rules: ["iam-usage"] }).map((i) => `${i.severity} ${i.title}`);
+    expect(titles).toEqual(
+      expect.arrayContaining([
+        "warning api writes to files, but its IAM role does not allow it",
+        "info api may read from files, but its code never does",
+        "info api may write to jobs, but its code never does",
+      ]),
+    );
+    expect(titles).toHaveLength(3);
+  });
+});

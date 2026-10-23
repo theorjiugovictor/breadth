@@ -1,6 +1,7 @@
 import * as posix from "./posix.js";
 import { edgeId, SCHEMA_VERSION, type EdgeKind, type FlowEdge, type FlowGraph, type FlowNode, type Port } from "@breadth/schema";
 import type { CallSite, Def, FileModel, ImportBinding } from "./model.js";
+import { AWS_PACKAGES, cloudAccess, dynamoTableOf, type AwsService, type CloudAccess } from "./cloud.js";
 import {
   classifyPackage,
   CONSUME_METHODS,
@@ -11,6 +12,8 @@ import {
   sqlLabel,
   type PackageClass,
 } from "./known.js";
+
+const CLOUD_KIND: Record<AwsService, FlowNode["kind"]> = { s3: "datastore", dynamodb: "datastore", sqs: "queue", sns: "queue", kinesis: "queue", secretsmanager: "infra_resource", lambda: "external_api" };
 
 /** Files that mark a directory as a deployable unit (a service). */
 export const SERVICE_MANIFESTS = new Set([
@@ -565,11 +568,19 @@ export function buildGraph(input: BuildInput): FlowGraph {
       if (mod && "external" in mod) imported.set(mod.external, classifyPackage(mod.external, f.lang));
     }
     const fileUses = (type: PackageClass["type"]) => [...imported.entries()].filter(([, c]) => c.type === type);
+    const aws = [...imported.keys()].some((p) => AWS_PACKAGES.test(p));
+    const dynamoTable = aws ? dynamoTableOf(f) : undefined;
 
     for (const c of f.calls) {
       if (routeSites.has(c)) continue;
       const from = fromNodeId(f, c.from);
       const site = { ...c, file: f.path };
+      // AWS SDK calls that name their bucket / table / queue: a node per resource.
+      const cloud = aws ? cloudAccess(f, c, dynamoTable) : undefined;
+      if (cloud) {
+        cloudCall(cloud, from, site);
+        continue;
+      }
       const r = resolveCall(f, c);
       const last = c.parts[c.parts.length - 1];
 
@@ -593,8 +604,10 @@ export function buildGraph(input: BuildInput): FlowGraph {
             continue;
           }
           if (t.cls.type === "db") {
-            const store = storeNode(t.cls.engine);
             const mode = dbAccessMode(method, c.firstArg);
+            // boto3.client("s3") / boto3.resource(...) only make a client: no "aws" datastore until it is used.
+            if (!mode && t.cls.engine === "aws") continue;
+            const store = storeNode(t.cls.engine);
             if (mode === "write") addEdge("write", from, store, site, { protocol: t.cls.engine, label: sqlLabel(c.firstArg) });
             else if (mode === "read") addEdge("read", store, from, site, { protocol: t.cls.engine, label: sqlLabel(c.firstArg) });
             continue;
@@ -685,6 +698,25 @@ export function buildGraph(input: BuildInput): FlowGraph {
         }
       }
     }
+  }
+
+  function cloudCall(a: CloudAccess, from: string, site: { line: number; file: string; inLoop?: boolean; conditional?: boolean }) {
+    const kind = CLOUD_KIND[a.service];
+    const key = a.name ?? (a.env ? `env:${a.env}` : "dynamic");
+    const id = `cloud:aws:${a.service}:${key}`;
+    addNode({
+      id,
+      name: a.name ?? (a.env ? `$${a.env}` : `${a.service} (name not known)`),
+      kind,
+      layer: kind === "queue" ? "messaging" : "infra",
+      description: `AWS ${a.service} ${a.name ? `"${a.name}"` : a.env ? `named by $${a.env}` : "whose name is computed at runtime"}, used by this code`,
+      metadata: { cloud: "aws", service: a.service, resource: a.name, env: a.env },
+    });
+    const extra = { protocol: a.service, label: a.action };
+    if (a.mode === "call") addEdge("call", from, id, site, extra);
+    else if (kind === "queue") a.mode === "write" ? addEdge("event", from, id, site, extra) : addEdge("event", id, from, site, extra);
+    else if (a.mode === "write") addEdge("write", from, id, site, extra);
+    else addEdge("read", id, from, site, extra);
   }
 
   function queueCall(f: FileModel, c: CallSite, system: string, method: string, from: string, site: { line: number; file: string; inLoop?: boolean; conditional?: boolean }) {

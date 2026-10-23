@@ -1,7 +1,7 @@
 import type { Node } from "web-tree-sitter";
 import type { Port } from "@breadth/schema";
 import { emptyModel, type Def, type FileModel, type Lang } from "./model.js";
-import { argIdentifiers, calleeParts, fingerprint, firstLine, stringLiteral, truncate, typeParts } from "./util.js";
+import { argIdentifiers, calleeParts, collectConstants, fingerprint, firstLine, namedArgs, stringLiteral, truncate, typeParts } from "./util.js";
 import { MIN_FINGERPRINT } from "./python.js";
 
 const LOOPS = new Set(["for_statement", "for_in_statement", "while_statement", "do_statement"]);
@@ -219,6 +219,7 @@ export function extractTypeScript(path: string, root: Node, lang: Lang): FileMod
               firstArg: first ? (stringLiteral(first) ?? objectTopic(first)) : undefined,
               receiver: parts.length > 1 ? ctx.types.get(parts[0]) : undefined,
               argNames: argIdentifiers(args),
+              kwargs: namedArgs(args),
             });
             if (parts.length === 2 && tracked(parts[0], ctx) && ctx.def && MUTATORS.has(parts[1])) {
               m.globalAccess.push({ from: ctx.def, name: parts[0], mode: "write", line: node.startPosition.row + 1 });
@@ -235,11 +236,11 @@ export function extractTypeScript(path: string, root: Node, lang: Lang): FileMod
       }
       case "new_expression": {
         const ctor = node.childForFieldName("constructor");
+        const args = node.childForFieldName("arguments");
         if (ctor) {
           const parts = calleeParts(ctor, "member_expression", "object", "property");
-          if (parts.length) m.calls.push({ from: ctx.def, parts, line: node.startPosition.row + 1, inLoop: ctx.inLoop, conditional: ctx.conditional, isNew: true });
+          if (parts.length) m.calls.push({ from: ctx.def, parts, line: node.startPosition.row + 1, inLoop: ctx.inLoop, conditional: ctx.conditional, isNew: true, kwargs: namedArgs(args) });
         }
-        const args = node.childForFieldName("arguments");
         if (args) visitChildren(args, ctx);
         return;
       }
@@ -405,6 +406,7 @@ export function extractTypeScript(path: string, root: Node, lang: Lang): FileMod
     else if (parent.type === "class") d.visibility = d.private || parent.visibility === "internal" ? "internal" : "public";
     else d.visibility = "internal";
   }
+  m.constants = collectConstants(root, "variable_declarator", "name", "value");
   return m;
 }
 

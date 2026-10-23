@@ -137,3 +137,87 @@ export function fingerprint(body: Node, skip?: Node | null): Fingerprint {
   });
   return { shape: fnv(types.join(" ")).toString(36), size: types.length, sig };
 }
+
+/**
+ * A call argument that names something (a bucket, a table, a queue): the string itself,
+ * "env:NAME" when it is read from an environment variable, or "id:name" for a variable
+ * (resolved later against the file's constants). Undefined for anything computed.
+ */
+export function argValue(n: Node | null | undefined): string | undefined {
+  if (!n) return undefined;
+  const lit = stringLiteral(n);
+  if (lit !== undefined) return /[{}]/.test(lit) ? undefined : lit;
+  const env = envRead(n);
+  if (env) return `env:${env}`;
+  if (n.type === "identifier" || n.type === "shorthand_property_identifier") return `id:${n.text}`;
+  return undefined;
+}
+
+/** os.environ["X"], os.environ.get("X"), os.getenv("X"), process.env.X, process.env["X"] (with or without a fallback). */
+export function envRead(n: Node): string | undefined {
+  const t = n.text.replace(/\s+/g, "").replace(/!$/, "");
+  const m =
+    t.match(/^(?:os\.)?environ\[["'](\w+)["']\]$/) ??
+    t.match(/^(?:os\.)?(?:environ\.get|getenv)\(["'](\w+)["'](?:,.*)?\)$/) ??
+    t.match(/^process\.env\.(\w+)$/) ??
+    t.match(/^process\.env\[["'](\w+)["']\]$/);
+  if (m) return m[1];
+  // X ?? "default", X || "default", X or "default": the variable decides
+  if (n.type === "binary_expression" || n.type === "boolean_operator") {
+    const left = n.childForFieldName("left");
+    return left ? envRead(left) : undefined;
+  }
+  if (n.type === "parenthesized_expression" || n.type === "non_null_expression" || n.type === "await_expression") {
+    const inner = n.namedChildren[0];
+    return inner ? envRead(inner) : undefined;
+  }
+  return undefined;
+}
+
+/** Variables assigned a literal or an environment variable anywhere in the file (conflicting ones dropped). */
+export function collectConstants(root: Node, assignment: string, nameField: string, valueField: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  const conflict = new Set<string>();
+  const visit = (n: Node) => {
+    if (n.type === assignment) {
+      const name = n.childForFieldName(nameField);
+      const v = argValue(n.childForFieldName(valueField));
+      if (name?.type === "identifier" && v && !v.startsWith("id:")) {
+        if (out[name.text] !== undefined && out[name.text] !== v) conflict.add(name.text);
+        out[name.text] = v;
+      }
+    }
+    for (const c of n.namedChildren) if (c) visit(c);
+  };
+  visit(root);
+  for (const c of conflict) delete out[c];
+  return out;
+}
+
+/** Named arguments: Python keywords (Bucket="x") or the properties of a first object argument ({ Bucket: "x" }). Key "0" is the first positional argument. */
+export function namedArgs(args: Node | null | undefined): Record<string, string> | undefined {
+  if (!args) return undefined;
+  const out: Record<string, string> = {};
+  const first = args.namedChildren[0];
+  if (first && first.type !== "keyword_argument") {
+    const v = argValue(first);
+    if (v) out["0"] = v;
+  }
+  for (const a of args.namedChildren) {
+    if (a?.type === "keyword_argument") {
+      const k = a.childForFieldName("name")?.text;
+      const v = argValue(a.childForFieldName("value"));
+      if (k && v) out[k] = v;
+    }
+  }
+  if (first?.type === "object") {
+    for (const p of first.namedChildren) {
+      if (p?.type === "pair") {
+        const k = p.childForFieldName("key")?.text.replace(/["']/g, "");
+        const v = argValue(p.childForFieldName("value"));
+        if (k && v) out[k] = v;
+      } else if (p?.type === "shorthand_property_identifier") out[p.text] = `id:${p.text}`;
+    }
+  }
+  return Object.keys(out).length ? out : undefined;
+}
