@@ -1,4 +1,6 @@
-# `messaging` collector (stub, not implemented)
+# `messaging` collector
+
+Implemented: AsyncAPI 2.x and 3.x documents (channels, operations, messages, servers). Reading brokers themselves (Kafka admin API, SQS/SNS listings, RabbitMQ definitions, schema registries) is still planned, as below.
 
 Describes message brokers from their own metadata: which topics and queues exist, who produces to them and who consumes from them.
 

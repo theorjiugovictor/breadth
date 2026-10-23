@@ -23,6 +23,12 @@ breadth keeps people in the loop. It maps what a system actually does (calls, da
 Requires Node 20 or newer.
 
 ```sh
+npm install -g @theorjiugovictor/breadth   # or run it once: npx @theorjiugovictor/breadth scan .
+```
+
+The npm package is published by the [release workflow](.github/workflows/release.yml) when a version tag is pushed. Until the first release, or to hack on it, build from source:
+
+```sh
 git clone https://github.com/theorjiugovictor/noodles breadth
 cd breadth
 npm install
@@ -30,9 +36,14 @@ npm run build          # builds the UI and bundles the CLI into cli/dist/breadth
 npm link -w cli        # puts `breadth` on your PATH (optional)
 ```
 
-Without `npm link`, run `node /path/to/breadth/cli/dist/breadth.mjs` instead of `breadth`.
+Without `npm link`, run `node /path/to/breadth/cli/dist/breadth.mjs` instead of `breadth`. (The unscoped npm name `breadth` belongs to someone else, so `npx breadth` is not this tool.)
 
-> breadth is not on npm yet, and the npm name `breadth` belongs to someone else, so do not use `npx breadth`.
+### Releasing
+
+1. `npm version 0.2.0 -w cli --no-git-tag-version`, commit, push.
+2. `git tag v0.2.0 && git push origin v0.2.0`.
+
+The release workflow checks that the tag matches `cli/package.json`, runs the tests, publishes `@theorjiugovictor/breadth` to npm (when the `NPM_TOKEN` repository secret is set) and creates a GitHub release with the tarball. It also moves the major tag (`v0`) to a commit that includes the built CLI. Workflows that use `theorjiugovictor/noodles@v0` then start in seconds instead of building breadth on every run. `@main` keeps working and builds from source.
 
 ## Quick start
 
@@ -160,6 +171,56 @@ The configuration alone does not say what an apply will *do* to existing resourc
 ```
 
 The comment then says `applying the plan replaces orders-db because engine changed: the data in it is lost unless restored from a backup`. On the command line this is `breadth diff --plan infra/prod=plan.json` (also `breadth scan --plan`). Leave out the `dir=` and breadth matches the plan to the root module it fits best. A `terraform show -json` plan saved in the repository next to the `.tf` files is picked up on its own.
+
+## Comprehension debt
+
+Code that works but nobody has looked at is the debt breadth exists for, so it can measure it. A **behaviour unit** is a function, an endpoint or a significant infrastructure resource. Its fingerprint covers what it does: signature, calls, reads, writes, publishes, settings and exposure. Line numbers and formatting don't count. `breadth review` records the fingerprints someone reviewed in `.breadth/ledger.json`. Commit that file so the team shares it. When behaviour changes, its fingerprint changes and it counts as unreviewed again.
+
+```sh
+breadth review --all                 # once: adopt today's code as known
+breadth debt                         # unreviewed behaviour per service, riskiest first
+breadth review --changed --by alice  # after reviewing a branch: record what it changed
+breadth debt --record                # add a snapshot to the history (shows the trend)
+breadth debt --fail-above 30         # exit 2 in CI above 30%
+```
+
+```
+Comprehension debt: 28.8% of behaviour, weighted by risk, has not been reviewed (+28.8 since 4f2c1a9)
+16 of 67 behaviours unreviewed
+
+  service         unreviewed   debt
+  payments              6/10  63.2%
+  orders                6/22  31.8%
+  infrastructure        4/24    25%
+
+Riskiest unreviewed behaviour:
+  ●●● refund  services/orders/app/payments.py:14
+  ●●● mark_refunded  services/orders/app/repository.py:50
+```
+
+Units that do I/O, hold data or widen access weigh three times plain logic. When the repository has a ledger, the PR comment adds a line such as `🧠 15 behaviours in this change are not in the comprehension ledger yet. Unreviewed behaviour overall: 0% → 28.8%`.
+
+To record reviews automatically, run the action in `review` mode when a pull request is approved. It records the branch's changes as reviewed by the approver and pushes the ledger to the branch:
+
+```yaml
+on:
+  pull_request_review:
+    types: [submitted]
+jobs:
+  record:
+    if: github.event.review.state == 'approved'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+      - uses: theorjiugovictor/noodles@main
+        with:
+          mode: review
+```
 
 ## Live mode: watch a coding agent
 
@@ -333,6 +394,8 @@ When a graph is a graph, many problems stop hiding in code and become shapes. br
 | `public-data` | risk | Public S3 buckets (ACL or bucket policy), publicly accessible databases, GCS buckets shared with `allUsers`, public Azure containers | no |
 | `unencrypted-storage` | risk | Databases, volumes and file systems without encryption at rest | no |
 | `broad-iam` | risk | IAM roles allowed `*`, `service:*` on every resource, or `NotAction` | no |
+| `ci-risk` | risk | `pull_request_target` jobs that check out the pull request's code (secrets exposed to anyone who opens a PR), `write-all` tokens, third-party actions pinned by tag instead of commit | no |
+| `contract-gap` | risk | AsyncAPI contracts and code disagree: a declared consumer of a topic nothing publishes, a topic code publishes that no contract declares | no |
 | `iam-usage` | risk | Code that reads or writes an S3 bucket, DynamoDB table, SQS queue, SNS topic or Kinesis stream its IAM role does not allow (AccessDenied waiting to happen), and grants the code never uses | no |
 | `race-risk` | risk | Shared state with several writers (module globals; databases written by several services) | no |
 | `data-exposure` | risk | Personal or secret-looking fields (by name and value shape) sent to external APIs | yes |
@@ -424,8 +487,8 @@ Conventions:
 | `otel` | ✅ | OTLP JSON traces: services, endpoints, call edges with protocols, datastores, topics, external APIs, one replayable execution per trace |
 | `infra` | ✅ | Terraform/OpenTofu configuration (`.tf`, `.tofu`, `.tf.json`, var files), `show -json` plans and state, and raw `.tfstate`; Kubernetes YAML (workloads, Services, Ingress, ConfigMaps/Secrets by key only, PVCs, NetworkPolicies). [More below](#terraform-and-opentofu) |
 | `netflow` | stub | VPC flow logs, service mesh: [spec](collectors/src/netflow/README.md) |
-| `messaging` | stub | Kafka, SQS/SNS, RabbitMQ, AsyncAPI: [spec](collectors/src/messaging/README.md) |
-| `cicd` | stub | GitHub Actions, GitLab CI, Argo CD: [spec](collectors/src/cicd/README.md) |
+| `messaging` | ✅ | AsyncAPI 2.x and 3.x contracts: which application sends to and receives from which topic, with which message; merges with the code's topics and services. Broker admin APIs are [planned](collectors/src/messaging/README.md) |
+| `cicd` | ✅ | GitHub Actions and GitLab CI: workflows, jobs, `needs`, triggers and watched paths, images built, secrets by name, and what jobs deploy (kubectl, helm, `terraform apply`, Lambda, ECS, Cloud Run, Argo CD), matched with the services and Terraform roots of the other layers. CircleCI and Argo CD manifests are [planned](collectors/src/cicd/README.md) |
 | `org` | stub | CODEOWNERS, Backstage: [spec](collectors/src/org/README.md) |
 
 ### Terraform and OpenTofu

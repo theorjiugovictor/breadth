@@ -6,6 +6,9 @@ branding:
   color: orange
 
 inputs:
+  mode:
+    description: "diff (default): comment with what the change does. review: record the pull request's changes as reviewed in .breadth/ledger.json and push the ledger to the branch (run it when a review is approved)."
+    default: "diff"
   path:
     description: "Folder to scan, relative to the repository root."
     default: "."
@@ -56,13 +59,18 @@ runs:
       shell: bash
       working-directory: ${{ github.action_path }}
       run: |
-        if [ ! -f cli/dist/breadth.mjs ]; then
+        if [ -f cli/dist/breadth.mjs ]; then
+          # a release tag (v0, v1): the CLI is prebuilt, only its two runtime packages are needed
+          node -e 'const p=require("./cli/package.json").dependencies; console.log(Object.entries(p).map(([k,v])=>k+"@"+v).join(" "))' \
+            | xargs npm install --prefix cli/dist --no-save --no-package-lock --no-audit --no-fund --loglevel=error
+        else
           npm ci --no-audit --no-fund --loglevel=error
           npm run build -w cli >/dev/null
         fi
 
     - name: Map the change
       id: map
+      if: inputs.mode != 'review'
       shell: bash
       env:
         INPUT_PATH: ${{ inputs.path }}
@@ -110,7 +118,7 @@ runs:
         echo "failed=$([ "$code" = 2 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
 
     - name: Comment on the pull request
-      if: inputs.comment == 'true' && github.event.pull_request
+      if: inputs.mode != 'review' && inputs.comment == 'true' && github.event.pull_request
       # Pull requests from forks get a read-only token: the job summary still has the map.
       continue-on-error: true
       shell: bash
@@ -128,11 +136,33 @@ runs:
         fi
 
     - name: Keep the diff graph
+      if: inputs.mode != 'review'
       uses: actions/upload-artifact@v4
       with:
         name: breadth-diff
         path: ${{ steps.map.outputs.graph }}
         if-no-files-found: ignore
+
+    - name: Record the review
+      if: inputs.mode == 'review'
+      shell: bash
+      env:
+        INPUT_PATH: ${{ inputs.path }}
+        REVIEWER: ${{ github.event.review.user.login || github.actor }}
+        BASE_REF: ${{ github.event.pull_request.base.ref }}
+      run: |
+        base=""
+        if [ -n "$BASE_REF" ]; then
+          git fetch --no-tags origin "$BASE_REF" >/dev/null 2>&1 || true
+          base=$(git merge-base HEAD "origin/$BASE_REF")
+        fi
+        node "$GITHUB_ACTION_PATH/cli/dist/breadth.mjs" review "$INPUT_PATH" --changed ${base:+--base "$base"} --by "$REVIEWER"
+        git config user.name "breadth"
+        git config user.email "breadth@users.noreply.github.com"
+        git add .breadth/ledger.json
+        if git diff --cached --quiet; then echo "ledger unchanged"; exit 0; fi
+        git commit -m "breadth: changes reviewed by $REVIEWER"
+        git push
 
     - name: Fail on behaviour changes
       if: steps.map.outputs.failed == 'true'

@@ -1,0 +1,55 @@
+name: deploy
+on:
+  push:
+    branches: [main]
+    paths:
+      - "services/**"
+      - "infra/**"
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [gateway, orders, payments, notifier]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - run: docker build -t ghcr.io/example/shop-orders:${{ github.sha }} services/orders
+      - uses: docker/build-push-action@v6
+        with:
+          context: services/payments
+          push: true
+          tags: ghcr.io/example/shop-payments:${{ github.sha }}
+
+  infra:
+    runs-on: ubuntu-latest
+    needs: build
+    defaults:
+      run:
+        working-directory: infra/terraform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform init -input=false
+      - run: terraform apply -auto-approve -input=false
+        env:
+          AWS_ROLE_ARN: ${{ secrets.DEPLOY_ROLE_ARN }}
+
+  rollout:
+    runs-on: ubuntu-latest
+    needs: [build, infra]
+    steps:
+      - uses: azure/k8s-set-context@v4
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+      - run: |
+          kubectl -n shop set image deployment/orders orders=ghcr.io/example/shop-orders:${{ github.sha }}
+          kubectl -n shop set image deployment/payments payments=ghcr.io/example/shop-payments:${{ github.sha }}
+          kubectl -n shop rollout status deployment/orders
