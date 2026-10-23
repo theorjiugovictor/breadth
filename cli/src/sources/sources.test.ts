@@ -2,7 +2,8 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { runCollectors } from "@breadth/collectors";
 import { datadogSource } from "./datadog.js";
-import { prometheusSource } from "./prometheus.js";
+import { lokiSource, prometheusSource } from "./prometheus.js";
+import { honeycombSource } from "./honeycomb.js";
 import { fromJaeger, jaegerSource, tempoSource } from "./traces.js";
 import { applyLiveStats, liveText, type LiveInfo } from "./apply.js";
 import { createSource, pullLive } from "./index.js";
@@ -103,6 +104,47 @@ describe("prometheus", () => {
     const m = await src.measure!({ from: T0, to: T0 + 60_000, service: "orders", endpoint: "POST /orders" });
     expect(m).toMatchObject({ error_pct: 1, throughput_rps: 10, p95_ms: 120 });
     expect(decodeURIComponent(calls.at(-1)!.url)).toContain('service_name="orders",span_name="POST /orders"');
+  });
+});
+
+describe("honeycomb and loki", () => {
+  it("runs Honeycomb queries, polls the result, and reads stats and measurements", async () => {
+    process.env.HONEYCOMB_API_KEY = "hk";
+    let polls = 0;
+    const { fetch, calls } = fakeFetch((c) => {
+      if (c.url.endsWith("/1/queries/__all__")) return { id: c.body.filters.some((f: any) => f.column === "error") ? "qe" : "qa" };
+      if (c.url.endsWith("/1/query_results/__all__")) return { id: c.body.query_id === "qe" ? "re" : "ra", complete: false };
+      polls++;
+      return c.url.endsWith("/re")
+        ? { complete: true, data: { results: [{ data: { "service.name": "orders", name: "POST /orders", COUNT: 6 } }] } }
+        : { complete: true, data: { results: [{ data: { "service.name": "orders", name: "POST /orders", COUNT: 600, "P95(duration_ms)": 140, "P50(duration_ms)": 40, "P99(duration_ms)": 300 } }] } };
+    });
+    const src = honeycombSource({}, fetch, 1);
+    expect(await src.stats!({ from: T0, to: T0 + 600_000 })).toEqual([{ service: "orders", endpoint: "POST /orders", rpm: 60, p95_ms: 140, error_pct: 1 }]);
+    expect(calls[0].headers).toMatchObject({ "X-Honeycomb-Team": "hk" });
+    expect(calls[0].body).toMatchObject({ breakdowns: ["service.name", "name"], start_time: T0 / 1000, filters: [{ column: "span.kind", op: "=", value: "server" }] });
+    expect(polls).toBe(2);
+    const m = await src.measure!({ from: T0, to: T0 + 60_000, service: "orders", endpoint: "POST /orders", run: { attr: "breadth.run_id", value: "r1" } });
+    expect(m).toMatchObject({ p95_ms: 140, p50_ms: 40, p99_ms: 300, error_pct: 1, throughput_rps: 10 });
+    expect(calls.find((c) => c.url.endsWith("/1/queries/__all__") && c.body.breakdowns.length === 0)!.body.filters).toEqual(
+      expect.arrayContaining([{ column: "service.name", op: "=", value: "orders" }, { column: "name", op: "=", value: "POST /orders" }, { column: "breadth.run_id", op: "=", value: "r1" }]),
+    );
+    delete process.env.HONEYCOMB_API_KEY;
+  });
+
+  it("reads request logs from Loki with LogQL", async () => {
+    const vector = (metric: object, v: number) => ({ status: "success", data: { resultType: "vector", result: [{ metric, value: [T0 / 1000, String(v)] }] } });
+    const { fetch, calls } = fakeFetch((c) => {
+      const q = decodeURIComponent(c.url);
+      const m = { service_name: "orders", method: "POST", route: "/orders" };
+      return q.includes("status >= 500") ? vector(m, 3) : q.includes("quantile_over_time(0.95") ? vector(m, 210) : vector(m, 300);
+    });
+    const src = lokiSource({ url: "http://loki:3100", runLabel: "run_id" }, fetch);
+    expect(await src.stats!({ from: T0, to: T0 + 300_000 })).toEqual([{ service: "orders", endpoint: "POST /orders", rpm: 60, p95_ms: 210, error_pct: 1 }]);
+    expect(calls[0].url).toContain("/loki/api/v1/query?query=");
+    expect(decodeURIComponent(calls[0].url)).toContain('sum by (service_name, method, route) (count_over_time({service_name=~".+"} | json | status != "" [300s]))');
+    await src.measure!({ from: T0, to: T0 + 60_000, service: "orders", endpoint: "POST /orders", run: { attr: "breadth.run_id", value: "r1" } });
+    expect(decodeURIComponent(calls.at(-1)!.url)).toContain('{service_name=~".+",service_name="orders"} | json | duration_ms != "" | method="POST" | route="/orders" | run_id="r1" | unwrap duration_ms [60s])');
   });
 });
 

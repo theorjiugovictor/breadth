@@ -290,7 +290,7 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 python app.py
 breadth receive --merge flowgraph.json   # without the canvas: merge traces into a graph file as they arrive
 ```
 
-**Pull (your observability backend).** `breadth pull` reads recent traces and traffic (request rate, p95, error rate per endpoint) from Datadog, Prometheus (OpenTelemetry span metrics by default; any PromQL), Grafana Tempo or Jaeger:
+**Pull (your observability backend).** `breadth pull` reads recent traces and traffic (request rate, p95, error rate per endpoint) from Datadog, Prometheus (OpenTelemetry span metrics by default; any PromQL), Grafana Tempo, Jaeger, Honeycomb (Query Data API) or Loki (JSON request logs with `method`, `route`, `status`, `duration_ms` fields by default; any LogQL). Datadog, Tempo and Jaeger give traces; all of them give traffic:
 
 ```json
 {
@@ -298,6 +298,8 @@ breadth receive --merge flowgraph.json   # without the canvas: merge traces into
     "datadog": { "site": "datadoghq.eu", "env": "prod", "apiKeyEnv": "DD_API_KEY", "appKeyEnv": "DD_APP_KEY" },
     "prometheus": { "url": "https://prometheus.internal", "tokenEnv": "PROM_TOKEN" },
     "tempo": { "url": "http://tempo:3200" },
+    "honeycomb": { "apiKeyEnv": "HONEYCOMB_API_KEY", "dataset": "__all__" },
+    "loki": { "url": "http://loki:3100", "orgId": "tenant-1" },
     "services": ["orders", "payments"]
   }
 }

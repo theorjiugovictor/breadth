@@ -34,7 +34,7 @@ inputs:
     description: "Model for check-intent (default: the provider's default)."
     default: ""
   live:
-    description: "Live sources for production traffic on each change (blast radius): datadog, prometheus, tempo or jaeger, comma separated, configured under sources in breadth.config.json. Keys come from the step's env (e.g. DD_API_KEY, DD_APP_KEY)."
+    description: "Live sources for production traffic on each change (blast radius): datadog, prometheus, tempo, jaeger, honeycomb or loki, comma separated, configured under sources in breadth.config.json. Keys come from the step's env (e.g. DD_API_KEY, DD_APP_KEY)."
     default: ""
   live-since:
     description: "Window of live traffic to read."
