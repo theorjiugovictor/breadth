@@ -16,7 +16,7 @@ breadth keeps people in the loop. It maps what a system actually does (calls, da
 - **Problems you can see.** Rules flag N+1 queries, repeated work, missed parallelism, dead code, duplicate logic, unused infrastructure, contract drift, unhandled errors and personal data sent to third parties. See [Insights](#insights).
 - **One graph format, fully local.** Collectors write [`flowgraph.json`](schema/flowgraph.schema.json) and the UI only reads it. Zero config, and nothing leaves your machine. LLM features are optional and work with any provider.
 
-**Try it without installing anything:** the [landing page](https://theorjiugovictor.github.io/noodles/) has a box where you paste a public GitHub repository. It is scanned in your browser: files come straight from GitHub and are parsed in a Web Worker with tree-sitter compiled to WebAssembly. No server is involved and nothing is uploaded.
+**Try it without installing anything:** the [landing page](https://theorjiugovictor.github.io/breadth/) has a box where you paste a public GitHub repository. It is scanned in your browser: files come straight from GitHub and are parsed in a Web Worker with tree-sitter compiled to WebAssembly. No server is involved and nothing is uploaded.
 
 ## Install
 
@@ -29,7 +29,7 @@ npm install -g @theorjiugovictor/breadth   # or run it once: npx @theorjiugovict
 The npm package is published by the [release workflow](.github/workflows/release.yml) when a version tag is pushed. Until the first release, or to hack on it, build from source:
 
 ```sh
-git clone https://github.com/theorjiugovictor/noodles breadth
+git clone https://github.com/theorjiugovictor/breadth
 cd breadth
 npm install
 npm run build          # builds the UI and bundles the CLI into cli/dist/breadth.mjs
@@ -43,7 +43,7 @@ Without `npm link`, run `node /path/to/breadth/cli/dist/breadth.mjs` instead of 
 1. `npm version 0.2.0 -w cli --no-git-tag-version`, commit, push.
 2. `git tag v0.2.0 && git push origin v0.2.0`.
 
-The release workflow checks that the tag matches `cli/package.json`, runs the tests, publishes `@theorjiugovictor/breadth` to npm (when the `NPM_TOKEN` repository secret is set) and creates a GitHub release with the tarball. It also moves the major tag (`v0`) to a commit that includes the built CLI. Workflows that use `theorjiugovictor/noodles@v0` then start in seconds instead of building breadth on every run. `@main` keeps working and builds from source.
+The release workflow checks that the tag matches `cli/package.json`, runs the tests, publishes `@theorjiugovictor/breadth` to npm (when the `NPM_TOKEN` repository secret is set) and creates a GitHub release with the tarball. It also moves the major tag (`v0`) to a commit that includes the built CLI. Workflows that use `theorjiugovictor/breadth@v0` then start in seconds instead of building breadth on every run. `@main` keeps working and builds from source.
 
 ## Quick start
 
@@ -94,7 +94,7 @@ breadth scans both versions (the base is read with `git archive`, so your workin
 | Medium | new reads, new publishes and consumers, calls between services, removed call paths, shared state modified. Infrastructure: new firewall paths between workloads, new read access through IAM, changed sizes and versions (`instance_class db.t4g.medium → db.r6g.large`) |
 | Low | new packages, new findings of low severity, new IAM attachments, routes and other plumbing |
 
-New insights (an N+1 query, an unhandled external call) are listed as changes too. The output is a terminal summary, a PR-ready markdown comment with a Mermaid picture (`--markdown`), JSON (`--json`), or a diff graph (`-o`). In the canvas, a diff graph opens on a **Changes** tab: new nodes are green, removed ones red and dashed, edited ones amber, and clicking a change shows it in place. The [live demo](https://theorjiugovictor.github.io/noodles/app/?graph=graphs/shop-pr.json) has one: an agent-written "bulk refunds" PR that also quietly drops the fraud check, grants itself `s3:*` on everything and opens Postgres to the internet.
+New insights (an N+1 query, an unhandled external call) are listed as changes too. The output is a terminal summary, a PR-ready markdown comment with a Mermaid picture (`--markdown`), JSON (`--json`), or a diff graph (`-o`). In the canvas, a diff graph opens on a **Changes** tab: new nodes are green, removed ones red and dashed, edited ones amber, and clicking a change shows it in place. The [live demo](https://theorjiugovictor.github.io/breadth/app/?graph=graphs/shop-pr.json) has one: an agent-written "bulk refunds" PR that also quietly drops the fraud check, grants itself `s3:*` on everything and opens Postgres to the internet.
 
 ### In GitHub Actions
 
@@ -112,7 +112,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: theorjiugovictor/noodles@main
+      - uses: theorjiugovictor/breadth@main
         # with:
         #   path: services        # scan a subfolder
         #   fail-on: high         # fail the check on high-severity behaviour changes
@@ -136,7 +136,7 @@ breadth diff --intent "Add bulk refunds for support agents" --llm-provider anthr
 ```
 
 ```yaml
-      - uses: theorjiugovictor/noodles@main
+      - uses: theorjiugovictor/breadth@main
         with:
           check-intent: true
           llm-provider: anthropic
@@ -164,7 +164,7 @@ The configuration alone does not say what an apply will *do* to existing resourc
           terraform -chdir=infra/prod init -input=false
           terraform -chdir=infra/prod plan -input=false -out=tfplan
           terraform -chdir=infra/prod show -json tfplan > "$RUNNER_TEMP/prod.plan.json"
-      - uses: theorjiugovictor/noodles@main
+      - uses: theorjiugovictor/breadth@main
         with:
           terraform-plan: |
             infra/prod=${{ runner.temp }}/prod.plan.json
@@ -217,7 +217,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0
-      - uses: theorjiugovictor/noodles@main
+      - uses: theorjiugovictor/breadth@main
         with:
           mode: review
 ```

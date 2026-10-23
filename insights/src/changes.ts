@@ -13,6 +13,9 @@ import { sensitivePorts } from "./rules/infra-posture.js";
 const SEV = { high: 0, medium: 1, low: 2 } as const;
 
 /** Within a severity: what a reviewer most needs to see first. */
+/** Module-level values in tests are fixtures, not shared state. */
+const TEST_FILE = /(^|\/)(tests?|__tests__|spec)\/|(\.|_)(test|spec)\.[jt]sx?$|(^|\/)test_[^/]+\.py$|_test\.(py|go)$/;
+
 const KIND_ORDER = ["internet-exposed", "public", "destroy", "encryption-off", "iam-broad", "safety-off", "removed-safeguard", "removed-in-use", "datastore-write", "external-call", "loop-io", "signature", "endpoint-removed", "service-removed", "endpoint-added", "service-added", "datastore-added", "external-added"];
 const order = (k: string) => {
   const i = KIND_ORDER.indexOf(k);
@@ -191,7 +194,7 @@ export function describeChanges(before: FlowGraph, after: FlowGraph, refs: { bas
     else if (n.kind === "external_api") push({ kind: "external-added", severity: "high", text: `new third-party dependency ${n.name}`, nodes: [id] });
     else if (n.kind === "queue") push({ kind: "queue-added", severity: "medium", text: `new queue or topic ${n.name}`, nodes: [id] });
     else if (n.kind === "infra_resource") push({ kind: "infra-added", severity: PLUMBING.test(String(n.metadata?.type ?? "")) ? "low" : "medium", text: `new infrastructure ${n.name}${n.metadata?.type ? ` (${n.metadata.type})` : ""}`, nodes: [id] });
-    else if (isGlobal(n)) push({ kind: "shared-state-added", severity: "low", text: `new shared state ${n.name}${where(n)}`, nodes: [id] });
+    else if (isGlobal(n) && !TEST_FILE.test(n.source?.file ?? n.id)) push({ kind: "shared-state-added", severity: "low", text: `new shared state ${n.name}${where(n)}`, nodes: [id] });
   }
   for (const id of d.removed) {
     const n = a.get(id)!;
@@ -260,10 +263,14 @@ export function describeChanges(before: FlowGraph, after: FlowGraph, refs: { bas
     const sig = (n: FlowNode) => (n.inputs ?? []).map((p) => p.name).join(", ");
     if (sig(was) !== sig(now)) {
       const users = callers(id);
+      // Same number of parameters, only renamed: positional callers are unaffected; in Python,
+      // callers passing them by keyword (f(spec=...)) break.
+      const renamed = (was.inputs ?? []).length === (now.inputs ?? []).length;
+      const keywords = /\.pyi?$/.test(now.source?.file ?? "");
       push({
         kind: "signature",
-        severity: users ? "high" : "low",
-        text: `${now.name}(${sig(was)}) → ${now.name}(${sig(now)})${users ? `, called from ${users} place${users === 1 ? "" : "s"}` : ""}`,
+        severity: !users ? "low" : renamed ? (keywords ? "medium" : "low") : "high",
+        text: `${now.name}(${sig(was)}) → ${now.name}(${sig(now)})${users ? `, called from ${users} place${users === 1 ? "" : "s"}` : ""}${renamed && users ? (keywords ? " (renamed: callers passing them by name break)" : " (parameters renamed only)") : ""}`,
         nodes: [id],
       });
     }

@@ -54,3 +54,29 @@ describe("describeChanges", () => {
     expect(withoutRemoved(d).nodes.some((n) => n.id === "old")).toBe(false);
   });
 });
+
+describe("signature changes", () => {
+  const graph = (file: string, param: string, extra: object[] = []) =>
+    ({
+      version: "1.0",
+      nodes: [
+        { id: "m", kind: "module", layer: "code", name: file },
+        { id: "f", kind: "function", layer: "code", name: "parse", parent: "m", source: { file }, inputs: [{ name: param }] },
+        { id: "c", kind: "function", layer: "code", name: "caller", parent: "m", source: { file } },
+        ...extra,
+      ],
+      edges: [{ id: "e", kind: "call", from: { node: "c" }, to: { node: "f" } }],
+    }) as unknown as FlowGraph;
+  const sig = (file: string) => describeChanges(graph(file, "spec"), graph(file, "specText")).changes.find((c) => c.kind === "signature")!;
+
+  it("a renamed parameter breaks no positional caller, except by keyword in Python", () => {
+    expect(sig("a.ts")).toMatchObject({ severity: "low", text: "parse(spec) → parse(specText), called from 1 place (parameters renamed only)" });
+    expect(sig("a.py")).toMatchObject({ severity: "medium" });
+  });
+
+  it("module-level values in tests are not shared state", () => {
+    const t0 = { id: "code:global:a.test.ts#T0", kind: "datastore", layer: "code", name: "T0", source: { file: "a.test.ts" }, metadata: { subkind: "global" } };
+    const changes = describeChanges(graph("a.ts", "x"), graph("a.ts", "x", [t0])).changes;
+    expect(changes.some((c) => c.kind === "shared-state-added")).toBe(false);
+  });
+});

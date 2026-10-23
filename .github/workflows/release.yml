@@ -5,7 +5,7 @@ name: release
 #  2. publishes the CLI to npm (when the NPM_TOKEN secret is set), with provenance
 #  3. creates a GitHub release with the package tarball
 #  4. moves the major tag (v0, v1, ...) to a commit that includes the built CLI, so
-#     `uses: theorjiugovictor/noodles@v0` runs without building breadth on every pull request
+#     `uses: theorjiugovictor/breadth@v0` runs without building breadth on every pull request
 on:
   push:
     tags: ["v*.*.*"]
