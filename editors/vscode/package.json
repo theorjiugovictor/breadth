@@ -5,7 +5,7 @@
   "version": "0.1.0",
   "publisher": "breadth",
   "license": "MIT",
-  "repository": { "type": "git", "url": "https://github.com/theorjiugovictor/noodles" },
+  "repository": { "type": "git", "url": "https://github.com/theorjiugovictor/breadth" },
   "engines": { "vscode": "^1.80.0" },
   "categories": ["Visualization", "Other"],
   "main": "./extension.js",

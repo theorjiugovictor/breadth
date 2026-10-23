@@ -195,6 +195,8 @@ export interface SpecCheck {
     requirements?: { total: number; implemented: number; newlyImplemented: string[] };
     /** References in its requirements that match nothing yet. */
     missing?: string[];
+    /** Questions still open in its requirements ([NEEDS CLARIFICATION: ...]). */
+    questions?: string[];
     /** All tasks checked and every requirement implemented. */
     complete?: boolean;
   }[];

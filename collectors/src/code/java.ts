@@ -2,7 +2,7 @@ import type { Node } from "web-tree-sitter";
 import type { Port } from "@breadth/schema";
 import { emptyModel, type Def, type FileModel } from "./model.js";
 import { MIN_FINGERPRINT } from "./python.js";
-import { argIdentifiers, calleeParts, collectConstants, fingerprint, firstLine, namedArgs, stringLiteral, truncate } from "./util.js";
+import { argIdentifiers, argValue, calleeParts, collectConstants, fingerprint, firstLine, namedArgs, stringLiteral, truncate } from "./util.js";
 
 const LOOPS = new Set(["for_statement", "enhanced_for_statement", "while_statement", "do_statement"]);
 const CONDITIONALS = new Set(["if_statement", "ternary_expression", "switch_block_statement_group", "switch_rule", "catch_clause"]);
@@ -166,6 +166,47 @@ export function extractJava(path: string, root: Node): FileModel {
     if (body) visit(body, { def: qual, cls, inLoop: false, conditional: false, locals: new Set(params.map((p) => p.name)), types });
   };
 
+  // AWS SDK v2 requests are built, not passed as named arguments:
+  //   s3.putObject(PutObjectRequest.builder().bucket("receipts").key(k).build(), body)
+  //   s3.putObject(b -> b.bucket(BUCKET).key(k), body)
+  //   var req = SendMessageRequest.builder().queueUrl(url).build(); sqs.sendMessage(req)
+  // The setters that name a resource become the call's named arguments, as in boto3.
+  const AWS_SETTERS: Record<string, string> = { bucket: "Bucket", tableName: "TableName", queueUrl: "QueueUrl", queueName: "QueueName", topicArn: "TopicArn", secretId: "SecretId", functionName: "FunctionName", streamName: "StreamName" };
+  const builderArgs = (n: Node | null | undefined, root?: string): Record<string, string> | undefined => {
+    const out: Record<string, string> = {};
+    let cur = n;
+    let built = false;
+    while (cur?.type === "method_invocation") {
+      const name = cur.childForFieldName("name")?.text ?? "";
+      const obj = cur.childForFieldName("object");
+      if (AWS_SETTERS[name]) {
+        const v = argValue(cur.childForFieldName("arguments")?.namedChildren[0]);
+        if (v) out[AWS_SETTERS[name]] ??= v;
+      }
+      if (name === "builder" && obj && /Request$/.test(obj.text)) built = true;
+      if (root && obj?.type === "identifier" && obj.text === root) built = true;
+      cur = obj;
+    }
+    return built && Object.keys(out).length ? out : undefined;
+  };
+  const requestArgs = (args: Node | null | undefined, built: Map<string, Record<string, string>>): Record<string, string> | undefined => {
+    for (const a of args?.namedChildren ?? []) {
+      if (!a) continue;
+      if (a.type === "identifier" && built.has(a.text)) return built.get(a.text);
+      if (a.type === "lambda_expression") {
+        const p = a.childForFieldName("parameters");
+        const param = p?.type === "identifier" ? p.text : p?.namedChildren[0]?.text;
+        const r = builderArgs(a.childForFieldName("body"), param);
+        if (r) return r;
+      }
+      const r = builderArgs(a);
+      if (r) return r;
+    }
+    return undefined;
+  };
+  const builtRequests = new Map<string, Map<string, Record<string, string>>>();
+  const requestsOf = (def: string) => builtRequests.get(def) ?? builtRequests.set(def, new Map()).get(def)!;
+
   const visit = (node: Node, ctx: Ctx) => {
     switch (node.type) {
       case "class_declaration":
@@ -195,7 +236,7 @@ export function extractJava(path: string, root: Node): FileModel {
             firstArg: first ? stringLiteral(first) : undefined,
             receiver: parts.length > 1 && parts[0] !== "this" ? ctx.types.get(parts[0]) : undefined,
             argNames: argIdentifiers(args),
-            kwargs: namedArgs(args),
+            kwargs: requestArgs(args, requestsOf(ctx.def)) ?? namedArgs(args),
           });
           if (parts.length === 2 && globalNames.has(parts[0]) && !ctx.locals.has(parts[0]) && ctx.def && /^(put|add|remove|clear|set|offer|poll|push|pop|merge|compute\w*|putIfAbsent|addAll|removeAll|increment\w*)$/.test(name)) {
             m.globalAccess.push({ from: ctx.def, name: parts[0], mode: "write", line: node.startPosition.row + 1 });
@@ -219,6 +260,8 @@ export function extractJava(path: string, root: Node): FileModel {
           const value = decl!.childForFieldName("value");
           if (n) {
             ctx.locals.add(n);
+            const req = value ? builderArgs(value) : undefined;
+            if (req) requestsOf(ctx.def).set(n, req);
             const vt = t ?? (value?.type === "object_creation_expression" ? javaType(value.childForFieldName("type")) : undefined);
             if (vt && vt[0] !== "var") ctx.types.set(n, vt);
           }

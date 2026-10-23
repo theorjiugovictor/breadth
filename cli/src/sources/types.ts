@@ -21,6 +21,14 @@ export interface TraceQuery {
   to: number;
   services?: string[];
   limit: number;
+  /** Only traces with a span carrying this attribute value (an experiment's run id). */
+  where?: RunFilter;
+}
+
+/** The experiment's own requests: spans stamped with a run id (e.g. breadth.run_id=chaos-42). */
+export interface RunFilter {
+  attr: string;
+  value: string;
 }
 
 export interface StatsQuery {
@@ -47,6 +55,8 @@ export interface MeasureQuery {
   to: number;
   service: string;
   endpoint?: string;
+  /** Count only the experiment's requests, not everything else in the window. */
+  run?: RunFilter;
 }
 
 /** What `fetch` is to adapters: injectable, so tests run against recorded responses. */

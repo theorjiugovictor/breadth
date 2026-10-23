@@ -8,6 +8,7 @@ import { buildGraph } from "./build.js";
 import type { FileModel } from "./model.js";
 import { langForFile } from "./parser.js";
 import { parseSource } from "./scan.js";
+import { parseProto, type ProtoService } from "./grpc.js";
 
 export interface CodeCollectorSettings {
   /** Show third-party packages as nodes (default true). */
@@ -63,7 +64,17 @@ export const codeCollector: Collector = {
       }
     }
 
+    const protos: ProtoService[] = [];
+    for (const rel of otherFiles.filter((f) => f.endsWith(".proto"))) {
+      try {
+        protos.push(...parseProto(rel, await fs.readFile(path.join(root, rel), "utf8")));
+      } catch {
+        /* unreadable proto: skip */
+      }
+    }
+
     const graph = buildGraph({
+      protos,
       rootName: path.basename(root) || "root",
       files: models,
       otherFiles,

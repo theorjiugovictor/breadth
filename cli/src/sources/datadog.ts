@@ -103,7 +103,9 @@ export function datadogSource(s: DatadogSettings, fetchImpl: Fetch = fetch as un
 
     async measure(q) {
       const server = s.serverQuery ?? "@span.kind:server";
-      const scope = `${server}${q.endpoint ? ` resource_name:"${q.endpoint.replace(/"/g, '\\"')}"` : ""}`;
+      // A run id stamped on the experiment's spans (or its trace, via baggage) narrows it to those requests.
+      const run = q.run ? ` @${q.run.attr}:"${q.run.value.replace(/"/g, '\\"')}"` : "";
+      const scope = `${server}${q.endpoint ? ` resource_name:"${q.endpoint.replace(/"/g, '\\"')}"` : ""}${run}`;
       const [all] = await aggregate(q.from, q.to, filter([q.service], scope), []);
       const [errs] = await aggregate(q.from, q.to, filter([q.service], `${scope} status:error`), []);
       const count = Number(all?.c.c0 ?? 0);

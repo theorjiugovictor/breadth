@@ -312,6 +312,7 @@ function specSection(report: ChangeReport): string[] {
     const tasks = c.tasks?.total ? `tasks ${c.tasks.done}/${c.tasks.total}` : "";
     out.push(`**${FORMAT[c.format ?? ""] ?? "Spec change"} \`${c.id}\`**: ${c.title} · ${[tasks, reqs].filter(Boolean).join(" · ")}${c.complete ? " · ✅ complete" : ""} <sub>(${c.reasons.join("; ")})</sub>`);
     if (c.missing?.length) out.push(`Not built yet: ${c.missing.slice(0, 8).map((m) => `\`${m}\``).join(", ")}`);
+    if (c.questions?.length) out.push(`❓ Still open in the spec: ${c.questions.slice(0, 5).join("; ")}`);
   }
   const extra = s.outOfScope.filter((i) => report.changes[i]);
   if (extra.length) {

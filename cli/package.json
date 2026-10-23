@@ -29,10 +29,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/theorjiugovictor/noodles.git",
+    "url": "git+https://github.com/theorjiugovictor/breadth.git",
     "directory": "cli"
   },
-  "homepage": "https://github.com/theorjiugovictor/noodles#readme",
+  "homepage": "https://github.com/theorjiugovictor/breadth#readme",
   "keywords": [
     "code-map",
     "architecture",

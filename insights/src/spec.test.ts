@@ -60,6 +60,11 @@ describe("spec-lifecycle", () => {
   it("suggests archiving a finished OpenSpec change", () => {
     expect(run([change({ done: 2, total: 2 }), cap, req(), fn("refund")], [{ id: "i", kind: "depends_on", relation: "implements", from: { node: "refund" }, to: { node: "req:x/r" } }])).toEqual(['info "C" is complete and can be archived']);
   });
+  it("warns when a change is being built with open questions", () => {
+    const q = { ...req(), metadata: { clarify: ["retention period not specified"] } };
+    expect(run([change({ done: 1, total: 3 }), cap, q])).toEqual(['warning "C" is being built with 1 requirement(s) still marked NEEDS CLARIFICATION']);
+    expect(run([change({ done: 0, total: 3 }), cap, q])).toEqual([]);
+  });
   it("says nothing while work is open, or without specs", () => {
     expect(run([change({ done: 1, total: 2 }), cap, req(["refund_orders"])])).toEqual([]);
     expect(run([fn("refund")])).toEqual([]);

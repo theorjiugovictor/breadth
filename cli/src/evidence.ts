@@ -45,6 +45,8 @@ export interface EvidenceInput {
   fault?: string;
   approvedBy?: string;
   store?: string;
+  /** Only the experiment's requests: spans carrying this attribute value. */
+  run?: { attr: string; value: string };
 }
 
 export interface EvidenceOutput {
@@ -64,7 +66,7 @@ export async function recordEvidence(i: EvidenceInput): Promise<EvidenceOutput> 
   const slos = (scenario.metadata?.slos as Slo[] | undefined) ?? [];
   if (!slos.length) throw new Error(`scenario "${scenario.name}" has no measurable criteria (write them like "p95 <= 200 ms and errors <= 1 %")`);
   let measured: Partial<Record<Measure, number>> = {};
-  if (i.source?.measure) measured = await i.source.measure({ from: i.from, to: i.to, service: i.service, endpoint: i.endpoint });
+  if (i.source?.measure) measured = await i.source.measure({ from: i.from, to: i.to, service: i.service, endpoint: i.endpoint, run: i.run });
   const results: Record<string, number> = {};
   for (const [k, v] of Object.entries({ ...measured, ...(i.results ?? {}) })) if (typeof v === "number" && Number.isFinite(v)) results[k] = Math.round(v * 1000) / 1000;
   const { verdict, checks } = evaluateSlos(slos, results);
@@ -81,6 +83,7 @@ export async function recordEvidence(i: EvidenceInput): Promise<EvidenceOutput> 
       service: i.service,
       experiment: i.tool || i.fault ? { tool: i.tool, fault: i.fault } : undefined,
       window: { start: new Date(i.from).toISOString(), end: new Date(i.to).toISOString() },
+      run_filter: i.run,
       snapshot: { revision: snapshot.revision, digest: snapshot.digest },
       fingerprint,
       approval: i.approvedBy ? { by: i.approvedBy, at: new Date().toISOString() } : undefined,

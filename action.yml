@@ -34,7 +34,7 @@ inputs:
     description: "Model for check-intent (default: the provider's default)."
     default: ""
   live:
-    description: "Live sources for production traffic on each change (blast radius): datadog, prometheus, tempo or jaeger, comma separated, configured under sources in breadth.config.json. Keys come from the step's env (e.g. DD_API_KEY, DD_APP_KEY)."
+    description: "Live sources for production traffic on each change (blast radius): datadog, prometheus, tempo, jaeger, honeycomb or loki, comma separated, configured under sources in breadth.config.json. Keys come from the step's env (e.g. DD_API_KEY, DD_APP_KEY)."
     default: ""
   live-since:
     description: "Window of live traffic to read."
@@ -89,9 +89,15 @@ runs:
         INPUT_LLM_MODEL: ${{ inputs['llm-model'] }}
         INPUT_LIVE: ${{ inputs.live }}
         INPUT_LIVE_SINCE: ${{ inputs['live-since'] }}
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}
       run: |
         base="$INPUT_BASE"
-        if [ -z "$base" ] && [ -n "$GITHUB_BASE_REF" ]; then
+        if [ -z "$base" ] && [ -n "$BASE_SHA" ]; then
+          # The base as the event saw it, not the branch now: if the base moved on (or the PR was
+          # merged while this ran), origin/<base> already contains the change and nothing differs.
+          git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null || git fetch --no-tags origin "$BASE_SHA" >/dev/null 2>&1 || true
+          base=$(git merge-base HEAD "$BASE_SHA" 2>/dev/null || echo "$BASE_SHA")
+        elif [ -z "$base" ] && [ -n "$GITHUB_BASE_REF" ]; then
           git fetch --no-tags origin "$GITHUB_BASE_REF" >/dev/null 2>&1 || true
           base=$(git merge-base HEAD "origin/$GITHUB_BASE_REF" 2>/dev/null || echo "origin/$GITHUB_BASE_REF")
         fi
@@ -161,9 +167,13 @@ runs:
         INPUT_PATH: ${{ inputs.path }}
         REVIEWER: ${{ github.event.review.user.login || github.actor }}
         BASE_REF: ${{ github.event.pull_request.base.ref }}
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}
       run: |
         base=""
-        if [ -n "$BASE_REF" ]; then
+        if [ -n "$BASE_SHA" ]; then
+          git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null || git fetch --no-tags origin "$BASE_SHA" >/dev/null 2>&1 || true
+          base=$(git merge-base HEAD "$BASE_SHA" 2>/dev/null || echo "$BASE_SHA")
+        elif [ -n "$BASE_REF" ]; then
           git fetch --no-tags origin "$BASE_REF" >/dev/null 2>&1 || true
           base=$(git merge-base HEAD "origin/$BASE_REF")
         fi

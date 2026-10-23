@@ -2,7 +2,8 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { runCollectors } from "@breadth/collectors";
 import { datadogSource } from "./datadog.js";
-import { prometheusSource } from "./prometheus.js";
+import { lokiSource, prometheusSource } from "./prometheus.js";
+import { honeycombSource } from "./honeycomb.js";
 import { fromJaeger, jaegerSource, tempoSource } from "./traces.js";
 import { applyLiveStats, liveText, type LiveInfo } from "./apply.js";
 import { createSource, pullLive } from "./index.js";
@@ -106,6 +107,47 @@ describe("prometheus", () => {
   });
 });
 
+describe("honeycomb and loki", () => {
+  it("runs Honeycomb queries, polls the result, and reads stats and measurements", async () => {
+    process.env.HONEYCOMB_API_KEY = "hk";
+    let polls = 0;
+    const { fetch, calls } = fakeFetch((c) => {
+      if (c.url.endsWith("/1/queries/__all__")) return { id: c.body.filters.some((f: any) => f.column === "error") ? "qe" : "qa" };
+      if (c.url.endsWith("/1/query_results/__all__")) return { id: c.body.query_id === "qe" ? "re" : "ra", complete: false };
+      polls++;
+      return c.url.endsWith("/re")
+        ? { complete: true, data: { results: [{ data: { "service.name": "orders", name: "POST /orders", COUNT: 6 } }] } }
+        : { complete: true, data: { results: [{ data: { "service.name": "orders", name: "POST /orders", COUNT: 600, "P95(duration_ms)": 140, "P50(duration_ms)": 40, "P99(duration_ms)": 300 } }] } };
+    });
+    const src = honeycombSource({}, fetch, 1);
+    expect(await src.stats!({ from: T0, to: T0 + 600_000 })).toEqual([{ service: "orders", endpoint: "POST /orders", rpm: 60, p95_ms: 140, error_pct: 1 }]);
+    expect(calls[0].headers).toMatchObject({ "X-Honeycomb-Team": "hk" });
+    expect(calls[0].body).toMatchObject({ breakdowns: ["service.name", "name"], start_time: T0 / 1000, filters: [{ column: "span.kind", op: "=", value: "server" }] });
+    expect(polls).toBe(2);
+    const m = await src.measure!({ from: T0, to: T0 + 60_000, service: "orders", endpoint: "POST /orders", run: { attr: "breadth.run_id", value: "r1" } });
+    expect(m).toMatchObject({ p95_ms: 140, p50_ms: 40, p99_ms: 300, error_pct: 1, throughput_rps: 10 });
+    expect(calls.find((c) => c.url.endsWith("/1/queries/__all__") && c.body.breakdowns.length === 0)!.body.filters).toEqual(
+      expect.arrayContaining([{ column: "service.name", op: "=", value: "orders" }, { column: "name", op: "=", value: "POST /orders" }, { column: "breadth.run_id", op: "=", value: "r1" }]),
+    );
+    delete process.env.HONEYCOMB_API_KEY;
+  });
+
+  it("reads request logs from Loki with LogQL", async () => {
+    const vector = (metric: object, v: number) => ({ status: "success", data: { resultType: "vector", result: [{ metric, value: [T0 / 1000, String(v)] }] } });
+    const { fetch, calls } = fakeFetch((c) => {
+      const q = decodeURIComponent(c.url);
+      const m = { service_name: "orders", method: "POST", route: "/orders" };
+      return q.includes("status >= 500") ? vector(m, 3) : q.includes("quantile_over_time(0.95") ? vector(m, 210) : vector(m, 300);
+    });
+    const src = lokiSource({ url: "http://loki:3100", runLabel: "run_id" }, fetch);
+    expect(await src.stats!({ from: T0, to: T0 + 300_000 })).toEqual([{ service: "orders", endpoint: "POST /orders", rpm: 60, p95_ms: 210, error_pct: 1 }]);
+    expect(calls[0].url).toContain("/loki/api/v1/query?query=");
+    expect(decodeURIComponent(calls[0].url)).toContain('sum by (service_name, method, route) (count_over_time({service_name=~".+"} | json | status != "" [300s]))');
+    await src.measure!({ from: T0, to: T0 + 60_000, service: "orders", endpoint: "POST /orders", run: { attr: "breadth.run_id", value: "r1" } });
+    expect(decodeURIComponent(calls.at(-1)!.url)).toContain('{service_name=~".+",service_name="orders"} | json | duration_ms != "" | method="POST" | route="/orders" | run_id="r1" | unwrap duration_ms [60s])');
+  });
+});
+
 describe("tempo and jaeger", () => {
   it("searches Tempo and reads each trace as OTLP", async () => {
     const otlp = { batches: [{ resource: { attributes: [{ key: "service.name", value: { stringValue: "orders" } }] }, scopeSpans: [{ spans: [{ traceId: "ab", spanId: "01", name: "POST /orders", kind: 2, startTimeUnixNano: "1000000", endTimeUnixNano: "2000000" }] }] }] };
@@ -133,6 +175,48 @@ describe("tempo and jaeger", () => {
     const { fetch, calls } = fakeFetch((c) => (c.url.endsWith("/api/services") ? { data: ["orders", "jaeger-query"] } : { data: [trace] }));
     expect(await jaegerSource({ url: "http://jaeger:16686" }, fetch).traces!({ from: T0, to: T0 + 1000, limit: 5 })).toHaveLength(2);
     expect(calls[1].url).toContain("service=orders&start=");
+  });
+});
+
+describe("evidence scoped to the experiment's own requests (--run-id)", () => {
+  const run = { attr: "breadth.run_id", value: "chaos-42" };
+  const span = (trace: string, id: string, ms: number, extra: Record<string, unknown> = {}, status = "unset") =>
+    ({ traceId: trace, spanId: id, name: "POST /orders", kind: "server", service: "orders", start: T0 + 1000, end: T0 + 1000 + ms, attrs: { "http.request.method": "POST", "http.route": "/orders", ...extra }, status }) as any;
+
+  it("measures from spans: only traces carrying the run id count", async () => {
+    const { measureFromSpans } = await import("./measure.js");
+    const spans = [
+      span("a", "1", 100, { "breadth.run_id": "chaos-42" }),
+      span("b", "2", 300, {}, "error"),
+      // the run id sits on the load generator's root span; the server span is in the same trace
+      { ...span("c", "3", 50), kind: "client", service: "k6", attrs: { "breadth.run_id": "chaos-42" } },
+      span("c", "4", 200),
+      span("d", "5", 5000), // someone else's traffic in the same window
+    ];
+    const m = measureFromSpans(spans, { from: T0, to: T0 + 10_000, service: "orders", endpoint: "POST /orders", run });
+    expect(m).toMatchObject({ p50_ms: 100, p95_ms: 200, error_pct: 0, throughput_rps: 0.2 });
+    expect(measureFromSpans(spans, { from: T0, to: T0 + 10_000, service: "orders" }).error_pct).toBe(25);
+  });
+
+  it("asks each backend for only the run's spans", async () => {
+    process.env.DD_API_KEY = "k";
+    process.env.DD_APP_KEY = "a";
+    const dd = fakeFetch(() => ({ data: [{ attributes: { by: {}, compute: { c0: 10, c1: 9e7 } } }] }));
+    await datadogSource({}, dd.fetch).measure!({ from: T0, to: T0 + 60_000, service: "orders", run });
+    expect(dd.calls[0].body.data.attributes.filter.query).toContain('@breadth.run_id:"chaos-42"');
+
+    const tempo = fakeFetch((c) => (c.url.includes("/api/search") ? { traces: [] } : {}));
+    await tempoSource({ url: "http://tempo:3200" }, tempo.fetch).measure!({ from: T0, to: T0 + 60_000, service: "orders", run });
+    expect(decodeURIComponent(tempo.calls[0].url)).toContain('{ resource.service.name = "orders" } && { .breadth.run_id = "chaos-42" }');
+
+    const jaeger = fakeFetch(() => ({ data: [] }));
+    await jaegerSource({ url: "http://jaeger:16686" }, jaeger.fetch).measure!({ from: T0, to: T0 + 60_000, service: "orders", run });
+    expect(decodeURIComponent(jaeger.calls[0].url)).toContain('tags={"breadth.run_id":"chaos-42"}');
+
+    const prom = fakeFetch(() => ({ status: "success", data: { result: [] } }));
+    await expect(prometheusSource({ url: "http://prom:9090" }, prom.fetch).measure!({ from: T0, to: T0 + 60_000, service: "orders", run })).rejects.toThrow(/runLabel/);
+    await prometheusSource({ url: "http://prom:9090", runLabel: "run_id" }, prom.fetch).measure!({ from: T0, to: T0 + 60_000, service: "orders", run });
+    expect(decodeURIComponent(prom.calls[0].url)).toContain('service_name="orders",run_id="chaos-42"');
   });
 });
 

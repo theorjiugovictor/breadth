@@ -38,6 +38,8 @@ export interface RunRecord {
   service?: string;
   experiment?: { tool?: string; fault?: string; plan?: Record<string, unknown> };
   window?: { start: string; end: string };
+  /** Only spans carrying this attribute value were measured (the experiment's own requests). */
+  run_filter?: { attr: string; value: string };
   snapshot?: { revision?: string; digest?: string };
   /** Behaviour fingerprint of `service` when the run happened (breadth evidence records it). */
   fingerprint?: string;
@@ -89,6 +91,8 @@ export function resilienceGraph(input: { capabilities: Capability[]; changes: Ch
             implemented_by: r.implementedBy.length ? r.implementedBy : undefined,
             verified_by: r.verifiedBy.length ? r.verifiedBy : undefined,
             targets: r.targets.length ? r.targets : undefined,
+            clarify: r.clarify,
+            tasks: r.tasks,
           }),
         }),
       );

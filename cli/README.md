@@ -11,4 +11,4 @@ npx @theorjiugovictor/breadth debt            # comprehension debt: behaviour no
 
 Python, TypeScript, JavaScript, Go and Java; Terraform / OpenTofu, Kubernetes, GitHub Actions, GitLab CI, AsyncAPI and OpenTelemetry traces. Everything runs locally.
 
-Documentation, the GitHub Action and the MCP server: https://github.com/theorjiugovictor/noodles
+Documentation, the GitHub Action and the MCP server: https://github.com/theorjiugovictor/breadth

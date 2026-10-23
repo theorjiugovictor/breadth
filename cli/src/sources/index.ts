@@ -2,7 +2,8 @@ import { linkTracesToCode, spansToGraph } from "@breadth/collectors";
 import { mergeGraphs, type FlowGraph } from "@breadth/schema";
 import { applyLiveStats } from "./apply.js";
 import { datadogSource, type DatadogSettings } from "./datadog.js";
-import { prometheusSource, type PrometheusSettings } from "./prometheus.js";
+import { honeycombSource, type HoneycombSettings } from "./honeycomb.js";
+import { lokiSource, prometheusSource, type LokiSettings, type PrometheusSettings } from "./prometheus.js";
 import { jaegerSource, tempoSource, type JaegerSettings, type TempoSettings } from "./traces.js";
 import { SourceError, type Fetch, type LiveSource } from "./types.js";
 
@@ -15,11 +16,13 @@ export interface SourcesConfig {
   prometheus?: PrometheusSettings;
   tempo?: TempoSettings;
   jaeger?: JaegerSettings;
+  honeycomb?: HoneycombSettings;
+  loki?: LokiSettings;
   /** Services to ask about (default: every service the backend knows). */
   services?: string[];
 }
 
-export const SOURCE_NAMES = ["datadog", "prometheus", "tempo", "jaeger"] as const;
+export const SOURCE_NAMES = ["datadog", "prometheus", "tempo", "jaeger", "honeycomb", "loki"] as const;
 
 export function createSource(name: string, config: SourcesConfig | undefined, fetchImpl?: Fetch): LiveSource {
   const s = (config ?? {}) as Record<string, any>;
@@ -35,6 +38,11 @@ export function createSource(name: string, config: SourcesConfig | undefined, fe
     case "jaeger":
       if (!s.jaeger?.url) throw new SourceError('jaeger: set sources.jaeger.url in breadth.config.json');
       return jaegerSource(s.jaeger, fetchImpl);
+    case "honeycomb":
+      return honeycombSource(s.honeycomb ?? {}, fetchImpl);
+    case "loki":
+      if (!s.loki?.url) throw new SourceError('loki: set sources.loki.url in breadth.config.json');
+      return lokiSource(s.loki, fetchImpl);
   }
   throw new SourceError(`unknown source "${name}". Available: ${SOURCE_NAMES.join(", ")}`);
 }

@@ -12,6 +12,36 @@ function tasks(text: string | undefined): { done: number; total: number } {
   return { done: boxes.filter((b) => b[1].toLowerCase() === "x").length, total: boxes.length };
 }
 
+/**
+ * Tasks grouped by what they name. Spec Kit labels a task with its story ("- [ ] T012 [US1] ...");
+ * Kiro lists requirement numbers under it ("_Requirements: 1.2, 3.1_"), which count for the
+ * task they sit under.
+ */
+function tasksBy(text: string | undefined, keysOf: (task: string, block: string) => string[]): Map<string, { done: number; total: number }> {
+  const out = new Map<string, { done: number; total: number }>();
+  const lines = (text ?? "").split("\n");
+  lines.forEach((l, i) => {
+    const m = l.match(/^(\s*)[-*]\s*\[( |x|X)\]/);
+    if (!m) return;
+    // the task's own lines, up to the next task or sub-task (sub-tasks count for themselves)
+    const block: string[] = [];
+    for (let j = i + 1; j < lines.length && !/^\s*[-*]\s*\[( |x|X)\]/.test(lines[j]); j++) block.push(lines[j]);
+    for (const k of new Set(keysOf(l, block.join("\n")))) {
+      const t = out.get(k) ?? { done: 0, total: 0 };
+      t.total++;
+      if (m[2].toLowerCase() === "x") t.done++;
+      out.set(k, t);
+    }
+  });
+  return out;
+}
+
+const CLARIFY = /\[NEEDS CLARIFICATION:?\s*([^\]]*)\]/gi;
+const clarifications = (text: string) => [...text.matchAll(CLARIFY)].map((m) => m[1].trim() || "unspecified");
+/** Template leftovers and separators: "---", "[Add more user stories as needed]", HTML comments. */
+const filler = (line: string) => /^\s*(---+|\[[^\]]*\]|\*[^*]+\*)\s*$/.test(line);
+const stripComments = (text: string) => text.replace(/<!--[\s\S]*?-->/g, (c) => c.replace(/[^\n]/g, ""));
+
 /** Breadth's three optional lines, in any format: Implemented by, Verified by, Target. */
 function references(line: string, req: Requirement, sc?: Scenario): boolean {
   const impl = listLine(line, /implemented\s+by|implementation/);
@@ -39,7 +69,8 @@ export function isSpecKit(spec: string): boolean {
 }
 
 /** Spec Kit: user stories (with Given/When/Then acceptance scenarios), FR-xxx requirements, SC-xxx success criteria. */
-export function parseSpecKit(feature: string, file: string, spec: string, tasksText?: string): { change: Change; capability: Capability } {
+export function parseSpecKit(feature: string, file: string, specText: string, tasksText?: string): { change: Change; capability: Capability } {
+  const spec = stripComments(specText);
   const lines = spec.split("\n");
   const title = lines.find((l) => /^#\s/.test(l))?.replace(/^#\s+(Feature Specification:\s*)?/i, "").trim() || feature;
   const branch = spec.match(/\*\*Feature Branch\*\*:\s*`?([^`\s]+)`?/)?.[1];
@@ -90,23 +121,33 @@ export function parseSpecKit(feature: string, file: string, spec: string, tasksT
       req = success;
       return;
     }
-    if (!req || !line.trim()) return;
+    if (!req || !line.trim() || filler(line)) return;
     if (references(line, req, sc)) return;
     const accept = line.match(/^\s*\d+\.\s*(\*\*Given\*\*.+)$/i);
     if (accept && section.startsWith("user scenarios")) {
       const text = accept[1].replace(/\*\*/g, "");
-      sc = scenario(req, text.replace(/^Given\s+/i, "").split(/,\s*\*?\*?When/i)[0].slice(0, 80), text, i + 1);
+      sc = scenario(req, text.length > 80 ? `${text.slice(0, 79)}…` : text, text, i + 1);
       req.scenarios.push(sc);
       return;
     }
     if (section.startsWith("user scenarios") && !/^\*\*(Why this priority|Independent Test|Acceptance Scenarios)\*\*/.test(line.trim())) req.text = `${req.text ? `${req.text} ` : ""}${line.trim()}`.slice(0, 600);
   });
+  for (const r of cap.requirements) {
+    const q = [...new Set(clarifications(`${r.name} ${r.text}`))];
+    if (q.length) r.clarify = q;
+  }
+  const byStory = tasksBy(tasksText, (t) => [...t.matchAll(/\[(US\d+)\]/gi)].map((m) => m[1].toLowerCase()));
+  for (const r of cap.requirements) {
+    const us = r.id.match(/\/(us\d+)-/)?.[1];
+    if (us && byStory.has(us)) r.tasks = byStory.get(us);
+  }
   const change: Change = { id: feature, title, why, tasks: tasks(tasksText), file, format: "spec-kit", branch };
   return { change, capability: cap };
 }
 
 /** Kiro: numbered requirements with a user story and EARS acceptance criteria (WHEN ... THEN the system SHALL ...). */
-export function parseKiro(feature: string, file: string, requirements: string, tasksText?: string): { change: Change; capability: Capability } {
+export function parseKiro(feature: string, file: string, requirementsText: string, tasksText?: string): { change: Change; capability: Capability } {
+  const requirements = stripComments(requirementsText);
   const lines = requirements.split("\n");
   const intro = requirements.match(/##\s+Introduction\s*\n+([\s\S]*?)(\n##|$)/i)?.[1].trim().split("\n")[0];
   const cap: Capability = { id: `spec:${feature}`, name: feature.replace(/[-_]/g, " "), purpose: intro, file, change: feature, requirements: [] };
@@ -137,6 +178,12 @@ export function parseKiro(feature: string, file: string, requirements: string, t
       req.scenarios.push(sc);
     }
   });
+  // "_Requirements: 1.1, 2.3_" under a task: requirement 1 and 2
+  const byReq = tasksBy(tasksText, (_t, block) => [...block.matchAll(/_?Requirements?:\s*([0-9., ]+)/gi)].flatMap((m) => m[1].split(/[,\s]+/).filter(Boolean).map((x) => x.split(".")[0])));
+  for (const r of cap.requirements) {
+    const n = r.id.match(/requirement-(\d+)$/)?.[1];
+    if (n && byReq.has(n)) r.tasks = byReq.get(n);
+  }
   const title = cap.requirements[0] ? `${cap.name}` : feature;
   return { change: { id: feature, title, why: intro, tasks: tasks(tasksText), file, format: "kiro" }, capability: cap };
 }

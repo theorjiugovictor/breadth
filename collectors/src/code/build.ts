@@ -1,6 +1,7 @@
 import * as posix from "./posix.js";
 import { edgeId, SCHEMA_VERSION, type EdgeKind, type FlowEdge, type FlowGraph, type FlowNode, type Port } from "@breadth/schema";
 import type { CallSite, Def, FileModel, ImportBinding } from "./model.js";
+import { grpcLinks, type ProtoService } from "./grpc.js";
 import { AWS_PACKAGES, cloudAccess, dynamoTableOf, type AwsService, type CloudAccess } from "./cloud.js";
 import {
   classifyPackage,
@@ -39,6 +40,8 @@ export interface BuildInput {
   /** All non-code files that were seen, used for service detection. */
   otherFiles: string[];
   includeExternal?: boolean;
+  /** Services declared in .proto files (gRPC). */
+  protos?: ProtoService[];
 }
 
 type Target =
@@ -629,6 +632,36 @@ export function buildGraph(input: BuildInput): FlowGraph {
     }
   }
 
+  // ---------- gRPC: one endpoint per rpc, served by its handler, called through stubs ----------
+  {
+    const g = grpcLinks(files, input.protos ?? []);
+    const used = new Set([...g.servers.map((x) => x.endpoint), ...g.clients.map((x) => x.endpoint)]);
+    for (const s of g.services.values()) {
+      for (const m of s.methods) {
+        const id = `grpc:${s.full}/${m.name}`;
+        if (!used.has(id)) continue;
+        const server = g.servers.find((x) => x.endpoint === id);
+        addNode({
+          id,
+          name: `gRPC ${s.name}/${m.name}`,
+          kind: "network_endpoint",
+          layer: "network",
+          parent: server ? ids.file(server.file) : undefined,
+          description: `gRPC method ${s.full}/${m.name}${m.streaming ? ` (${m.streaming} streaming)` : ""}${server ? `, served by ${serviceOf(server.file)}` : ""}`,
+          inputs: [{ name: "request", type: "grpc" }],
+          outputs: [{ name: "response", type: "grpc" }],
+          source: server ? { file: server.file, line: server.line } : s.file ? { file: s.file, line: m.line } : undefined,
+          metadata: compact({ protocol: "grpc", service: server ? serviceOf(server.file) : undefined, grpc_service: s.full, method: m.name, streaming: m.streaming, proto: s.file || undefined }),
+        });
+      }
+    }
+    for (const sv of g.servers) addEdge("call", sv.endpoint, ids.def(sv.file, sv.qual), { line: sv.line, file: sv.file }, { protocol: "grpc" });
+    for (const c of g.clients) {
+      routeSites.add(c.site);
+      addEdge("call", fromNodeId(c.file, c.site.from), c.endpoint, { ...c.site, file: c.file.path }, { protocol: "grpc", label: c.endpoint.slice(5) });
+    }
+  }
+
   for (const f of files) {
     const imported = new Map<string, PackageClass>();
     for (const b of f.imports) {
@@ -673,8 +706,9 @@ export function buildGraph(input: BuildInput): FlowGraph {
           }
           if (t.cls.type === "db") {
             const mode = dbAccessMode(method, c.firstArg);
-            // boto3.client("s3") / boto3.resource(...) only make a client: no "aws" datastore until it is used.
-            if (!mode && t.cls.engine === "aws") continue;
+            // boto3.client("s3"), S3Client.create(), DynamoDbClient.builder().build() only make a client:
+            // no "aws" datastore until it is used.
+            if (t.cls.engine === "aws" && (!mode || /^(create|builder|build|close)$/.test(method))) continue;
             const store = storeNode(t.cls.engine);
             if (mode === "write") addEdge("write", from, store, site, { protocol: t.cls.engine, label: sqlLabel(c.firstArg) });
             else if (mode === "read") addEdge("read", store, from, site, { protocol: t.cls.engine, label: sqlLabel(c.firstArg) });

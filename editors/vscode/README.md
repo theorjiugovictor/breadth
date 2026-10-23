@@ -1,6 +1,6 @@
 # breadth live
 
-Companion to [`breadth watch`](https://github.com/theorjiugovictor/noodles#live-mode-watch-a-coding-agent).
+Companion to [`breadth watch`](https://github.com/theorjiugovictor/breadth#live-mode-watch-a-coding-agent).
 It sends unsaved editor contents, from you or from a coding agent working in the editor (Copilot, Cursor, Windsurf, Antigravity), to the local `breadth watch` server. The live canvas then updates while code is being written, not only when it is saved.
 
 - Talks only to `http://127.0.0.1:<breadth.port>` (default 4321), and only while `breadth watch` is running.

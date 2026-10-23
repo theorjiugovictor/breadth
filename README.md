@@ -16,7 +16,7 @@ breadth keeps people in the loop. It maps what a system actually does (calls, da
 - **Problems you can see.** Rules flag N+1 queries, repeated work, missed parallelism, dead code, duplicate logic, unused infrastructure, contract drift, unhandled errors and personal data sent to third parties. See [Insights](#insights).
 - **One graph format, fully local.** Collectors write [`flowgraph.json`](schema/flowgraph.schema.json) and the UI only reads it. Zero config, and nothing leaves your machine. LLM features are optional and work with any provider.
 
-**Try it without installing anything:** the [landing page](https://theorjiugovictor.github.io/noodles/) has a box where you paste a public GitHub repository. It is scanned in your browser: files come straight from GitHub and are parsed in a Web Worker with tree-sitter compiled to WebAssembly. No server is involved and nothing is uploaded.
+**Try it without installing anything:** the [landing page](https://theorjiugovictor.github.io/breadth/) has a box where you paste a public GitHub repository. It is scanned in your browser: files come straight from GitHub and are parsed in a Web Worker with tree-sitter compiled to WebAssembly. No server is involved and nothing is uploaded.
 
 ## Install
 
@@ -29,7 +29,7 @@ npm install -g @theorjiugovictor/breadth   # or run it once: npx @theorjiugovict
 The npm package is published by the [release workflow](.github/workflows/release.yml) when a version tag is pushed. Until the first release, or to hack on it, build from source:
 
 ```sh
-git clone https://github.com/theorjiugovictor/noodles breadth
+git clone https://github.com/theorjiugovictor/breadth
 cd breadth
 npm install
 npm run build          # builds the UI and bundles the CLI into cli/dist/breadth.mjs
@@ -43,7 +43,7 @@ Without `npm link`, run `node /path/to/breadth/cli/dist/breadth.mjs` instead of 
 1. `npm version 0.2.0 -w cli --no-git-tag-version`, commit, push.
 2. `git tag v0.2.0 && git push origin v0.2.0`.
 
-The release workflow checks that the tag matches `cli/package.json`, runs the tests, publishes `@theorjiugovictor/breadth` to npm (when the `NPM_TOKEN` repository secret is set) and creates a GitHub release with the tarball. It also moves the major tag (`v0`) to a commit that includes the built CLI. Workflows that use `theorjiugovictor/noodles@v0` then start in seconds instead of building breadth on every run. `@main` keeps working and builds from source.
+The release workflow checks that the tag matches `cli/package.json`, runs the tests, publishes `@theorjiugovictor/breadth` to npm (when the `NPM_TOKEN` repository secret is set) and creates a GitHub release with the tarball. It also moves the major tag (`v0`) to a commit that includes the built CLI. Workflows that use `theorjiugovictor/breadth@v0` then start in seconds instead of building breadth on every run. `@main` keeps working and builds from source.
 
 ## Quick start
 
@@ -94,7 +94,7 @@ breadth scans both versions (the base is read with `git archive`, so your workin
 | Medium | new reads, new publishes and consumers, calls between services, removed call paths, shared state modified. Infrastructure: new firewall paths between workloads, new read access through IAM, changed sizes and versions (`instance_class db.t4g.medium → db.r6g.large`) |
 | Low | new packages, new findings of low severity, new IAM attachments, routes and other plumbing |
 
-New insights (an N+1 query, an unhandled external call) are listed as changes too. The output is a terminal summary, a PR-ready markdown comment with a Mermaid picture (`--markdown`), JSON (`--json`), or a diff graph (`-o`). In the canvas, a diff graph opens on a **Changes** tab: new nodes are green, removed ones red and dashed, edited ones amber, and clicking a change shows it in place. The [live demo](https://theorjiugovictor.github.io/noodles/app/?graph=graphs/shop-pr.json) has one: an agent-written "bulk refunds" PR that also quietly drops the fraud check, grants itself `s3:*` on everything and opens Postgres to the internet.
+New insights (an N+1 query, an unhandled external call) are listed as changes too. The output is a terminal summary, a PR-ready markdown comment with a Mermaid picture (`--markdown`), JSON (`--json`), or a diff graph (`-o`). In the canvas, a diff graph opens on a **Changes** tab: new nodes are green, removed ones red and dashed, edited ones amber, and clicking a change shows it in place. The [live demo](https://theorjiugovictor.github.io/breadth/app/?graph=graphs/shop-pr.json) has one: an agent-written "bulk refunds" PR that also quietly drops the fraud check, grants itself `s3:*` on everything and opens Postgres to the internet.
 
 ### In GitHub Actions
 
@@ -112,7 +112,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: theorjiugovictor/noodles@main
+      - uses: theorjiugovictor/breadth@main
         # with:
         #   path: services        # scan a subfolder
         #   fail-on: high         # fail the check on high-severity behaviour changes
@@ -136,7 +136,7 @@ breadth diff --intent "Add bulk refunds for support agents" --llm-provider anthr
 ```
 
 ```yaml
-      - uses: theorjiugovictor/noodles@main
+      - uses: theorjiugovictor/breadth@main
         with:
           check-intent: true
           llm-provider: anthropic
@@ -164,7 +164,7 @@ The configuration alone does not say what an apply will *do* to existing resourc
           terraform -chdir=infra/prod init -input=false
           terraform -chdir=infra/prod plan -input=false -out=tfplan
           terraform -chdir=infra/prod show -json tfplan > "$RUNNER_TEMP/prod.plan.json"
-      - uses: theorjiugovictor/noodles@main
+      - uses: theorjiugovictor/breadth@main
         with:
           terraform-plan: |
             infra/prod=${{ runner.temp }}/prod.plan.json
@@ -217,7 +217,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0
-      - uses: theorjiugovictor/noodles@main
+      - uses: theorjiugovictor/breadth@main
         with:
           mode: review
 ```
@@ -263,6 +263,8 @@ breadth evidence "Postgres latency" --service orders --endpoint "POST /orders" -
 
 Each run stores the source snapshot (git revision and a digest of every file) and the **behaviour fingerprint** of the service it is about. When that service's calls, data access or endpoints change, the `evidence-status` insight reports the evidence as stale ("about older behaviour of orders"), and a pull request that causes it says so. Contradicted requirements, requirements nothing verifies, and dangling references are reported too. `--results p95_ms=180,error_pct=0.4` records measurements from any other tool, and `--fail-on contradicts` gates CI on the verdict.
 
+A window also holds everyone else's traffic. To judge only the experiment's own requests, stamp them with a run id (have the load generator set `breadth.run_id` on its spans or as baggage copied onto spans) and pass `--run-id chaos-42` (`--run-attr` names a different attribute). Datadog filters on it, Tempo and Jaeger measure from the traces that carry it, and Prometheus needs the attribute as a span-metrics dimension (`sources.prometheus.runLabel`). The filter is saved in the run record.
+
 **Pull requests against their spec change.** `breadth diff` finds the spec change a pull request implements: by branch name (Spec Kit names branches after the feature), by the spec files it edits, by code it links to a requirement, by a mention in the PR title or description (`--pr-text-file`, which the action passes), or explicitly with `--spec-change <id>`. The comment then shows the change's tasks and how many requirements have code, and lists every behaviour change outside it: anything not reached from the code or targets its requirements name. With `--intent`, the change's requirements are added to the request the LLM compares against. A repository with specs but none matching says so in one line; one without specs sees nothing.
 
 ```markdown
@@ -274,7 +276,7 @@ Each run stores the source snapshot (git revision and a digest of every file) an
 - 🔴 shop-payments is now allowed s3:* on *
 ```
 
-The `spec-lifecycle` insight reports changes whose tasks are all ticked while code they name does not exist, and finished OpenSpec changes that are still open. Agents get `breadth_requirements` over MCP: what a function implements or verifies, with its scenarios, tests and evidence.
+The `spec-lifecycle` insight reports changes whose tasks are all ticked while code they name does not exist, changes being built while requirements still say `[NEEDS CLARIFICATION]`, and finished OpenSpec changes that are still open. Task progress is also counted per requirement where the tasks say which one they serve (Spec Kit's `[US1]` labels, Kiro's `_Requirements: 1.2_` lines). Agents get `breadth_requirements` over MCP: what a function implements or verifies, with its scenarios, tests and evidence.
 
 ## Live data: traces and traffic from running systems
 
@@ -288,7 +290,7 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 python app.py
 breadth receive --merge flowgraph.json   # without the canvas: merge traces into a graph file as they arrive
 ```
 
-**Pull (your observability backend).** `breadth pull` reads recent traces and traffic (request rate, p95, error rate per endpoint) from Datadog, Prometheus (OpenTelemetry span metrics by default; any PromQL), Grafana Tempo or Jaeger:
+**Pull (your observability backend).** `breadth pull` reads recent traces and traffic (request rate, p95, error rate per endpoint) from Datadog, Prometheus (OpenTelemetry span metrics by default; any PromQL), Grafana Tempo, Jaeger, Honeycomb (Query Data API) or Loki (JSON request logs with `method`, `route`, `status`, `duration_ms` fields by default; any LogQL). Datadog, Tempo and Jaeger give traces; all of them give traffic:
 
 ```json
 {
@@ -296,6 +298,8 @@ breadth receive --merge flowgraph.json   # without the canvas: merge traces into
     "datadog": { "site": "datadoghq.eu", "env": "prod", "apiKeyEnv": "DD_API_KEY", "appKeyEnv": "DD_APP_KEY" },
     "prometheus": { "url": "https://prometheus.internal", "tokenEnv": "PROM_TOKEN" },
     "tempo": { "url": "http://tempo:3200" },
+    "honeycomb": { "apiKeyEnv": "HONEYCOMB_API_KEY", "dataset": "__all__" },
+    "loki": { "url": "http://loki:3100", "orgId": "tenant-1" },
     "services": ["orders", "payments"]
   }
 }
@@ -580,13 +584,13 @@ Conventions:
 
 | Name | Status | Reads |
 |---|---|---|
-| `code` | ✅ | Python, TypeScript, JavaScript, Go, Java (tree-sitter, WASM, no native build). Modules, classes, functions, params as inputs, return types as outputs, call edges (imports, re-exports, `self`/`this`, typed locals, attributes), loops, recursion, globals, DB/HTTP/queue clients, AWS SDK calls by resource, HTTP routes (FastAPI/Flask, Express/Nest, net/http/gin/chi/gorilla, Spring/JAX-RS). Go packages and Java packages span their folder; Java fields injected through constructors and JPA repositories are followed. Generated files (`DO NOT EDIT`) are skipped |
+| `code` | ✅ | Python, TypeScript, JavaScript, Go, Java (tree-sitter, WASM, no native build). Modules, classes, functions, params as inputs, return types as outputs, call edges (imports, re-exports, `self`/`this`, typed locals, attributes), loops, recursion, globals, DB/HTTP/queue clients, AWS SDK calls by resource, HTTP routes (FastAPI/Flask, Express/Nest, net/http/gin/chi/gorilla, Spring/JAX-RS). gRPC: one endpoint per rpc in your `.proto` files, linked to the Go, Python, Java or Node code that serves it and to the stubs that call it, so calls between services show up even without traces. Go packages and Java packages span their folder; Java fields injected through constructors and JPA repositories are followed. Generated files (`DO NOT EDIT`) are skipped |
 | `otel` | ✅ | OTLP traces from files (JSON), pushed live (OTLP/HTTP protobuf or JSON to `watch` or `receive`) or pulled from Datadog, Tempo or Jaeger (`breadth pull`): services, endpoints, call edges with protocols, datastores, topics, external APIs, one replayable execution per trace |
 | `infra` | ✅ | Terraform/OpenTofu configuration (`.tf`, `.tofu`, `.tf.json`, var files), `show -json` plans and state, and raw `.tfstate`; Kubernetes YAML (workloads, Services, Ingress, ConfigMaps/Secrets by key only, PVCs, NetworkPolicies). [More below](#terraform-and-opentofu) |
 | `netflow` | stub | VPC flow logs, service mesh: [spec](collectors/src/netflow/README.md) |
 | `messaging` | ✅ | AsyncAPI 2.x and 3.x contracts: which application sends to and receives from which topic, with which message; merges with the code's topics and services. Broker admin APIs are [planned](collectors/src/messaging/README.md) |
 | `cicd` | ✅ | GitHub Actions and GitLab CI: workflows, jobs, `needs`, triggers and watched paths, images built, secrets by name, and what jobs deploy (kubectl, helm, `terraform apply`, Lambda, ECS, Cloud Run, Argo CD), matched with the services and Terraform roots of the other layers. CircleCI and Argo CD manifests are [planned](collectors/src/cicd/README.md) |
-| `resilience` | ✅ | OpenSpec specs and changes (requirements, scenarios with measurable criteria), run records in `.breadth/runs`, the source snapshot. See [From requirement to evidence](#from-requirement-to-evidence) |
+| `resilience` | ✅ | Specs (OpenSpec, Spec Kit, Kiro: requirements, scenarios with measurable criteria, tasks), run records in `.breadth/runs`, the source snapshot. See [From requirement to evidence](#from-requirement-to-evidence) |
 | `org` | stub | CODEOWNERS, Backstage: [spec](collectors/src/org/README.md) |
 
 ### Terraform and OpenTofu
@@ -603,7 +607,7 @@ The `infra` collector reads `.tf` source with its own HCL parser. It needs no `t
 - **Instances.** A resource with a known `count` or `for_each` (up to 25 instances) becomes one node per instance, `aws_sqs_queue.jobs["emails"]`, with its own name. `dynamic` blocks expand the same way. When the keys are only known at apply time, one node stands for all of them.
 - **JSON syntax.** `.tf.json` and `.tfvars.json` are read like native syntax.
 
-- **Code to infrastructure.** AWS SDK calls in code (boto3, AWS SDK for JavaScript v2 and v3) that name their resource, such as `s3.put_object(Bucket=...)`, `new PutObjectCommand({ Bucket })` or `table.query(...)` on a `dynamodb.Table("orders")`, are matched with the Terraform resource. The name can be a literal, a constant or an environment variable. Environment variables are resolved through the service's Kubernetes Deployment (values and ConfigMaps), Lambda `environment` or ECS container definitions, including Terraform references such as `BUCKET = aws_s3_bucket.receipts.bucket`. The code's reads and writes then land on the Terraform node, so a PR comment says `store_receipt now writes to shop-refund-receipts (s3:PutObject)` and the `iam-usage` insight can check them against IAM.
+- **Code to infrastructure.** AWS SDK calls in code (boto3, AWS SDK for JavaScript v2 and v3, Go v2, Java v2) that name their resource, such as `s3.put_object(Bucket=...)`, `new PutObjectCommand({ Bucket })`, `s3.putObject(PutObjectRequest.builder().bucket(BUCKET)...)` (or the `b -> b.bucket(...)` form, or a request built into a variable first), or `table.query(...)` on a `dynamodb.Table("orders")` or Java enhanced-client `table("orders", ...)`, are matched with the Terraform resource. The name can be a literal, a constant or an environment variable. Environment variables are resolved through the service's Kubernetes Deployment (values and ConfigMaps), Lambda `environment` or ECS container definitions, including Terraform references such as `BUCKET = aws_s3_bucket.receipts.bucket`. The code's reads and writes then land on the Terraform node, so a PR comment says `store_receipt now writes to shop-refund-receipts (s3:PutObject)` and the `iam-usage` insight can check them against IAM.
 
 Two settings in `breadth.config.json` cover what a CLI flag would otherwise pass:
 
