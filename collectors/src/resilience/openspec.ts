@@ -34,6 +34,10 @@ export interface Requirement {
   targets: string[];
   scenarios: Scenario[];
   line: number;
+  /** Open questions left in the text: Spec Kit's [NEEDS CLARIFICATION: ...] */
+  clarify?: string[];
+  /** Tasks that name this requirement (Spec Kit [US1], Kiro _Requirements: 1.2_) */
+  tasks?: { done: number; total: number };
 }
 
 export interface Capability {

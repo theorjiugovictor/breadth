@@ -272,6 +272,12 @@
                       "type": "string"
                     }
                   },
+                  "questions": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
                   "complete": {
                     "type": "boolean"
                   }

@@ -100,6 +100,7 @@ export function checkSpec(before: FlowGraph, after: FlowGraph, d: Pick<GraphDiff
     }
     const tasks = c.metadata?.tasks as { done: number; total: number } | undefined;
     const missing = reqs.flatMap((r) => ((r.metadata?.unresolved as string[] | undefined) ?? []).map((x) => `${x} (for "${r.name}")`));
+    const questions = reqs.flatMap((r) => ((r.metadata?.clarify as string[] | undefined) ?? []).map((q) => `${q} (in "${r.name.slice(0, 60)}")`));
     out.push({
       id: String(c.metadata?.change ?? cid),
       title: c.name,
@@ -108,7 +109,8 @@ export function checkSpec(before: FlowGraph, after: FlowGraph, d: Pick<GraphDiff
       tasks,
       requirements: { total: reqs.length, implemented: implemented.length, newlyImplemented: newly.map((r) => r.name) },
       missing,
-      complete: !!tasks?.total && tasks.done === tasks.total && implemented.length === reqs.length && !missing.length,
+      questions: questions.length ? questions : undefined,
+      complete: !!tasks?.total && tasks.done === tasks.total && implemented.length === reqs.length && !missing.length && !questions.length,
     });
   }
   // Scope follows behaviour, not files: what the spec names, what that calls (a few hops), and

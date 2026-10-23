@@ -22,7 +22,7 @@ export const specLifecycle: Rule = {
   id: "spec-lifecycle",
   category: "risk",
   title: "Spec change lifecycle",
-  description: "With spec changes collected (OpenSpec, Spec Kit, Kiro): changes whose tasks are all ticked although code their requirements name (Implemented by:) does not exist, and OpenSpec changes that are complete (tasks done, every requirement implemented) but not archived. Requirements that name no code are not judged.",
+  description: "With spec changes collected (OpenSpec, Spec Kit, Kiro): changes whose tasks are all ticked although code their requirements name (Implemented by:) does not exist, and OpenSpec changes that are complete (tasks done, every requirement implemented) but not archived, and changes being built while requirements are still marked NEEDS CLARIFICATION. Requirements that name no code are not judged.",
   run(ctx) {
     const out: Insight[] = [];
     const changes = ctx.graph.nodes.filter((n) => n.role === "change" && !n.metadata?.archived);
@@ -34,6 +34,20 @@ export const specLifecycle: Rule = {
       const own = reqs.filter((r) => changeOf(ctx, r) === c.id);
       const missing = own.flatMap((r) => ((r.metadata?.unresolved as string[] | undefined) ?? []).map((x) => ({ r, x })));
       const done = !!tasks?.total && tasks.done === tasks.total;
+      const open = own.filter((r) => (r.metadata?.clarify as string[] | undefined)?.length);
+      const started = !!tasks?.done || own.some((r) => implemented(r));
+      if (open.length && started) {
+        out.push({
+          id: `spec-lifecycle:questions:${c.id}`,
+          rule: "spec-lifecycle",
+          category: "risk",
+          severity: "warning",
+          confidence: "high",
+          title: `"${c.name}" is being built with ${open.length} requirement(s) still marked NEEDS CLARIFICATION`,
+          detail: open.slice(0, 5).map((r) => `${r.name.slice(0, 80)}: ${(r.metadata!.clarify as string[]).join("; ")}`).join("\n"),
+          nodes: [c.id, ...open.map((r) => r.id)],
+        });
+      }
       if (done && missing.length) {
         out.push({
           id: `spec-lifecycle:ticked:${c.id}`,
@@ -45,7 +59,7 @@ export const specLifecycle: Rule = {
           detail: `${missing.slice(0, 6).map(({ r, x }) => `${x} (for "${r.name}")`).join(", ")}. Renamed, not built, or the tasks were ticked early.`,
           nodes: [c.id, ...new Set(missing.map(({ r }) => r.id))],
         });
-      } else if (done && own.length && own.every(implemented) && c.metadata?.format === "openspec") {
+      } else if (done && own.length && own.every(implemented) && !open.length && c.metadata?.format === "openspec") {
         out.push({
           id: `spec-lifecycle:archive:${c.id}`,
           rule: "spec-lifecycle",

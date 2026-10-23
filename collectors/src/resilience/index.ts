@@ -89,6 +89,8 @@ export function resilienceGraph(input: { capabilities: Capability[]; changes: Ch
             implemented_by: r.implementedBy.length ? r.implementedBy : undefined,
             verified_by: r.verifiedBy.length ? r.verifiedBy : undefined,
             targets: r.targets.length ? r.targets : undefined,
+            clarify: r.clarify,
+            tasks: r.tasks,
           }),
         }),
       );

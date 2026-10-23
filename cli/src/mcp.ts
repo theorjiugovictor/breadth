@@ -104,6 +104,8 @@ export function requirementsText(g: FlowGraph, ref?: string): string {
       `- ${r.name}${where(r)}  [${r.id}]${change ? ` (change ${String(change)})` : ""}`,
       r.description ? `  ${r.description.slice(0, 300)}` : "",
       ...scenarios.slice(0, 8).map((s) => `  scenario: ${s.name}${(s.metadata?.slos as { text: string }[] | undefined)?.length ? ` — ${(s.metadata!.slos as { text: string }[]).map((x) => x.text).join(", ")}` : ""}`),
+      r.metadata?.clarify ? `  open questions: ${(r.metadata.clarify as string[]).join("; ")}` : "",
+      r.metadata?.tasks ? `  tasks: ${(r.metadata.tasks as { done: number; total: number }).done}/${(r.metadata.tasks as { done: number; total: number }).total}` : "",
       `  implemented by: ${by("implements", [r.id]).join(", ") || "nothing found"}`,
       `  verified by: ${by("verifies", [r.id, ...scenarios.map((s) => s.id)]).join(", ") || "no test"}`,
       evidence.length ? `  evidence: ${evidence.map((e) => `${String(e.metadata?.verdict ?? "?")}${stale.has(e.id) ? " (stale: behaviour changed since)" : ""} from run ${String(e.metadata?.run ?? e.name)}`).join("; ")}` : "  evidence: none",

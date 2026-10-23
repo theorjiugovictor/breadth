@@ -274,7 +274,7 @@ Each run stores the source snapshot (git revision and a digest of every file) an
 - 🔴 shop-payments is now allowed s3:* on *
 ```
 
-The `spec-lifecycle` insight reports changes whose tasks are all ticked while code they name does not exist, and finished OpenSpec changes that are still open. Agents get `breadth_requirements` over MCP: what a function implements or verifies, with its scenarios, tests and evidence.
+The `spec-lifecycle` insight reports changes whose tasks are all ticked while code they name does not exist, changes being built while requirements still say `[NEEDS CLARIFICATION]`, and finished OpenSpec changes that are still open. Task progress is also counted per requirement where the tasks say which one they serve (Spec Kit's `[US1]` labels, Kiro's `_Requirements: 1.2_` lines). Agents get `breadth_requirements` over MCP: what a function implements or verifies, with its scenarios, tests and evidence.
 
 ## Live data: traces and traffic from running systems
 
