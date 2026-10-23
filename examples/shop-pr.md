@@ -6,7 +6,7 @@
 #### Against the spec
 **OpenSpec change `add-bulk-refunds`**: Add bulk refunds · tasks 1/3 · requirements implemented 2/2 (2 by this pull request) <sub>(code in the pull request implements its requirements; branch add-bulk-refunds)</sub>
 
-**Outside the spec change** (4): not in any file, service or target its requirements name.
+**Outside the spec change** (4): not reached from the code or targets its requirements name.
 - 🔴 postgresql is now reachable from the internet (tcp/5432): PostgreSQL (5432)
 - 🔴 shop-payments is now allowed s3:* on *
 - 🔴 charge no longer calls risk_score: a check was removed

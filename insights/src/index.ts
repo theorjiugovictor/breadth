@@ -19,6 +19,7 @@ import { ciRisk } from "./rules/ci-risk.js";
 import { contractGap } from "./rules/contract-gap.js";
 import { evidenceStatus } from "./rules/evidence-status.js";
 import { unexercised } from "./rules/unexercised.js";
+import { specLifecycle } from "./rules/spec-lifecycle.js";
 
 export type { Rule, RuleOptions } from "./rule.js";
 export { Ctx } from "./context.js";
@@ -46,6 +47,7 @@ export const RULES: Rule[] = [
   ciRisk,
   contractGap,
   evidenceStatus,
+  specLifecycle,
   unexercised,
   raceRisk,
   dataExposure,

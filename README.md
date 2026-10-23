@@ -224,9 +224,17 @@ jobs:
 
 ## From requirement to evidence
 
-breadth can hold the whole chain in one graph: what was promised (an [OpenSpec](https://github.com/Fission-AI/OpenSpec) spec), the code that implements it, the tests and experiments that check it, and the evidence that supports or contradicts it. Nodes for requirements, scenarios and evidence are `artifact` nodes with a `role`. The links between them are edges with a `relation` (`implements`, `verifies`, `targets`, `supports`, `contradicts`, ...), drawn in indigo and never mistaken for traffic. This is the `resilience-v1` profile.
+breadth can hold the whole chain in one graph: what was promised (a spec), the code that implements it, the tests and experiments that check it, and the evidence that supports or contradicts it. Nodes for requirements, scenarios and evidence are `artifact` nodes with a `role`. The links between them are edges with a `relation` (`implements`, `verifies`, `targets`, `supports`, `contradicts`, ...), drawn in indigo and never mistaken for traffic. This is the `resilience-v1` profile.
 
-**Specs.** `openspec/specs/<capability>/spec.md` and `openspec/changes/<change>/` are read as written. Three optional lines connect a requirement or scenario to the rest of the graph, and success criteria in `THEN` lines become checkable:
+**This layer is optional.** Without specs, breadth works exactly as before: no requirement nodes, no spec findings, nothing about specs in pull request comments. It switches on when one of these is in the repository:
+
+| Format | Read from |
+| --- | --- |
+| [OpenSpec](https://github.com/Fission-AI/OpenSpec) | `openspec/specs/<capability>/spec.md`, `openspec/changes/<change>/` (proposal, tasks, delta specs), `openspec/changes/archive/` |
+| [Spec Kit](https://github.com/github/spec-kit) | `specs/<NNN-feature>/spec.md` and `tasks.md` (user stories with Given/When/Then, `FR-xxx`, `SC-xxx`). Only folders that look like Spec Kit; a plain `specs/` of tests is left alone |
+| [Kiro](https://kiro.dev) | `.kiro/specs/<feature>/requirements.md` and `tasks.md` (numbered requirements, EARS acceptance criteria) |
+
+**Specs.** All three are read as written. Three optional lines connect a requirement or scenario to the rest of the graph, and success criteria in `THEN` lines become checkable:
 
 ```markdown
 ### Requirement: Checkout survives a slow database
@@ -254,6 +262,19 @@ breadth evidence "Postgres latency" --service orders --endpoint "POST /orders" -
 ```
 
 Each run stores the source snapshot (git revision and a digest of every file) and the **behaviour fingerprint** of the service it is about. When that service's calls, data access or endpoints change, the `evidence-status` insight reports the evidence as stale ("about older behaviour of orders"), and a pull request that causes it says so. Contradicted requirements, requirements nothing verifies, and dangling references are reported too. `--results p95_ms=180,error_pct=0.4` records measurements from any other tool, and `--fail-on contradicts` gates CI on the verdict.
+
+**Pull requests against their spec change.** `breadth diff` finds the spec change a pull request implements: by branch name (Spec Kit names branches after the feature), by the spec files it edits, by code it links to a requirement, by a mention in the PR title or description (`--pr-text-file`, which the action passes), or explicitly with `--spec-change <id>`. The comment then shows the change's tasks and how many requirements have code, and lists every behaviour change outside it: anything not reached from the code or targets its requirements name. With `--intent`, the change's requirements are added to the request the LLM compares against. A repository with specs but none matching says so in one line; one without specs sees nothing.
+
+```markdown
+#### Against the spec
+**OpenSpec change `add-bulk-refunds`**: Add bulk refunds · tasks 1/3 · requirements implemented 2/2 (2 by this pull request)
+
+**Outside the spec change** (4): not reached from the code or targets its requirements name.
+- 🔴 postgresql is now reachable from the internet (tcp/5432): PostgreSQL (5432)
+- 🔴 shop-payments is now allowed s3:* on *
+```
+
+The `spec-lifecycle` insight reports changes whose tasks are all ticked while code they name does not exist, and finished OpenSpec changes that are still open. Agents get `breadth_requirements` over MCP: what a function implements or verifies, with its scenarios, tests and evidence.
 
 ## Live data: traces and traffic from running systems
 
@@ -359,6 +380,7 @@ The **breadth live** extension sends unsaved editor buffers to `breadth watch` (
 | `breadth_find` | Functions, classes, files, endpoints and datastores by name or path |
 | `breadth_node` | Where a node lives, its inputs and outputs, callers, callees, data reads and writes, and insights |
 | `breadth_impact` | Everything that depends on a node, up to N hops, and the endpoints it is reachable from |
+| `breadth_requirements` | The spec requirements a node implements or verifies, with scenarios, success criteria, tests and evidence; or every open spec change. One line for repositories without specs |
 | `breadth_insights` | Findings, optionally for one file or folder |
 
 MCP does not replace hooks. An MCP server hears from the agent only when the agent decides to call a tool, so it cannot observe edits; hooks and file watching capture those. What MCP adds is the other direction: the agent can use the graph instead of reading every file, and can say what it is doing. When `breadth watch` is running, the tools read its live graph. Otherwise they scan the project themselves.
@@ -468,7 +490,8 @@ When a graph is a graph, many problems stop hiding in code and become shapes. br
 | `broad-iam` | risk | IAM roles allowed `*`, `service:*` on every resource, or `NotAction` | no |
 | `ci-risk` | risk | `pull_request_target` jobs that check out the pull request's code (secrets exposed to anyone who opens a PR), `write-all` tokens, third-party actions pinned by tag instead of commit | no |
 | `contract-gap` | risk | AsyncAPI contracts and code disagree: a declared consumer of a topic nothing publishes, a topic code publishes that no contract declares | no |
-| `evidence-status` | risk | Requirements (OpenSpec) contradicted by run evidence, evidence recorded on behaviour that has since changed (stale), requirements nothing verifies, references that match nothing | no |
+| `evidence-status` | risk | Requirements (OpenSpec, Spec Kit, Kiro) contradicted by run evidence, evidence recorded on behaviour that has since changed (stale), requirements nothing verifies, references that match nothing | no |
+| `spec-lifecycle` | risk | Spec changes whose tasks are all ticked although code they name does not exist; complete OpenSpec changes not yet archived | no |
 | `unexercised` | redundancy | Endpoints in code that got no traffic while their service did (needs `breadth pull` / `watch --live`) | live data |
 | `iam-usage` | risk | Code that reads or writes an S3 bucket, DynamoDB table, SQS queue, SNS topic or Kinesis stream its IAM role does not allow (AccessDenied waiting to happen), and grants the code never uses | no |
 | `race-risk` | risk | Shared state with several writers (module globals; databases written by several services) | no |

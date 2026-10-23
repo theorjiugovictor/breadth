@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { FlowGraph } from "@breadth/schema";
 import { describeChanges } from "./changes.js";
 import { checkSpec } from "./spec.js";
+import { runInsights } from "./index.js";
 
 const g = (nodes: object[], edges: object[]): FlowGraph => ({ version: "1.0", nodes, edges }) as unknown as FlowGraph;
 const fn = (id: string, file = "app.py") => ({ id, kind: "function", layer: "code", name: id, source: { file } });
@@ -44,5 +45,23 @@ describe("checkSpec", () => {
   it("is silent for repositories without specs", () => {
     const strip = (x: FlowGraph) => g(x.nodes.filter((n) => n.kind !== "artifact"), x.edges.filter((e) => !e.relation));
     expect(checkSpec(strip(before), strip(after), describeChanges(strip(before), strip(after)), { branch: "add-refunds" })).toBeUndefined();
+  });
+});
+
+describe("spec-lifecycle", () => {
+  const change = (tasks: { done: number; total: number }) => ({ id: "change:c", kind: "artifact", layer: "resilience", role: "change", name: "C", metadata: { change: "c", format: "openspec", tasks } });
+  const cap = { id: "change:c/spec:x", kind: "artifact", layer: "resilience", role: "capability", name: "X", metadata: { change: "c" } };
+  const req = (unresolved?: string[]) => ({ id: "req:x/r", kind: "artifact", layer: "resilience", role: "requirement", name: "R", parent: cap.id, metadata: unresolved ? { unresolved } : {} });
+  const run = (nodes: object[], edges: object[] = []) => runInsights(g(nodes, edges), { rules: ["spec-lifecycle"] }).map((i) => `${i.severity} ${i.title}`);
+
+  it("warns when every task is ticked but named code does not exist", () => {
+    expect(run([change({ done: 2, total: 2 }), cap, req(["refund_orders"])])).toEqual(['warning Every task of "C" is ticked, but code it names does not exist']);
+  });
+  it("suggests archiving a finished OpenSpec change", () => {
+    expect(run([change({ done: 2, total: 2 }), cap, req(), fn("refund")], [{ id: "i", kind: "depends_on", relation: "implements", from: { node: "refund" }, to: { node: "req:x/r" } }])).toEqual(['info "C" is complete and can be archived']);
+  });
+  it("says nothing while work is open, or without specs", () => {
+    expect(run([change({ done: 1, total: 2 }), cap, req(["refund_orders"])])).toEqual([]);
+    expect(run([fn("refund")])).toEqual([]);
   });
 });
