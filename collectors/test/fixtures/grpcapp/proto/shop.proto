@@ -1,0 +1,17 @@
+syntax = "proto3";
+package shop;
+
+// Cart storage
+service CartService {
+  rpc AddItem(AddItemRequest) returns (Empty) {}
+  rpc GetCart(GetCartRequest) returns (Cart) {}
+  rpc WatchCart(GetCartRequest) returns (stream Cart) {}
+}
+
+service AdService {
+  rpc GetAds(AdRequest) returns (AdResponse) {}
+}
+
+service CheckoutService {
+  rpc PlaceOrder(PlaceOrderRequest) returns (PlaceOrderResponse) {}
+}

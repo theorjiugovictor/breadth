@@ -1,6 +1,7 @@
 import * as posix from "./posix.js";
 import { edgeId, SCHEMA_VERSION, type EdgeKind, type FlowEdge, type FlowGraph, type FlowNode, type Port } from "@breadth/schema";
 import type { CallSite, Def, FileModel, ImportBinding } from "./model.js";
+import { grpcLinks, type ProtoService } from "./grpc.js";
 import { AWS_PACKAGES, cloudAccess, dynamoTableOf, type AwsService, type CloudAccess } from "./cloud.js";
 import {
   classifyPackage,
@@ -39,6 +40,8 @@ export interface BuildInput {
   /** All non-code files that were seen, used for service detection. */
   otherFiles: string[];
   includeExternal?: boolean;
+  /** Services declared in .proto files (gRPC). */
+  protos?: ProtoService[];
 }
 
 type Target =
@@ -626,6 +629,36 @@ export function buildGraph(input: BuildInput): FlowGraph {
       const handler = [...(c.argNames ?? [])].reverse().map((n) => resolveInScope(f, c.from, n.split(".")[0])).find((t) => t?.kind === "def");
       const target = handler && handler.kind === "def" ? ids.def(handler.file, handler.qual) : fromNodeId(f, c.from);
       addEdge("call", id, target, { line: c.line, file: f.path }, { protocol: "http" });
+    }
+  }
+
+  // ---------- gRPC: one endpoint per rpc, served by its handler, called through stubs ----------
+  {
+    const g = grpcLinks(files, input.protos ?? []);
+    const used = new Set([...g.servers.map((x) => x.endpoint), ...g.clients.map((x) => x.endpoint)]);
+    for (const s of g.services.values()) {
+      for (const m of s.methods) {
+        const id = `grpc:${s.full}/${m.name}`;
+        if (!used.has(id)) continue;
+        const server = g.servers.find((x) => x.endpoint === id);
+        addNode({
+          id,
+          name: `gRPC ${s.name}/${m.name}`,
+          kind: "network_endpoint",
+          layer: "network",
+          parent: server ? ids.file(server.file) : undefined,
+          description: `gRPC method ${s.full}/${m.name}${m.streaming ? ` (${m.streaming} streaming)` : ""}${server ? `, served by ${serviceOf(server.file)}` : ""}`,
+          inputs: [{ name: "request", type: "grpc" }],
+          outputs: [{ name: "response", type: "grpc" }],
+          source: server ? { file: server.file, line: server.line } : s.file ? { file: s.file, line: m.line } : undefined,
+          metadata: compact({ protocol: "grpc", service: server ? serviceOf(server.file) : undefined, grpc_service: s.full, method: m.name, streaming: m.streaming, proto: s.file || undefined }),
+        });
+      }
+    }
+    for (const sv of g.servers) addEdge("call", sv.endpoint, ids.def(sv.file, sv.qual), { line: sv.line, file: sv.file }, { protocol: "grpc" });
+    for (const c of g.clients) {
+      routeSites.add(c.site);
+      addEdge("call", fromNodeId(c.file, c.site.from), c.endpoint, { ...c.site, file: c.file.path }, { protocol: "grpc", label: c.endpoint.slice(5) });
     }
   }
 

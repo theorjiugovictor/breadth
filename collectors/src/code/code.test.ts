@@ -165,3 +165,27 @@ describe("code collector: java", async () => {
     expect(edge(g, "call", fn("OrderController.java#OrderController.delete"), fn("OrderController.java#OrderController.audit"))).toBeTruthy();
   });
 });
+
+describe("code collector: gRPC between services", async () => {
+  const g = await codeCollector.collect(path.join(fixtures, "grpcapp"), {});
+  const ep = (m: string) => g.nodes.find((n) => n.id === `grpc:shop.${m}`);
+
+  it("makes one endpoint per rpc, served by its handler in any language", () => {
+    expect(validateGraph(g)).toEqual({ valid: true, errors: [] });
+    expect(ep("CartService/AddItem")?.metadata).toMatchObject({ protocol: "grpc", service: "cart", grpc_service: "shop.CartService" });
+    expect(edge(g, "call", "grpc:shop.CartService/AddItem", "code:fn:cart/server.go#cartServer.AddItem")).toBeTruthy();
+    expect(edge(g, "call", "grpc:shop.CheckoutService/PlaceOrder", "code:fn:checkout/server.py#Checkout.PlaceOrder")).toBeTruthy();
+    expect(edge(g, "call", "grpc:shop.AdService/GetAds", "code:fn:ads/src/main/java/shop/AdServer.java#AdServer.AdServiceImpl.getAds")).toBeTruthy();
+  });
+
+  it("links stub calls across services to the endpoint", () => {
+    expect(edge(g, "call", "code:fn:checkout/server.py#Checkout.PlaceOrder", "grpc:shop.CartService/GetCart")?.protocol).toBe("grpc");
+    expect(edge(g, "call", "code:fn:web/client.js#addToCart", "grpc:shop.CartService/AddItem")).toBeTruthy();
+    expect(edge(g, "call", "code:fn:web/client.js#showAds", "grpc:shop.AdService/GetAds")).toBeTruthy();
+  });
+
+  it("leaves out rpcs nothing serves or calls, and health checks", () => {
+    expect(ep("CartService/WatchCart")).toBeUndefined();
+    expect(g.nodes.some((n) => /Check$/.test(n.id) && n.id.startsWith("grpc:"))).toBe(false);
+  });
+});
