@@ -17,12 +17,15 @@ import { broadIam, internetExposed, publicData, unencryptedStorage } from "./rul
 import { iamUsage } from "./rules/iam-usage.js";
 import { ciRisk } from "./rules/ci-risk.js";
 import { contractGap } from "./rules/contract-gap.js";
+import { evidenceStatus } from "./rules/evidence-status.js";
 
 export type { Rule, RuleOptions } from "./rule.js";
 export { Ctx } from "./context.js";
 export { sensitiveFields } from "./rules/data-exposure.js";
 export { expectedKinds } from "./rules/contract-drift.js";
 export { describeChanges, diffGraph, withoutRemoved, type ChangeReport } from "./changes.js";
+export { behaviourUnits, serviceFingerprint, type Unit } from "./units.js";
+export { staleEvidence } from "./rules/evidence-status.js";
 
 export const RULES: Rule[] = [
   nPlusOne,
@@ -40,6 +43,7 @@ export const RULES: Rule[] = [
   iamUsage,
   ciRisk,
   contractGap,
+  evidenceStatus,
   raceRisk,
   dataExposure,
   contractDrift,

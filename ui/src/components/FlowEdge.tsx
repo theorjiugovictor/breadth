@@ -1,6 +1,6 @@
 import { memo } from "react";
 import { BaseEdge, EdgeLabelRenderer, getBezierPath, type EdgeProps } from "@xyflow/react";
-import { EDGE_STYLE, edgeColor } from "../graph/visual";
+import { EDGE_STYLE, edgeColor, relationColor } from "../graph/visual";
 import type { ViewEdge } from "../graph/view";
 
 export interface EdgeData extends Record<string, unknown> {
@@ -13,6 +13,7 @@ export interface EdgeData extends Record<string, unknown> {
 
 function labelText(e: ViewEdge): string | undefined {
   const parts: string[] = [];
+  if (e.relation) return e.relation.replace(/_/g, " ") + (e.count > 1 ? ` ×${e.count}` : "");
   if (e.loop) parts.push("↻");
   // Plain code calls only show how often; protocol edges (http, sql, kafka...) show what.
   const meaningful = e.protocols.length > 0 || e.kind !== "call";
@@ -54,9 +55,9 @@ export const FlowEdge = memo(function FlowEdge(props: EdgeProps) {
         path={path}
         markerEnd={markerEnd}
         style={{
-          stroke: d.diff === "added" ? "var(--ok)" : d.diff === "removed" ? "var(--err)" : edgeColor(e.kind),
-          strokeWidth: style.width + Math.min(2, Math.log10(Math.max(1, e.count))) + (d.diff ? 1 : 0),
-          strokeDasharray: d.diff === "removed" ? "6 5" : style.dash,
+          stroke: d.diff === "added" ? "var(--ok)" : d.diff === "removed" ? "var(--err)" : e.relation ? relationColor(e.relation) : edgeColor(e.kind),
+          strokeWidth: (e.relation ? 2.2 : style.width) + Math.min(2, Math.log10(Math.max(1, e.count))) + (d.diff ? 1 : 0),
+          strokeDasharray: d.diff === "removed" ? "6 5" : e.relation ? undefined : style.dash,
           opacity: d.diff === "removed" ? 0.8 : e.conditional ? 0.75 : 1,
         }}
         interactionWidth={14}

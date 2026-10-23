@@ -1,0 +1,12 @@
+{
+  "kind": "breadth.run",
+  "id": "2026-10-20-postgres-down",
+  "scenario": "Postgres unavailable",
+  "target": "POST /orders",
+  "service": "orders",
+  "experiment": { "tool": "toxiproxy", "fault": "Postgres down for 10 s", "plan": { "baseline_s": 60, "fault_s": 10, "recovery_s": 60, "rate_rps": 10 } },
+  "window": { "start": "2026-10-20T09:10:00Z", "end": "2026-10-20T09:12:10Z" },
+  "approval": { "by": "dana", "at": "2026-10-20T09:05:00Z" },
+  "results": { "error_pct": 7.6, "recovery_s": 22 },
+  "store": "quality-lake://runs/2026-10-20-postgres-down"
+}

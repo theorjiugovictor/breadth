@@ -37,6 +37,8 @@ export interface ViewEdge {
   targetPort?: string;
   edgeIds: string[];
   hasSamples: boolean;
+  /** Semantic relation (implements, verifies, supports, ...): drawn apart from traffic. */
+  relation?: string;
 }
 
 export interface View {
@@ -111,7 +113,7 @@ export function computeView(index: GraphIndex, focus: string, filters: Filters, 
       const direct = ra === e.from.node && rb === e.to.node && a === ra && b === rb;
       const sp = direct ? e.from.port : undefined;
       const tp = direct ? e.to.port : undefined;
-      const key = `${a}|${sp ?? ""}|${b}|${tp ?? ""}|${e.kind}`;
+      const key = `${a}|${sp ?? ""}|${b}|${tp ?? ""}|${e.kind}|${e.relation ?? ""}`;
       let v = agg.get(key);
       if (!v) {
         v = {
@@ -128,6 +130,7 @@ export function computeView(index: GraphIndex, focus: string, filters: Filters, 
           targetPort: tp,
           edgeIds: [],
           hasSamples: false,
+          relation: e.relation,
         };
         agg.set(key, v);
       }

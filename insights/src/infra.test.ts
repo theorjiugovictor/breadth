@@ -196,3 +196,26 @@ describe("CI and contract rules", () => {
     expect(runInsights(g, { rules: ["ci-risk"] }).map((i) => i.severity)).toEqual(["critical", "warning", "info"]);
   });
 });
+
+describe("requirement evidence", () => {
+  it("reports contradicted, unverified and unresolved requirements, and stale evidence", async () => {
+    const { runCollectors } = await import("@breadth/collectors");
+    const { behaviourUnits, serviceFingerprint } = await import("./index.js");
+    const shop = (await import("node:path")).resolve(__dirname, "../../examples/shop");
+    const g = await runCollectors(shop, ["code", "resilience"], { exclude: ["**/generate.mjs", "traces/"] });
+    const titles = runInsights(g, { rules: ["evidence-status"] }).map((i) => `${i.severity} ${i.title}`);
+    expect(titles).toEqual(
+      expect.arrayContaining([
+        'critical "Checkout survives a slow database" is contradicted by run 2026-10-20-postgres-down',
+        'info "Support agents can refund many orders at once" refers to refund_orders, POST /orders/refunds, which do not exist',
+      ]),
+    );
+    // evidence recorded on the current behaviour is fresh; on different behaviour, stale
+    const ev = g.nodes.find((n) => n.id === "evidence:2026-10-20-postgres-latency")!;
+    const service = behaviourUnits(g).get("code:fn:services/orders/app/main.py#create_order")!.service;
+    ev.metadata = { ...ev.metadata, service, fingerprint: serviceFingerprint(behaviourUnits(g), service) };
+    expect(runInsights(g, { rules: ["evidence-status"] }).some((i) => i.id.includes(":stale:"))).toBe(false);
+    ev.metadata = { ...ev.metadata, fingerprint: "older" };
+    expect(runInsights(g, { rules: ["evidence-status"] }).find((i) => i.id.includes(":stale:"))?.title).toBe(`Evidence for "Checkout survives a slow database" is about older behaviour of ${service}`);
+  });
+});

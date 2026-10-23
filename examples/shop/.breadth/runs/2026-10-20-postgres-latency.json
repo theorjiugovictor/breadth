@@ -1,0 +1,12 @@
+{
+  "kind": "breadth.run",
+  "id": "2026-10-20-postgres-latency",
+  "scenario": "Postgres latency",
+  "target": "POST /orders",
+  "service": "orders",
+  "experiment": { "tool": "toxiproxy", "fault": "Postgres +100 ms for 10 s", "plan": { "baseline_s": 60, "fault_s": 10, "recovery_s": 60, "rate_rps": 10 } },
+  "window": { "start": "2026-10-20T09:00:00Z", "end": "2026-10-20T09:02:10Z" },
+  "approval": { "by": "dana", "at": "2026-10-20T08:55:00Z", "hash": "sha256:4f1c9e0b" },
+  "results": { "p95_ms": 240, "error_pct": 0.3 },
+  "store": "quality-lake://runs/2026-10-20-postgres-latency"
+}

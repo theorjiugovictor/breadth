@@ -85,6 +85,12 @@ export function describeChanges(before: FlowGraph, after: FlowGraph, refs: { bas
     const how = e.label && e.label !== t ? ` (${e.label})` : "";
     const verb = added ? "now" : "no longer";
     const ids = { nodes: [e.from.node, e.to.node], edges: [e.id] };
+    // Requirements (resilience-v1): what implements and verifies them.
+    if (e.relation) {
+      if (e.relation === "implements") return push({ kind: "implements", severity: "low", text: `${f} ${added ? "now implements" : "no longer implements"} "${t}"`, ...ids });
+      if (e.relation === "verifies") return push({ kind: "verifies", severity: added ? "low" : "medium", text: `"${t}" is ${added ? "now" : "no longer"} verified by ${f}`, nodes: [e.to.node, e.from.node], edges: [e.id] });
+      return; // structure of specs and runs: listed through their nodes and findings
+    }
     // Permissions (IAM): what a workload is allowed to touch.
     if (e.metadata?.via === "iam") {
       const reads = e.kind === "read" || (e.kind === "event" && from?.kind === "queue");
@@ -173,6 +179,11 @@ export function describeChanges(before: FlowGraph, after: FlowGraph, refs: { bas
   for (const id of d.added) {
     const n = b.get(id)!;
     if (id.startsWith("net:")) continue; // address ranges: listed with the rule that lets them in
+    if (n.role === "requirement") {
+      push({ kind: "requirement-added", severity: "low", text: `new requirement "${n.name}"`, nodes: [id] });
+      continue;
+    }
+    if (n.kind === "artifact") continue;
     if (n.kind === "network_endpoint" && isTerraform(n)) push({ kind: "infra-added", severity: PLUMBING.test(String(n.metadata?.type)) ? "low" : "medium", text: `new network entry point ${n.name} (${String(n.metadata?.type)})`, nodes: [id] });
     else if (n.kind === "network_endpoint") push({ kind: "endpoint-added", severity: "high", text: `new endpoint ${n.name}${n.metadata?.service ? ` in ${n.metadata.service}` : ""}`, nodes: [id] });
     else if (n.kind === "service") push({ kind: "service-added", severity: "high", text: `new service ${n.name}`, nodes: [id] });

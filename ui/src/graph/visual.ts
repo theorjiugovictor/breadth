@@ -17,6 +17,14 @@ import {
   Variable,
   Workflow,
   Layers,
+  FileCheck2,
+  FlaskConical,
+  ScrollText,
+  ShieldCheck,
+  ClipboardList,
+  BadgeCheck,
+  Fingerprint,
+  GitPullRequestArrow,
   type LucideIcon,
 } from "lucide-react";
 import type { EdgeKind, FlowNode, Layer, NodeKind } from "@breadth/schema";
@@ -34,6 +42,7 @@ export const KIND_LABEL: Record<NodeKind, string> = {
   team: "Team",
   system: "System",
   org: "Organisation",
+  artifact: "Record",
 };
 
 const KIND_ICON: Record<NodeKind, LucideIcon> = {
@@ -49,6 +58,7 @@ const KIND_ICON: Record<NodeKind, LucideIcon> = {
   team: Users,
   system: Network,
   org: Building2,
+  artifact: FileCheck2,
 };
 
 const KIND_COLOR: Record<NodeKind, string> = {
@@ -64,10 +74,39 @@ const KIND_COLOR: Record<NodeKind, string> = {
   team: "#ea580c",
   system: "#334155",
   org: "#ea580c",
+  artifact: "#9333ea",
 };
+
+/** Artifact roles (resilience-v1 profile): requirement, scenario, test, evidence, ... */
+const ROLE_VISUAL: Record<string, { Icon: LucideIcon; color: string; label: string }> = {
+  change: { Icon: GitPullRequestArrow, color: "#0f766e", label: "Spec change" },
+  capability: { Icon: ScrollText, color: "#0f766e", label: "Capability" },
+  requirement: { Icon: ClipboardList, color: "#0f766e", label: "Requirement" },
+  scenario: { Icon: ClipboardList, color: "#14b8a6", label: "Scenario" },
+  test: { Icon: FileCheck2, color: "#2563eb", label: "Test" },
+  snapshot: { Icon: Fingerprint, color: "#475569", label: "Source snapshot" },
+  experiment: { Icon: FlaskConical, color: "#9333ea", label: "Experiment" },
+  approval: { Icon: BadgeCheck, color: "#ca8a04", label: "Approval" },
+  evidence: { Icon: ShieldCheck, color: "#ca8a04", label: "Evidence" },
+};
+
+/** Semantic relations are indigo; evidence verdicts green / red. */
+export function relationColor(relation: string): string {
+  if (relation === "supports") return "var(--ok)";
+  if (relation === "contradicts") return "var(--err)";
+  return "#4f46e5";
+}
 
 /** Icon + colour for a node, refined by common metadata.subkind values. */
 export function nodeVisual(n: FlowNode): { Icon: LucideIcon; color: string; label: string } {
+  if (n.kind === "artifact") {
+    const v = ROLE_VISUAL[n.role ?? ""];
+    if (v) {
+      const verdict = n.metadata?.verdict;
+      const color = verdict === "supports" ? "#16a34a" : verdict === "contradicts" ? "#dc2626" : n.metadata?.stale ? "#94a3b8" : v.color;
+      return { ...v, color };
+    }
+  }
   const sub = n.metadata?.subkind as string | undefined;
   const ext = n.metadata?.external === true;
   if (sub === "class") return { Icon: Braces, color: "#a855f7", label: "Class" };
@@ -88,6 +127,7 @@ export const LAYER_LABEL: Record<Layer, string> = {
   infra: "Infrastructure",
   delivery: "Delivery",
   org: "Organisation",
+  resilience: "Resilience",
 };
 
 export const EDGE_STYLE: Record<EdgeKind, { label: string; dash?: string; width: number }> = {
