@@ -169,6 +169,21 @@ export interface GraphDiffInfo {
   insightsAdded?: string[];
   insightsResolved?: string[];
   changes: BehaviorChange[];
+  /** The change checked against what it was asked to do. */
+  intent?: IntentCheck;
+}
+
+export interface IntentCheck {
+  /** What was asked: the PR description or the agent's task. */
+  request: string;
+  summary?: string;
+  /** Indexes into `changes` that do what was asked. */
+  matches?: number[];
+  /** Changes nothing in the request explains. */
+  unrequested?: { change: number; why?: string }[];
+  /** Things asked for that no change shows. */
+  missing?: string[];
+  model?: string;
 }
 
 export function emptyGraph(): FlowGraph {

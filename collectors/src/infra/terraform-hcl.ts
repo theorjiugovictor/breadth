@@ -9,7 +9,7 @@
 // Browser-safe: no Node APIs.
 
 import { basename, dirname, join } from "../code/posix.js";
-import { attr, parseHcl, type Block, type Body, type Expr } from "./hcl.js";
+import { attr, parseHcl, parseTfJson, parseTfvarsJson, type Block, type Body, type Expr } from "./hcl.js";
 import type { TfResource } from "./terraform.js";
 
 export interface TfSourceFile {
@@ -36,10 +36,19 @@ export interface TfRoot {
 
 export interface LoadOptions {
   warn?: (msg: string) => void;
+  /**
+   * Extra variable files (what `-var-file` would pass), relative to each root module: a list
+   * for every root (files that do not exist are skipped), or per root folder:
+   * { "envs/prod": ["prod.tfvars"] }.
+   */
+  varFiles?: string[] | Record<string, string[]>;
 }
 
-export const TF_FILE = /\.(tf|tofu)$/i;
-export const TFVARS_FILE = /(^|\/)(terraform\.tfvars|[^/]*\.auto\.tfvars)$/i;
+export const TF_FILE = /\.(tf|tofu)(\.json)?$/i;
+/** Variable files Terraform loads on its own. */
+export const TFVARS_FILE = /(^|\/)(terraform\.tfvars|[^/]*\.auto\.tfvars)(\.json)?$/i;
+/** Any variable file (others apply only when named with -var-file / the varFiles setting). */
+export const ANY_TFVARS_FILE = /\.tfvars(\.json)?$/i;
 
 /* ---------------- values ---------------- */
 
@@ -463,19 +472,22 @@ class ModuleInstance {
     for (const a of body.attrs) out[a.name] = plain(this.eval(a.expr, scope));
     for (const b of body.blocks) {
       if (b.type === "lifecycle" || b.type === "provisioner" || b.type === "connection") continue;
-      let name = b.type;
-      let inner = b.body;
-      let innerScope = scope;
+      const list = (out[b.type === "dynamic" ? (b.labels[0] ?? "") : b.type] as unknown[] | undefined) ?? [];
       if (b.type === "dynamic") {
+        // dynamic "ingress" { for_each = [...]; content { ... } }: one block per element when the list is known
         const content = b.body.blocks.find((x) => x.type === "content");
         if (!b.labels[0] || !content) continue;
-        name = b.labels[0];
-        inner = content.body;
-        innerScope = new Map([...scope, [iteratorName(b), new Unknown()]]);
+        const fe = attr(b.body, "for_each");
+        const items = fe ? this.eval(fe.expr, scope) : new Unknown();
+        const it = iteratorName(b);
+        for (const [k, v] of instances(items) ?? [[undefined, new Unknown()]]) {
+          list.push(this.bodyValues(content.body, new Map([...scope, [it, k === undefined ? new Unknown() : { key: k, value: v }]])));
+        }
+        out[b.labels[0]] = list;
+        continue;
       }
-      const list = (out[name] as unknown[] | undefined) ?? [];
-      list.push(this.bodyValues(inner, innerScope));
-      out[name] = list;
+      list.push(this.bodyValues(b.body, scope));
+      out[b.type] = list;
     }
     return out;
   }
@@ -485,33 +497,56 @@ class ModuleInstance {
     for (const [key, b] of this.resources) {
       const count = attr(b.body, "count");
       const forEach = attr(b.body, "for_each");
-      // count = 0 / for_each = {} (often a feature flag): the resource does not exist.
-      if (count && this.eval(count.expr) === 0) continue;
-      if (forEach) {
-        const fe = this.eval(forEach.expr);
-        if (known(fe) && fe && typeof fe === "object" && Object.keys(fe).length === 0) continue;
+      // One instance per for_each key / count index when they are known (a few of them):
+      // aws_sqs_queue.jobs["emails"], aws_instance.web[0]. Unknown: one node for all.
+      let keyed: [string | number | undefined, Value][] = [[undefined, new Unknown()]];
+      if (count) {
+        const n = this.eval(count.expr);
+        if (n === 0) continue; // count = 0, often a feature flag: the resource does not exist
+        if (typeof n === "number" && n > 0 && n <= MAX_INSTANCES) keyed = Array.from({ length: n }, (_, i) => [i, i]);
+      } else if (forEach) {
+        const items = instances(this.eval(forEach.expr));
+        if (items && !items.length) continue;
+        if (items && items.length <= MAX_INSTANCES) keyed = items;
       }
-      const values = this.bodyValues(b.body, new Map([["each", new Unknown()], ["count", new Unknown()]]));
-      delete values.count;
-      delete values.for_each;
-      delete values.depends_on;
-      delete values.provider;
-      out.push({
-        address: this.prefix + key,
-        type: b.labels[0],
-        name: b.labels[1],
-        module: this.prefix ? this.prefix.replace(/\.$/, "") : undefined,
-        values,
-        refs: new Set(this.bodyRefs(b.body, ["lifecycle"])),
-        file: b.file,
-        line: b.line,
-      });
+      const refs = new Set(this.bodyRefs(b.body, ["lifecycle"]));
+      for (const [k, v] of keyed) {
+        const scope = new Map<string, Value>([
+          ["each", forEach && k !== undefined ? { key: k, value: v } : new Unknown()],
+          ["count", count && k !== undefined ? { index: k } : new Unknown()],
+        ]);
+        const values = this.bodyValues(b.body, scope);
+        delete values.count;
+        delete values.for_each;
+        delete values.depends_on;
+        delete values.provider;
+        out.push({
+          address: this.prefix + key + (k === undefined ? "" : `[${JSON.stringify(k)}]`),
+          type: b.labels[0],
+          name: b.labels[1],
+          module: this.prefix ? this.prefix.replace(/\.$/, "") : undefined,
+          values,
+          refs,
+          file: b.file,
+          line: b.line,
+        });
+      }
     }
     for (const [name, call] of this.calls) {
       modules.push({ address: `${this.prefix}module.${name}`, source: call.source, local: !!call.child, file: call.file, line: call.block.line });
       call.child?.collect(out, modules);
     }
   }
+}
+
+/** Above this many for_each keys / count instances, one node stands for all of them. */
+const MAX_INSTANCES = 25;
+
+/** The [key, value] pairs a known for_each collection iterates over (sets iterate with key = value). */
+function instances(v: Value): [string | number, Value][] | undefined {
+  if (!known(v) || !v || typeof v !== "object") return undefined;
+  if (Array.isArray(v)) return v.map((x) => [typeof x === "string" || typeof x === "number" ? x : JSON.stringify(plain(x)), x]);
+  return Object.entries(v);
 }
 
 function iteratorName(dynamic: Block): string {
@@ -718,22 +753,29 @@ function compactObject(o: Record<string, unknown>) {
 
 class Loader {
   readonly dirs = new Map<string, ParsedDir>();
+  /** Every variable file by path, for the varFiles setting. */
+  readonly varFiles = new Map<string, Body>();
 
   constructor(files: TfSourceFile[], opts: LoadOptions) {
     for (const f of files) {
       const isTf = TF_FILE.test(f.path);
-      const isVars = TFVARS_FILE.test(f.path);
+      const isVars = ANY_TFVARS_FILE.test(f.path);
       if (!isTf && !isVars) continue;
       let body: Body;
       try {
-        body = parseHcl(f.text);
+        const json = /\.json$/i.test(f.path);
+        body = isTf ? (json ? parseTfJson(f.text) : parseHcl(f.text)) : json ? parseTfvarsJson(f.text) : parseHcl(f.text);
       } catch (err) {
         opts.warn?.(`infra: could not parse ${f.path}: ${(err as Error).message}`);
         continue;
       }
       const dir = dirname(f.path);
       if (!this.dirs.has(dir)) this.dirs.set(dir, { dir, files: [], tfvars: [] });
-      (isTf ? this.dirs.get(dir)!.files : this.dirs.get(dir)!.tfvars).push({ path: f.path, body });
+      if (isTf) this.dirs.get(dir)!.files.push({ path: f.path, body });
+      else {
+        this.varFiles.set(f.path, body);
+        if (TFVARS_FILE.test(f.path)) this.dirs.get(dir)!.tfvars.push({ path: f.path, body });
+      }
     }
     for (const [dir, d] of this.dirs) if (!d.files.length) this.dirs.delete(dir);
   }
@@ -766,12 +808,14 @@ export function loadTerraform(files: TfSourceFile[], opts: LoadOptions = {}): Tf
   const loader = new Loader(files, opts);
   const roots: TfRoot[] = [];
   for (const dir of loader.roots()) {
-    // terraform.tfvars and *.auto.tfvars apply to a root module, in name order.
+    // terraform.tfvars, then *.auto.tfvars in name order, then the configured var files: later wins.
     const tfvars = new Map<string, Value>();
-    for (const v of [...dir.tfvars].sort((a, b) => Number(/\.auto\./.test(a.path)) - Number(/\.auto\./.test(b.path)) || a.path.localeCompare(b.path))) {
-      const scratch = new ModuleInstance(loader, { dir: dir.dir, files: [], tfvars: [] }, "", new Map(), new Map(), 0);
-      for (const a of v.body.attrs) tfvars.set(a.name, scratch.eval(a.expr));
-    }
+    const auto = [...dir.tfvars].sort((a, b) => Number(/\.auto\./.test(a.path)) - Number(/\.auto\./.test(b.path)) || a.path.localeCompare(b.path));
+    const wanted = Array.isArray(opts.varFiles) ? opts.varFiles : (opts.varFiles?.[dir.dir] ?? []);
+    const extra = wanted.map((f) => ({ path: join(dir.dir, f), body: loader.varFiles.get(join(dir.dir, f)) }));
+    for (const x of extra) if (!x.body && !Array.isArray(opts.varFiles)) opts.warn?.(`infra: var file ${x.path} for ${dir.dir} not found`);
+    const scratch = new ModuleInstance(loader, { dir: dir.dir, files: [], tfvars: [] }, "", new Map(), new Map(), 0);
+    for (const v of [...auto, ...extra]) for (const a of v.body?.attrs ?? []) tfvars.set(a.name, scratch.eval(a.expr));
     const mod = new ModuleInstance(loader, dir, "", new Map(), tfvars, 0);
     const resources: TfResource[] = [];
     const modules: TfModuleCall[] = [];
@@ -779,4 +823,17 @@ export function loadTerraform(files: TfSourceFile[], opts: LoadOptions = {}): Tf
     roots.push({ dir: dir.dir, resources, modules, files: dir.files.map((f) => f.path) });
   }
   return roots;
+}
+
+/**
+ * With several root modules (envs/prod, envs/staging) only one should be matched with the code
+ * and Kubernetes layers by name (datastore:postgresql, service:orders), or every environment's
+ * database merges into one node. The configured one, else one that looks like production, else
+ * the only one.
+ */
+export function primaryRoot(dirs: string[], configured?: string): string | undefined {
+  if (configured !== undefined) return dirs.find((d) => d === configured.replace(/^\.\//, "").replace(/\/+$/, "") || (configured === "." && d === "."));
+  if (dirs.length === 1) return dirs[0];
+  const prod = dirs.filter((d) => /(^|[/_-])(prod|production|prd|live)$/i.test(d));
+  return prod.length === 1 ? prod[0] : undefined;
 }

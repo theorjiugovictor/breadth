@@ -266,3 +266,42 @@ describe("diff", () => {
     expect(before.nodes.some((n) => n.name === "notify")).toBe(false);
   });
 });
+
+describe("diff --intent", () => {
+  it("asks the LLM with the request and the changes only, and reads its JSON back", async () => {
+    const { checkIntent, intentPrompt, parseIntentReply } = await import("./intent.js");
+    const changes = [
+      { kind: "endpoint-added", severity: "high" as const, text: "new endpoint POST /refunds", nodes: ["a"] },
+      { kind: "removed-safeguard", severity: "high" as const, text: "charge no longer calls risk_score: a check was removed", nodes: ["b"] },
+    ];
+    expect(intentPrompt("Add bulk refunds", changes)).toContain("2. [high] charge no longer calls risk_score");
+    let seen = "";
+    const llm = {
+      name: "test:model",
+      remote: false,
+      async complete(req: { prompt: string }) {
+        seen = req.prompt;
+        return 'Sure:\n```json\n{"summary": "Adds refunds and drops the fraud check.", "matches": [1, 9], "unrequested": [{"change": 2, "why": "fraud check removed"}], "missing": ["email the customer"]}\n```';
+      },
+    };
+    const r = await checkIntent("Add bulk refunds", changes, llm);
+    expect(seen).toContain("Add bulk refunds");
+    expect(r).toEqual({ request: "Add bulk refunds", summary: "Adds refunds and drops the fraud check.", matches: [0], unrequested: [{ change: 1, why: "fraud check removed" }], missing: ["email the customer"], model: "test:model" });
+    expect(parseIntentReply("no json here", 2)).toBeUndefined();
+  });
+
+  it("puts the comparison in the PR comment", () => {
+    const report = {
+      added: [], removed: [], changed: [], edgesAdded: [], edgesRemoved: [],
+      changes: [{ kind: "removed-safeguard", severity: "high" as const, text: "charge no longer calls risk_score", nodes: ["x"] }],
+      counts: { functionsAdded: 0, functionsRemoved: 0, functionsChanged: 0, endpointsAdded: 0, endpointsRemoved: 0, edgesAdded: 0, edgesRemoved: 0 },
+      insightsAddedFull: [], insightsResolvedFull: [],
+      intent: { request: "refunds", summary: "Also drops the fraud check.", unrequested: [{ change: 0, why: "safety check removed" }], missing: ["emails"], model: "m" },
+    };
+    const empty = { version: "1.0" as const, nodes: [], edges: [] };
+    const md = renderMarkdown(report, empty, empty);
+    expect(md).toContain("#### Compared with the request\n> Also drops the fraud check.");
+    expect(md).toContain("- 🔴 charge no longer calls risk_score · **not in the request**: safety check removed");
+    expect(md).toContain("**Asked for, but not visible in the change:**\n- emails");
+  });
+});

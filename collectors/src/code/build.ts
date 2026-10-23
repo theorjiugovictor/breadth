@@ -1,6 +1,7 @@
 import * as posix from "./posix.js";
 import { edgeId, SCHEMA_VERSION, type EdgeKind, type FlowEdge, type FlowGraph, type FlowNode, type Port } from "@breadth/schema";
 import type { CallSite, Def, FileModel, ImportBinding } from "./model.js";
+import { AWS_PACKAGES, cloudAccess, dynamoTableOf, type AwsService, type CloudAccess } from "./cloud.js";
 import {
   classifyPackage,
   CONSUME_METHODS,
@@ -11,6 +12,8 @@ import {
   sqlLabel,
   type PackageClass,
 } from "./known.js";
+
+const CLOUD_KIND: Record<AwsService, FlowNode["kind"]> = { s3: "datastore", dynamodb: "datastore", sqs: "queue", sns: "queue", kinesis: "queue", secretsmanager: "infra_resource", lambda: "external_api" };
 
 /** Files that mark a directory as a deployable unit (a service). */
 export const SERVICE_MANIFESTS = new Set([
@@ -24,6 +27,7 @@ export const SERVICE_MANIFESTS = new Set([
   "Cargo.toml",
   "pom.xml",
   "build.gradle",
+  "build.gradle.kts",
 ]);
 
 export interface BuildInput {
@@ -128,6 +132,19 @@ export function buildGraph(input: BuildInput): FlowGraph {
   }
 
   // ---------- resolution ----------
+  // Go and Java: every file of a folder shares one namespace (the package).
+  const pkgDirs = new Map<string, Map<string, string[]>>([
+    ["go", new Map()],
+    ["java", new Map()],
+  ]);
+  for (const f of files) {
+    const dirs = pkgDirs.get(f.lang);
+    if (!dirs) continue;
+    const d = posix.dirname(f.path);
+    dirs.set(d, [...(dirs.get(d) ?? []), f.path].sort());
+  }
+  const siblings = (file: FileModel): FileModel[] =>
+    (pkgDirs.get(file.lang)?.get(posix.dirname(file.path)) ?? []).filter((p) => p !== file.path).map((p) => byPath.get(p)!);
   const pyModules = new Map<string, string>(); // dotted module -> path
   for (const f of files) {
     if (f.lang !== "python") continue;
@@ -165,6 +182,15 @@ export function buildGraph(input: BuildInput): FlowGraph {
       }
       const p = findPyModule(spec, from.path);
       return p ? { file: p } : { external: packageName(spec, "python") };
+    }
+    if (from.lang === "go" || from.lang === "java") {
+      // A package is a folder: github.com/acme/shop/internal/store or com.acme.shop.store, matched by its tail.
+      const tail = from.lang === "go" ? spec : spec.replace(/\./g, "/");
+      let best: string | undefined;
+      for (const dir of pkgDirs.get(from.lang)!.keys()) {
+        if (dir !== "." && (tail === dir || tail.endsWith(`/${dir}`) || dir.endsWith(`/${tail}`)) && (!best || dir.length > best.length)) best = dir;
+      }
+      return best ? { file: pkgDirs.get(from.lang)!.get(best)![0] } : { external: packageName(spec, from.lang) };
     }
     // JS / TS
     if (spec.startsWith(".") || spec.startsWith("/")) {
@@ -221,6 +247,11 @@ export function buildGraph(input: BuildInput): FlowGraph {
         if (r) return r;
       }
     }
+    // Go / Java: declared in another file of the same package
+    for (const s of siblings(file)) {
+      if (defIndex.get(s.path)!.has(name)) return { kind: "def", file: s.path, qual: name };
+      if (globalIndex.get(s.path)!.has(name)) return { kind: "global", file: s.path, name };
+    }
     return undefined;
   };
 
@@ -244,12 +275,15 @@ export function buildGraph(input: BuildInput): FlowGraph {
       if (defs.get(s)?.type === "class") return s;
       s = s.includes(".") ? s.slice(0, s.lastIndexOf(".")) : "";
     }
+    // Go: func (s *Store) Save() with Store declared in another file of the package
+    if (file.lang === "go" && defs.get(qual)?.type === "method" && qual.includes(".")) return qual.slice(0, qual.lastIndexOf("."));
     return undefined;
   };
 
   const findMethod = (file: string, cls: string, method: string, depth = 0): Target | undefined => {
     const defs = defIndex.get(file)!;
     if (defs.has(`${cls}.${method}`)) return { kind: "def", file, qual: `${cls}.${method}` };
+    for (const s of siblings(byPath.get(file)!)) if (defIndex.get(s.path)!.has(`${cls}.${method}`)) return { kind: "def", file: s.path, qual: `${cls}.${method}` };
     if (depth > 4) return undefined;
     for (const base of defs.get(cls)?.bases ?? []) {
       const t = resolveName(byPath.get(file)!, base.split("[")[0].split("<")[0]);
@@ -265,6 +299,7 @@ export function buildGraph(input: BuildInput): FlowGraph {
     const f = byPath.get(file)!;
     const t = f.attrTypes[`${cls}.${attr}`];
     if (t) return { file, scope: cls, type: t };
+    for (const s of siblings(f)) if (s.attrTypes[`${cls}.${attr}`]) return { file: s.path, scope: cls, type: s.attrTypes[`${cls}.${attr}`] };
     if (depth > 4) return undefined;
     for (const base of defIndex.get(file)!.get(cls)?.bases ?? []) {
       const b = resolveName(f, base.split("[")[0].split("<")[0]);
@@ -296,7 +331,14 @@ export function buildGraph(input: BuildInput): FlowGraph {
     if (cls.target.kind === "external") return descend(cls.target, member);
     if (cls.target.kind === "def" && defIndex.get(cls.target.file)!.get(cls.target.qual)?.type === "class") {
       const m = findMethod(cls.target.file, cls.target.qual, member[0]);
-      return m ? { target: m } : undefined;
+      if (m) return { target: m };
+      // interface OrderRepository extends JpaRepository<...>: repo.save() is the library's
+      const owner = byPath.get(cls.target.file)!;
+      for (const base of defIndex.get(cls.target.file)!.get(cls.target.qual)?.bases ?? []) {
+        const b = resolveName(owner, base.split("<")[0].split("[")[0].trim());
+        if (b?.kind === "external") return descend(b, member);
+      }
+      return undefined;
     }
     return undefined;
   };
@@ -541,13 +583,38 @@ export function buildGraph(input: BuildInput): FlowGraph {
           const prefix = cls?.decorators?.map((x) => x.match(/^Controller\(\s*["'`]([^"'`]*)["'`]/)?.[1]).find(Boolean) ?? "";
           r = { method: nest[1], path: `/${[prefix, nest[2] ?? ""].filter(Boolean).join("/")}`.replace(/\/+/g, "/"), fw: "nest" };
         }
+        // Spring: @GetMapping("/x"), @RequestMapping(value = "/x", method = RequestMethod.POST); prefix from the class's @RequestMapping
+        const spring = dec.match(/^(Get|Post|Put|Patch|Delete|Request)Mapping(?:\(([\s\S]*)\))?$/);
+        if (spring && f.lang === "java" && d.type !== "class") {
+          const cls = d.parentQual ? f.defs.find((x) => x.qual === d.parentQual) : undefined;
+          const prefix = cls?.decorators?.map((x) => x.match(/^RequestMapping\(\s*(?:(?:value|path)\s*=\s*)?\{?\s*"([^"]*)"/)?.[1]).find((x) => x !== undefined) ?? "";
+          const p = spring[2]?.match(/^\s*(?:(?:value|path)\s*=\s*)?\{?\s*"([^"]*)"/)?.[1] ?? spring[2]?.match(/(?:value|path)\s*=\s*\{?\s*"([^"]*)"/)?.[1] ?? "";
+          const verb = spring[1] === "Request" ? (spring[2]?.match(/RequestMethod\.(\w+)/)?.[1] ?? "*") : spring[1];
+          r = { method: verb, path: `/${[prefix, p].filter(Boolean).join("/")}`.replace(/\/+/g, "/").replace(/(.)\/$/, "$1"), fw: "spring" };
+        }
+        // JAX-RS: @GET + @Path("/x"), with the class's @Path as prefix
+        if (!r && f.lang === "java" && /^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)$/.test(dec)) {
+          const pathOf = (decs?: string[]) => decs?.map((x) => x.match(/^Path\(\s*(?:value\s*=\s*)?"([^"]*)"/)?.[1]).find((x) => x !== undefined) ?? "";
+          const cls = d.parentQual ? f.defs.find((x) => x.qual === d.parentQual) : undefined;
+          r = { method: dec, path: `/${[pathOf(cls?.decorators), pathOf(d.decorators)].filter(Boolean).join("/")}`.replace(/\/+/g, "/"), fw: "jaxrs" };
+        }
         if (!r) continue;
         const id = addRoute(f, r.method, r.path, d.line, r.fw);
         addEdge("call", id, ids.def(f.path, d.qual), { line: d.line, file: f.path }, { protocol: "http" });
       }
     }
     for (const c of f.calls) {
-      if (c.parts.length !== 2 || !ROUTE_METHODS.test(c.parts[1]) || !c.firstArg?.startsWith("/")) continue;
+      // Go: http.HandleFunc("/orders", h), mux.HandleFunc("GET /orders/{id}", h), r.HandleFunc("/x", h).Methods("GET")
+      const goRoute = f.lang === "go" && c.parts.length === 2 && /^(HandleFunc|Handle)$/.test(c.parts[1]) ? c.firstArg?.match(/^(?:([A-Z]+)\s+)?(\/\S*)$/) : undefined;
+      if (goRoute) {
+        routeSites.add(c);
+        const id = addRoute(f, goRoute[1] ?? "*", goRoute[2], c.line, "go");
+        const handler = [...(c.argNames ?? [])].reverse().map((n) => resolveInScope(f, c.from, n.split(".")[0])).find((t) => t?.kind === "def");
+        addEdge("call", id, handler && handler.kind === "def" ? ids.def(handler.file, handler.qual) : fromNodeId(f, c.from), { line: c.line, file: f.path }, { protocol: "http" });
+        continue;
+      }
+      // Java routes come from annotations; get("/x") there is a test client (MockMvc, RestAssured)
+      if (f.lang === "java" || c.parts.length !== 2 || !ROUTE_METHODS.test(c.parts[1]) || !c.firstArg?.startsWith("/")) continue;
       const recv = resolveInScope(f, c.from, c.parts[0]);
       if (recv && !(recv.kind === "external" && recv.cls.type === "lib") && recv.kind !== "global") continue;
       routeSites.add(c);
@@ -565,11 +632,19 @@ export function buildGraph(input: BuildInput): FlowGraph {
       if (mod && "external" in mod) imported.set(mod.external, classifyPackage(mod.external, f.lang));
     }
     const fileUses = (type: PackageClass["type"]) => [...imported.entries()].filter(([, c]) => c.type === type);
+    const aws = [...imported.keys()].some((p) => AWS_PACKAGES.test(p));
+    const dynamoTable = aws ? dynamoTableOf(f) : undefined;
 
     for (const c of f.calls) {
       if (routeSites.has(c)) continue;
       const from = fromNodeId(f, c.from);
       const site = { ...c, file: f.path };
+      // AWS SDK calls that name their bucket / table / queue: a node per resource.
+      const cloud = aws ? cloudAccess(f, c, dynamoTable) : undefined;
+      if (cloud) {
+        cloudCall(cloud, from, site);
+        continue;
+      }
       const r = resolveCall(f, c);
       const last = c.parts[c.parts.length - 1];
 
@@ -593,8 +668,10 @@ export function buildGraph(input: BuildInput): FlowGraph {
             continue;
           }
           if (t.cls.type === "db") {
-            const store = storeNode(t.cls.engine);
             const mode = dbAccessMode(method, c.firstArg);
+            // boto3.client("s3") / boto3.resource(...) only make a client: no "aws" datastore until it is used.
+            if (!mode && t.cls.engine === "aws") continue;
+            const store = storeNode(t.cls.engine);
             if (mode === "write") addEdge("write", from, store, site, { protocol: t.cls.engine, label: sqlLabel(c.firstArg) });
             else if (mode === "read") addEdge("read", store, from, site, { protocol: t.cls.engine, label: sqlLabel(c.firstArg) });
             continue;
@@ -612,7 +689,7 @@ export function buildGraph(input: BuildInput): FlowGraph {
       }
 
       // Unresolved: global fetch(), or method calls on clients created from known packages.
-      if (c.parts.length === 1 && last === "fetch" && f.lang !== "python") {
+      if (c.parts.length === 1 && last === "fetch" && f.lang !== "python" && f.lang !== "go" && f.lang !== "java") {
         httpCall(f, c, "fetch", from);
         continue;
       }
@@ -685,6 +762,25 @@ export function buildGraph(input: BuildInput): FlowGraph {
         }
       }
     }
+  }
+
+  function cloudCall(a: CloudAccess, from: string, site: { line: number; file: string; inLoop?: boolean; conditional?: boolean }) {
+    const kind = CLOUD_KIND[a.service];
+    const key = a.name ?? (a.env ? `env:${a.env}` : "dynamic");
+    const id = `cloud:aws:${a.service}:${key}`;
+    addNode({
+      id,
+      name: a.name ?? (a.env ? `$${a.env}` : `${a.service} (name not known)`),
+      kind,
+      layer: kind === "queue" ? "messaging" : "infra",
+      description: `AWS ${a.service} ${a.name ? `"${a.name}"` : a.env ? `named by $${a.env}` : "whose name is computed at runtime"}, used by this code`,
+      metadata: { cloud: "aws", service: a.service, resource: a.name, env: a.env },
+    });
+    const extra = { protocol: a.service, label: a.action };
+    if (a.mode === "call") addEdge("call", from, id, site, extra);
+    else if (kind === "queue") a.mode === "write" ? addEdge("event", from, id, site, extra) : addEdge("event", id, from, site, extra);
+    else if (a.mode === "write") addEdge("write", from, id, site, extra);
+    else addEdge("read", id, from, site, extra);
   }
 
   function queueCall(f: FileModel, c: CallSite, system: string, method: string, from: string, site: { line: number; file: string; inLoop?: boolean; conditional?: boolean }) {

@@ -18,6 +18,7 @@ export function ChangesList({ index, diff, active, onSelect }: Props) {
   const fnAdded = kind(diff.added, "function");
   const fnRemoved = kind(diff.removed, "function");
   const fnChanged = kind(diff.changed, "function");
+  const unrequested = new Map((diff.intent?.unrequested ?? []).map((u) => [u.change, u.why ?? ""]));
   return (
     <div>
       <div className="diff-head">
@@ -30,6 +31,12 @@ export function ChangesList({ index, diff, active, onSelect }: Props) {
         <span className="c-chg">~{fnChanged}</span> functions · <span className="c-add">+{diff.edgesAdded.length}</span>{" "}
         <span className="c-del">−{diff.edgesRemoved.length}</span> connections
       </div>
+      {diff.intent?.summary && (
+        <div className="intent-note">
+          <strong>Compared with the request.</strong> {diff.intent.summary}
+          {!!diff.intent.missing?.length && <div>Not visible: {diff.intent.missing.join("; ")}</div>}
+        </div>
+      )}
       {diff.changes.length === 0 && (
         <div className="empty-note" style={{ padding: "4px 4px" }}>
           No behaviour changes: the same calls, data access and endpoints as before.
@@ -40,7 +47,10 @@ export function ChangesList({ index, diff, active, onSelect }: Props) {
         return (
           <button key={i} className={`change-row${active === i ? " on" : ""}`} onClick={() => onSelect(active === i ? undefined : i)}>
             <Icon size={14} color={COLOR[c.severity]} style={{ flex: "none", marginTop: 2 }} />
-            <span>{c.text}</span>
+            <span>
+              {c.text}
+              {unrequested.has(i) && <span className="not-asked" title={unrequested.get(i) || undefined}> not in the request</span>}
+            </span>
           </button>
         );
       })}

@@ -14,6 +14,7 @@ import { missedParallelism } from "./rules/missed-parallelism.js";
 import { contractDrift } from "./rules/contract-drift.js";
 import { duplicateLogic } from "./rules/duplicate-logic.js";
 import { broadIam, internetExposed, publicData, unencryptedStorage } from "./rules/infra-posture.js";
+import { iamUsage } from "./rules/iam-usage.js";
 
 export type { Rule, RuleOptions } from "./rule.js";
 export { Ctx } from "./context.js";
@@ -34,6 +35,7 @@ export const RULES: Rule[] = [
   publicData,
   unencryptedStorage,
   broadIam,
+  iamUsage,
   raceRisk,
   dataExposure,
   contractDrift,

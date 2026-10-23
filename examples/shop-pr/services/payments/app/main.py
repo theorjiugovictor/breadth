@@ -2,6 +2,7 @@
 from flask import Flask, request
 
 from . import audit
+from .receipts import store_receipt
 from .stripe_client import create_charge, create_refund
 
 app = Flask(__name__)
@@ -22,4 +23,5 @@ def charge():
 def refund():
     body = request.get_json()
     refund_id = create_refund(body["customer"], body["amount"])
+    store_receipt(refund_id, body["customer"], body["amount"])
     return {"status": "refunded", "refundId": refund_id}

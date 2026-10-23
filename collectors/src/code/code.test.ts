@@ -109,3 +109,59 @@ describe("url helpers", () => {
     expect(normRoute("/users/{user_id}")).toBe("/users/{}");
   });
 });
+
+describe("code collector: go", async () => {
+  const g = await codeCollector.collect(path.join(fixtures, "goapp"), {});
+  const fn = (p: string) => `code:fn:${p}`;
+
+  it("produces a valid graph", () => {
+    expect(validateGraph(g)).toEqual({ valid: true, errors: [] });
+  });
+
+  it("resolves calls across packages and across files of one package", () => {
+    expect(edge(g, "call", fn("cmd/api/main.go#createOrder"), fn("internal/store/store.go#Store.Save"))?.loop).toBe(true);
+    // Load is declared in load.go, on the Store type declared in store.go
+    expect(edge(g, "call", fn("cmd/api/main.go#getOrder"), fn("internal/store/load.go#Store.Load"))).toBeTruthy();
+    expect(edge(g, "call", fn("internal/store/store.go#Store.Save"), fn("internal/store/store.go#Store.archive"))).toBeTruthy();
+  });
+
+  it("finds net/http routes, SQL, HTTP calls, Kafka and AWS", () => {
+    expect(edge(g, "call", "route:cmd/api/main.go#POST /orders", fn("cmd/api/main.go#createOrder"))).toBeTruthy();
+    expect(g.nodes.find((n) => n.id === "route:cmd/api/main.go#GET /orders/{}")?.name).toBe("GET /orders/{id}");
+    expect(edge(g, "write", fn("internal/store/store.go#Store.Save"), "store:sql")?.label).toBe("INSERT orders");
+    expect(edge(g, "read", "store:sql", fn("internal/store/load.go#Store.Load"))?.label).toBe("SELECT orders");
+    expect(edge(g, "call", fn("cmd/api/main.go#getOrder"), "ext:http:api.example.com")).toBeTruthy();
+    expect(edge(g, "event", fn("internal/store/store.go#Store.Save"), "queue:kafka")).toBeTruthy();
+    expect(edge(g, "write", fn("internal/store/store.go#Store.archive"), "cloud:aws:s3:env:ARCHIVE_BUCKET")?.label).toBe("s3:PutObject");
+  });
+
+  it("marks exported names and reads doc comments", () => {
+    const save = g.nodes.find((n) => n.id === fn("internal/store/store.go#Store.Save"))!;
+    expect(save.description).toBe("Save writes an order and announces it.");
+    expect(save.inputs?.map((p) => p.name)).toEqual(["ctx", "id"]);
+  });
+});
+
+describe("code collector: java", async () => {
+  const g = await codeCollector.collect(path.join(fixtures, "javaapp"), {});
+  const base = "src/main/java/com/shop/orders";
+  const fn = (q: string) => `code:fn:${base}/${q}`;
+
+  it("produces a valid graph", () => {
+    expect(validateGraph(g)).toEqual({ valid: true, errors: [] });
+  });
+
+  it("finds Spring routes with the controller's prefix", () => {
+    const routes = g.nodes.filter((n) => n.kind === "network_endpoint").map((n) => n.name).sort();
+    expect(routes).toEqual(["DELETE /api/orders/{id}", "GET /api/orders/{id}", "POST /api/orders"]);
+    expect(edge(g, "call", `route:${base}/OrderController.java#POST /api/orders`, fn("OrderController.java#OrderController.create"))).toBeTruthy();
+  });
+
+  it("follows injected fields, JPA repositories, JdbcTemplate and Kafka", () => {
+    expect(edge(g, "call", fn("OrderController.java#OrderController.create"), fn("PriceService.java#PriceService.priceOf"))?.loop).toBe(true);
+    expect(edge(g, "write", fn("OrderController.java#OrderController.create"), "store:sql")).toBeTruthy();
+    expect(edge(g, "read", "store:sql", fn("PriceService.java#PriceService.priceOf"))?.label).toBe("SELECT products");
+    expect(edge(g, "event", fn("OrderController.java#OrderController.create"), "queue:kafka:order-created")).toBeTruthy();
+    expect(edge(g, "call", fn("OrderController.java#OrderController.delete"), fn("OrderController.java#OrderController.audit"))).toBeTruthy();
+  });
+});

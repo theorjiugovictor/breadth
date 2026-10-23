@@ -211,9 +211,12 @@ export function renderMarkdown(report: ChangeReport, before: FlowGraph, after: F
     c.endpointsRemoved && `−${n(c.endpointsRemoved, "endpoint")}`,
     (c.edgesAdded || c.edgesRemoved) && `${c.edgesAdded} connections added, ${c.edgesRemoved} removed`,
   ].filter(Boolean);
+  const unrequested = new Map((report.intent?.unrequested ?? []).map((u) => [u.change, u.why]));
   const line = (x: BehaviorChange) => {
     const file = fileOf(x.nodes[0], before, after);
-    return `- ${ICON[x.severity]} ${x.text}${file && !x.text.includes(file) ? ` <sub>\`${file}\`</sub>` : ""}`;
+    const i = report.changes.indexOf(x);
+    const flag = unrequested.has(i) ? ` · **not in the request**${unrequested.get(i) ? `: ${unrequested.get(i)}` : ""}` : "";
+    return `- ${ICON[x.severity]} ${x.text}${file && !x.text.includes(file) ? ` <sub>\`${file}\`</sub>` : ""}${flag}`;
   };
   const out: string[] = [COMMENT_MARKER, `### ${opts.title ?? "breadth · what this change does"}`, ""];
   if (!report.changes.length && !parts.length) {
@@ -223,6 +226,7 @@ export function renderMarkdown(report: ChangeReport, before: FlowGraph, after: F
       `**${attention.length ? `${n(attention.length, "change")} worth a close look` : "Nothing high-risk"}**${parts.length ? ` · ${parts.join(" · ")}` : ""}`,
       "",
     );
+    if (report.intent) out.push(...intentSection(report), "");
     if (attention.length) out.push("#### Worth a close look", ...attention.slice(0, 25).map(line), "");
     if (other.length) out.push("#### Also changes", ...other.slice(0, 25).map(line), other.length > 25 ? `- …and ${other.length - 25} more` : "", "");
     const picture = mermaid(report, before, after);
@@ -242,11 +246,33 @@ export function renderMarkdown(report: ChangeReport, before: FlowGraph, after: F
   return out.filter((l, i, a) => !(l === "" && a[i - 1] === "")).join("\n") + "\n";
 }
 
+/** The request compared with the change (breadth diff --intent). */
+function intentSection(report: ChangeReport): string[] {
+  const it = report.intent!;
+  const out = ["#### Compared with the request"];
+  if (it.summary) out.push(`> ${it.summary}`, "");
+  const extra = (it.unrequested ?? []).filter((u) => report.changes[u.change]);
+  if (extra.length) {
+    out.push(`**Not in the request** (${extra.length}):`);
+    for (const u of extra.slice(0, 15)) out.push(`- ${ICON[report.changes[u.change].severity]} ${report.changes[u.change].text}${u.why ? ` · ${u.why}` : ""}`);
+    out.push("");
+  }
+  if (it.missing?.length) out.push("**Asked for, but not visible in the change:**", ...it.missing.slice(0, 10).map((m) => `- ${m}`), "");
+  if (!extra.length && !it.missing?.length) out.push("Every behaviour change is explained by the request.", "");
+  out.push(`<sub>Request checked by ${it.model ?? "an LLM"} against the list of changes; it can be wrong.</sub>`);
+  return out;
+}
+
 /** Plain text for terminals. */
 export function renderText(report: ChangeReport): string {
   const c = report.counts;
   const head = `${report.base ?? "base"} → ${report.head ?? "head"}: +${c.functionsAdded} −${c.functionsRemoved} ~${c.functionsChanged} functions, +${c.edgesAdded} −${c.edgesRemoved} connections`;
   if (!report.changes.length) return `${head}\nNo behaviour changes.\n`;
   const mark = { high: "!!", medium: " !", low: "  " } as const;
-  return [head, "", ...report.changes.map((x) => `${mark[x.severity]} ${x.text}`)].join("\n") + "\n";
+  const extra = new Map((report.intent?.unrequested ?? []).map((u) => [u.change, u.why]));
+  const lines = [head, ""];
+  if (report.intent?.summary) lines.push(`Request: ${report.intent.summary}`, "");
+  lines.push(...report.changes.map((x, i) => `${mark[x.severity]} ${x.text}${extra.has(i) ? `   <- not in the request${extra.get(i) ? `: ${extra.get(i)}` : ""}` : ""}`));
+  if (report.intent?.missing?.length) lines.push("", "Asked for, not visible:", ...report.intent.missing.map((m) => `   ${m}`));
+  return lines.join("\n") + "\n";
 }

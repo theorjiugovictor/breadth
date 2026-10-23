@@ -1,5 +1,5 @@
 /// <reference lib="webworker" />
-import { scanSources, scanTerraformSources, setWasmLocator } from "@breadth/collectors/browser";
+import { linkCodeToInfra, scanSources, scanTerraformSources, setWasmLocator } from "@breadth/collectors/browser";
 import { runInsights } from "@breadth/insights";
 import { mergeGraphs, type FlowGraph } from "@breadth/schema";
 import { downloadFiles, listRepo, ScanError, repoLabel, type RepoRef } from "./github";
@@ -17,7 +17,7 @@ self.onmessage = async (e: MessageEvent<{ repo: RepoRef; wasmBase: string }>) =>
   try {
     post({ type: "progress", phase: "list" });
     const listing = await listRepo(repo);
-    if (!listing.code.length && !listing.terraform.length) throw new ScanError(`No Python, TypeScript, JavaScript or Terraform files found in ${repoLabel(repo)}.`);
+    if (!listing.code.length && !listing.terraform.length) throw new ScanError(`No Python, TypeScript, JavaScript, Go, Java or Terraform files found in ${repoLabel(repo)}.`);
     const wanted = [...listing.code, ...listing.terraform];
     const total = wanted.length;
     post({ type: "progress", phase: "download", done: 0, total });
@@ -37,6 +37,7 @@ self.onmessage = async (e: MessageEvent<{ repo: RepoRef; wasmBase: string }>) =>
     });
     const tf = downloaded.filter((f) => isTf.has(f.path));
     const graph = tf.length ? mergeGraphs(code, scanTerraformSources(tf, rootName)) : code;
+    if (tf.length) linkCodeToInfra(graph);
     // Deep links to GitHub for the Source tab.
     const blob = `https://github.com/${repo.owner}/${repo.repo}/blob/${listing.ref}/`;
     for (const n of graph.nodes) {

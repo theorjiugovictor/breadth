@@ -109,6 +109,32 @@ jobs:
 
 The action posts one comment per pull request and updates it on every push, writes the same summary to the job page, and uploads the diff graph as an artifact. Pull requests from forks get a read-only token, so for those the summary is on the job page only.
 
+### Compared with the request
+
+An agent asked to "add bulk refunds" that also drops the fraud check has done two things, and only one was asked for. With `--intent` (or `check-intent: true` in the action, which uses the pull request's title and description), an LLM compares the request with the list of behaviour changes. The comment then gets a section on top:
+
+> #### Compared with the request
+> > Adds bulk refunds, but also removes the fraud check from charges and opens Postgres to the internet.
+>
+> **Not in the request** (2):
+> - 🔴 charge no longer calls risk_score: a check was removed · fraud check removed, not asked for
+> - 🔴 postgresql is now reachable from the internet (tcp/5432) · unrelated to refunds
+
+```sh
+breadth diff --intent "Add bulk refunds for support agents" --llm-provider anthropic
+```
+
+```yaml
+      - uses: theorjiugovictor/noodles@main
+        with:
+          check-intent: true
+          llm-provider: anthropic
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+Only the request text and the behaviour-change sentences are sent, never source code. Any provider `breadth llm` lists works, including local ones (Ollama, LM Studio). The result is advice: the changes themselves come from the graphs, not from the model.
+
 ### Terraform
 
 breadth reads `.tf` files directly, so a Terraform pull request gets the same comment with no extra setup:
@@ -307,6 +333,7 @@ When a graph is a graph, many problems stop hiding in code and become shapes. br
 | `public-data` | risk | Public S3 buckets (ACL or bucket policy), publicly accessible databases, GCS buckets shared with `allUsers`, public Azure containers | no |
 | `unencrypted-storage` | risk | Databases, volumes and file systems without encryption at rest | no |
 | `broad-iam` | risk | IAM roles allowed `*`, `service:*` on every resource, or `NotAction` | no |
+| `iam-usage` | risk | Code that reads or writes an S3 bucket, DynamoDB table, SQS queue, SNS topic or Kinesis stream its IAM role does not allow (AccessDenied waiting to happen), and grants the code never uses | no |
 | `race-risk` | risk | Shared state with several writers (module globals; databases written by several services) | no |
 | `data-exposure` | risk | Personal or secret-looking fields (by name and value shape) sent to external APIs | yes |
 | `contract-drift` | risk | Observed values whose type contradicts the declared parameter or return type | yes |
@@ -393,9 +420,9 @@ Conventions:
 
 | Name | Status | Reads |
 |---|---|---|
-| `code` | ✅ | Python, TypeScript, JavaScript (tree-sitter, WASM, no native build). Modules, classes, functions, params as inputs, return types as outputs, call edges (imports, re-exports, `self`/`this`, typed locals, attributes), loops, recursion, globals, DB/HTTP/queue clients, HTTP routes |
+| `code` | ✅ | Python, TypeScript, JavaScript, Go, Java (tree-sitter, WASM, no native build). Modules, classes, functions, params as inputs, return types as outputs, call edges (imports, re-exports, `self`/`this`, typed locals, attributes), loops, recursion, globals, DB/HTTP/queue clients, AWS SDK calls by resource, HTTP routes (FastAPI/Flask, Express/Nest, net/http/gin/chi/gorilla, Spring/JAX-RS). Go packages and Java packages span their folder; Java fields injected through constructors and JPA repositories are followed. Generated files (`DO NOT EDIT`) are skipped |
 | `otel` | ✅ | OTLP JSON traces: services, endpoints, call edges with protocols, datastores, topics, external APIs, one replayable execution per trace |
-| `infra` | ✅ | Terraform/OpenTofu configuration (`.tf`, `.tofu`, `terraform.tfvars`), `show -json` plans and state, and raw `.tfstate`; Kubernetes YAML (workloads, Services, Ingress, ConfigMaps/Secrets by key only, PVCs, NetworkPolicies). [More below](#terraform-and-opentofu) |
+| `infra` | ✅ | Terraform/OpenTofu configuration (`.tf`, `.tofu`, `.tf.json`, var files), `show -json` plans and state, and raw `.tfstate`; Kubernetes YAML (workloads, Services, Ingress, ConfigMaps/Secrets by key only, PVCs, NetworkPolicies). [More below](#terraform-and-opentofu) |
 | `netflow` | stub | VPC flow logs, service mesh: [spec](collectors/src/netflow/README.md) |
 | `messaging` | stub | Kafka, SQS/SNS, RabbitMQ, AsyncAPI: [spec](collectors/src/messaging/README.md) |
 | `cicd` | stub | GitHub Actions, GitLab CI, Argo CD: [spec](collectors/src/cicd/README.md) |
@@ -412,7 +439,25 @@ The `infra` collector reads `.tf` source with its own HCL parser. It needs no `t
 - **Security posture.** Public stores (S3 ACLs and bucket policies, unless a public access block overrides them; `publicly_accessible` databases; GCS `allUsers`; public Azure containers) and storage without encryption at rest are marked on the node. The `internet-exposed`, `public-data`, `unencrypted-storage` and `broad-iam` [insights](#insights) report them.
 - **Plans.** With a `terraform show -json` plan, each resource is marked with what applying does to it (`create`, `update`, `replace`, `delete`, and the attributes that force a replacement).
 
-JSON-syntax configuration (`.tf.json`) and `-var-file` values are not read. Resources whose names come from `for_each` keys keep their address as the name.
+- **Instances.** A resource with a known `count` or `for_each` (up to 25 instances) becomes one node per instance, `aws_sqs_queue.jobs["emails"]`, with its own name. `dynamic` blocks expand the same way. When the keys are only known at apply time, one node stands for all of them.
+- **JSON syntax.** `.tf.json` and `.tfvars.json` are read like native syntax.
+
+- **Code to infrastructure.** AWS SDK calls in code (boto3, AWS SDK for JavaScript v2 and v3) that name their resource, such as `s3.put_object(Bucket=...)`, `new PutObjectCommand({ Bucket })` or `table.query(...)` on a `dynamodb.Table("orders")`, are matched with the Terraform resource. The name can be a literal, a constant or an environment variable. Environment variables are resolved through the service's Kubernetes Deployment (values and ConfigMaps), Lambda `environment` or ECS container definitions, including Terraform references such as `BUCKET = aws_s3_bucket.receipts.bucket`. The code's reads and writes then land on the Terraform node, so a PR comment says `store_receipt now writes to shop-refund-receipts (s3:PutObject)` and the `iam-usage` insight can check them against IAM.
+
+Two settings in `breadth.config.json` cover what a CLI flag would otherwise pass:
+
+```json
+{
+  "settings": {
+    "infra": {
+      "varFiles": { "envs/prod": ["prod.tfvars"], "envs/staging": ["staging.tfvars"] },
+      "primaryRoot": "envs/prod"
+    }
+  }
+}
+```
+
+`varFiles` are the `-var-file` files of each root module (or a list tried in every root). `primaryRoot` is the environment matched with the code and Kubernetes layers by name. With several environments, only one of them can be "the postgresql the code writes to", or every environment's database would merge into one node. By default that is a root named `prod`, `production` or `live`, or the only root.
 
 ## Write a collector
 
@@ -488,7 +533,7 @@ To capture your own graph, serve it and pass the URL: `node scripts/screenshots.
 `app/?repo=owner/repo` (or the box on the landing page) scans a public GitHub repository without a server:
 
 1. One GitHub API request lists the files (`git/trees/HEAD?recursive=1`). Anonymous requests are limited to 60 per hour per visitor.
-2. Python, TypeScript, JavaScript and Terraform files are downloaded from `raw.githubusercontent.com` (not counted against that limit). Repositories with more than 1,200 code files are sampled, application code first, with a notice.
+2. Python, TypeScript, JavaScript, Go, Java and Terraform files are downloaded from `raw.githubusercontent.com` (not counted against that limit). Repositories with more than 1,200 code files are sampled, application code first, with a notice.
 3. A Web Worker parses them with tree-sitter (WebAssembly) and the Terraform reader, builds the graph and runs the insights.
 4. The Source tab shows the lines straight from GitHub, with a link to the file.
 

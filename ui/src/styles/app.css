@@ -1610,6 +1610,24 @@ pre,
   font-size: 12.5px;
   margin-bottom: 4px;
 }
+.intent-note {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+}
+.intent-note strong {
+  color: inherit;
+}
+.not-asked {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--sev-critical);
+  white-space: nowrap;
+}
 .diff-counts {
   font-size: 12px;
   color: var(--text-2);

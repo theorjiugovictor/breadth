@@ -17,6 +17,8 @@ const WORKLOADS = new Set(["Deployment", "StatefulSet", "DaemonSet", "ReplicaSet
 /** Parse one YAML/JSON file into Kubernetes objects (multi-doc and `kind: List` aware). */
 export function parseK8s(text: string, file: string): K8sObject[] {
   const out: K8sObject[] = [];
+  // Helm / Go templates ({{ .Values.x }}) are not manifests until rendered.
+  if (/\{\{[-\s]*[.$\w]/.test(text)) return out;
   let docs: unknown[];
   try {
     docs = parseAllDocuments(text).map((d) => d.toJSON());
@@ -27,7 +29,8 @@ export function parseK8s(text: string, file: string): K8sObject[] {
     if (!d || typeof d !== "object") return;
     const o = d as Json;
     if (o.kind === "List" && Array.isArray(o.items)) return o.items.forEach(push);
-    if (typeof o.apiVersion === "string" && typeof o.kind === "string" && o.metadata?.name) out.push({ ...(o as K8sObject), file });
+    const ns = o.metadata?.namespace;
+    if (typeof o.apiVersion === "string" && typeof o.kind === "string" && typeof o.metadata?.name === "string" && (ns === undefined || typeof ns === "string")) out.push({ ...(o as K8sObject), file });
   };
   docs.forEach(push);
   return out;
@@ -163,10 +166,23 @@ export function k8sGraph(objects: K8sObject[]): { nodes: FlowNode[]; edges: Flow
     if (def) addEdge("network", idOf(ing), idOf({ kind: "Service", metadata: { name: def, namespace: ns(ing) } }), { protocol: "http", label: "default" });
   }
   // Workload -> ConfigMaps / Secrets / PVCs, and env URLs pointing at other services
+  // Non-secret environment of each workload (literal values and ConfigMap data), to match the
+  // names code reads from the environment ($RECEIPTS_BUCKET) with the resources they name.
+  const configMaps = new Map(objects.filter((o) => o.kind === "ConfigMap").map((o) => [`${ns(o)}/${o.metadata.name}`, ((o as Json).data ?? {}) as Record<string, unknown>]));
   for (const w of workloads) {
     const spec = podSpec(w) ?? {};
     const refs = new Set<string>();
+    const env: Record<string, string> = {};
     for (const c of [...(spec.containers ?? []), ...(spec.initContainers ?? [])]) {
+      for (const ef of c.envFrom ?? []) {
+        for (const [k, v] of Object.entries(configMaps.get(`${ns(w)}/${ef.configMapRef?.name}`) ?? {})) if (typeof v === "string") env[`${ef.prefix ?? ""}${k}`] = v;
+      }
+      for (const e of c.env ?? []) {
+        if (typeof e.value === "string") env[e.name] = e.value;
+        const key = e.valueFrom?.configMapKeyRef;
+        const v = key && configMaps.get(`${ns(w)}/${key.name}`)?.[key.key];
+        if (typeof v === "string") env[e.name] = v;
+      }
       for (const ef of c.envFrom ?? []) {
         if (ef.configMapRef?.name) refs.add(`ConfigMap/${ef.configMapRef.name}`);
         if (ef.secretRef?.name) refs.add(`Secret/${ef.secretRef.name}`);
@@ -192,6 +208,8 @@ export function k8sGraph(objects: K8sObject[]): { nodes: FlowNode[]; edges: Flow
       const [kind, name] = r.split("/");
       addEdge("depends_on", idOf(w), idOf({ kind, metadata: { name, namespace: ns(w) } }));
     }
+    const node = nodes.get(idOf(w));
+    if (node && Object.keys(env).length) node.metadata = { ...node.metadata, env };
   }
   // NetworkPolicy ingress rules -> network edges between selected workloads
   for (const np of objects.filter((o) => o.kind === "NetworkPolicy")) {

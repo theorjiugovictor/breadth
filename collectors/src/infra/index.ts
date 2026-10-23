@@ -5,12 +5,20 @@ import type { Collector, CollectorOptions } from "../core/types.js";
 import { walkFiles } from "../core/walk.js";
 import { k8sGraph, parseK8s, type K8sObject } from "./k8s.js";
 import { applyPlan, idPrefixFor, linkIamToKubernetes, parseTerraform, terraformGraph } from "./terraform.js";
-import { loadTerraform, TF_FILE, TFVARS_FILE, type TfSourceFile } from "./terraform-hcl.js";
+import { ANY_TFVARS_FILE, loadTerraform, primaryRoot, TF_FILE, type LoadOptions, type TfSourceFile } from "./terraform-hcl.js";
 
 export { applyPlan, parseTerraform, terraformGraph } from "./terraform.js";
 export { loadTerraform, type TfRoot, type TfSourceFile } from "./terraform-hcl.js";
 
 const CANDIDATE = /\.(json|tfstate|ya?ml|tf|tofu|tfvars)$/i;
+
+/** `settings.infra` in breadth.config.json. */
+export interface InfraSettings {
+  /** Variable files per root module, like -var-file: { "envs/prod": ["prod.tfvars"] }, or a list for every root. */
+  varFiles?: LoadOptions["varFiles"];
+  /** The root module matched with code and Kubernetes by name when there are several (default: the one named prod/production, or the only one). */
+  primaryRoot?: string;
+}
 /** Skip things that are certainly not infra descriptions. */
 const NOT_INFRA = /(^|\/)(package(-lock)?\.json|tsconfig[\w.]*\.json|composer\.json|\.eslintrc\.json|flowgraph\.json|.*\.otlp\.json|pnpm-lock\.yaml|\.github\/.*|docker-compose\.ya?ml|mkdocs\.ya?ml|\.pre-commit-config\.yaml)$/;
 
@@ -44,10 +52,8 @@ async function scan(target: string, options: CollectorOptions): Promise<Found> {
     } catch {
       continue;
     }
-    if (TF_FILE.test(rel) || TFVARS_FILE.test(rel)) {
+    if (TF_FILE.test(rel) || ANY_TFVARS_FILE.test(rel)) {
       found.hcl.push({ path: rel, text });
-    } else if (/\.tfvars$/i.test(rel)) {
-      continue; // per-environment var files (prod.tfvars) apply only when passed with -var-file
     } else if (/\.(json|tfstate)$/i.test(rel)) {
       if (!/"(format_version|terraform_version)"/.test(text.slice(0, 5000))) continue;
       try {
@@ -80,10 +86,13 @@ export const infraCollector: Collector = {
     const found = await scan(target, options);
     const graphs: FlowGraph[] = [];
     const rootName = path.basename(path.resolve(target)).replace(/\.\w+$/, "") || "infra";
-    const roots = loadTerraform(found.hcl, { warn: (m) => options.log?.warn(m) });
+    const settings = (options.settings?.infra ?? {}) as InfraSettings;
+    const roots = loadTerraform(found.hcl, { warn: (m) => options.log?.warn(m), varFiles: settings.varFiles });
+    const primary = primaryRoot(roots.map((r) => r.dir), settings.primaryRoot);
+    if (roots.length > 1 && primary === undefined) options.log?.info(`infra: ${roots.length} terraform root modules; set settings.infra.primaryRoot to match one with the code by name`);
     for (const root of roots) {
       options.log?.info(`infra: ${root.dir === "." ? "" : `${root.dir}: `}${root.resources.length} terraform resources from ${root.files.length} .tf files`);
-      const { nodes, edges } = terraformGraph(root.resources, root.files[0], root.dir === "." ? rootName : root.dir, { idPrefix: idPrefixFor(root.dir), modules: root.modules });
+      const { nodes, edges } = terraformGraph(root.resources, root.files[0], root.dir === "." ? rootName : root.dir, { idPrefix: idPrefixFor(root.dir), modules: root.modules, aliases: root.dir === primary });
       graphs.push({ version: SCHEMA_VERSION, nodes, edges });
     }
     // A plan or state file for configuration that is also in the scan (a plan.json written next

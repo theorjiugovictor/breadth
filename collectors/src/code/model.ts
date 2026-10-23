@@ -1,6 +1,6 @@
 import type { Port } from "@breadth/schema";
 
-export type Lang = "python" | "typescript" | "tsx" | "javascript";
+export type Lang = "python" | "typescript" | "tsx" | "javascript" | "go" | "java";
 
 /** A function, method or class found in a file. */
 export interface Def {
@@ -48,6 +48,8 @@ export interface CallSite {
   argNames?: string[];
   /** Inside a try block (or a promise chain ending in .catch). */
   guarded?: boolean;
+  /** Named arguments that name something (see util.namedArgs): Bucket, TableName, QueueUrl... */
+  kwargs?: Record<string, string>;
 }
 
 export interface ImportBinding {
@@ -92,6 +94,8 @@ export interface FileModel {
   attrTypes: Record<string, string[]>;
   /** Names used as values somewhere in the file (not as the callee of a call): handlers, callbacks, exports. */
   valueRefs: string[];
+  /** Variables assigned a literal or an environment variable ("env:NAME"), for resolving arguments. */
+  constants?: Record<string, string>;
   lines: number;
 }
 

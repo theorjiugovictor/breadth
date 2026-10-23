@@ -15,6 +15,7 @@ import { hookPayload, hookReply } from "./hook.js";
 import { integrations, renderConfig, writeConfig } from "./connect.js";
 import { runMcp } from "./mcp.js";
 import { applyPlans, diffRefs, loadGraph, parsePlanArgs, renderMarkdown, renderText } from "./diff.js";
+import { checkIntent } from "./intent.js";
 
 const VERSION = "0.1.0";
 
@@ -22,7 +23,7 @@ const HELP = `breadth ${VERSION}: turn any codebase or system into an n8n-style 
 
 Usage:
   breadth scan <path> [--collector code,infra] [-o flowgraph.json] [--config file] [--exclude glob]... [--plan [dir=]plan.json]
-  breadth diff [path] [--base ref] [--head ref] [-o diff.json] [--markdown pr.md] [--fail-on high] [--plan [dir=]plan.json]   what a change does, in behaviour
+  breadth diff [path] [--base ref] [--head ref] [-o diff.json] [--markdown pr.md] [--fail-on high] [--plan [dir=]plan.json] [--intent "what was asked"]   what a change does, in behaviour
   breadth diff before.json after.json
   breadth import-traces <otlp.json>... [--merge flowgraph.json] [-o out.json]
   breadth serve [flowgraph.json] [--port 4321] [--host 127.0.0.1] [--no-open]
@@ -45,6 +46,7 @@ Options:
       --llm         use the configured LLM: node summaries (scan), narration of changes (watch)
       --llm-provider, --llm-model, --llm-base-url   override the LLM settings (see \`breadth llm\`)
       --no-insights do not store insights in the written graph
+      --intent      (diff) what the change was asked to do, or --intent-file: an LLM names what it does that was not asked for
       --plan        a Terraform plan (terraform show -json tfplan) for the root module in dir:
                     marks what applying it creates, changes, replaces or destroys (repeatable)
   -q, --quiet       less output
@@ -429,6 +431,9 @@ async function cmdDiff(args: string[]) {
       config: { type: "string" },
       exclude: { type: "string", multiple: true },
       plan: { type: "string", multiple: true },
+      intent: { type: "string" },
+      "intent-file": { type: "string" },
+      ...LLM_FLAGS,
     },
   });
   const plans = parsePlanArgs(values.plan);
@@ -452,6 +457,21 @@ async function cmdDiff(args: string[]) {
       collectorOptions: { exclude: [...(config.exclude ?? []), ...(values.exclude ?? [])], include: config.include, settings: config.settings, log: { info() {}, warn: (m) => log.warn(m) } },
       plans,
     }));
+  }
+  const request = values["intent-file"] ? readFileSync(values["intent-file"], "utf8") : values.intent;
+  if (request?.trim()) {
+    const llm = llmFrom(loadConfig(path.resolve(positionals.length === 2 ? "." : (positionals[0] ?? ".")), values.config), values);
+    if (llm === noneProvider) log.warn("--intent needs an LLM to compare the request with the change; configure one (see `breadth llm`). Skipped.");
+    else {
+      const notice = privacyNotice(llm, "the request text and the list of behaviour changes (no source code)");
+      if (notice) process.stderr.write(`breadth: ${notice}\n`);
+      try {
+        report.intent = await checkIntent(request, report.changes, llm);
+        if (!report.intent) log.warn(`${llm.name} gave no usable answer for --intent; the comparison is left out`);
+      } catch (err) {
+        log.warn(`--intent: ${(err as Error).message}`);
+      }
+    }
   }
   const md = renderMarkdown(report, before, after, { link: values.link });
   if (values.out) {
