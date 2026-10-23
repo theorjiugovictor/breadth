@@ -383,6 +383,8 @@ When a graph is a graph, many problems stop hiding in code and become shapes. br
 | `public-data` | risk | Public S3 buckets (ACL or bucket policy), publicly accessible databases, GCS buckets shared with `allUsers`, public Azure containers | no |
 | `unencrypted-storage` | risk | Databases, volumes and file systems without encryption at rest | no |
 | `broad-iam` | risk | IAM roles allowed `*`, `service:*` on every resource, or `NotAction` | no |
+| `ci-risk` | risk | `pull_request_target` jobs that check out the pull request's code (secrets exposed to anyone who opens a PR), `write-all` tokens, third-party actions pinned by tag instead of commit | no |
+| `contract-gap` | risk | AsyncAPI contracts and code disagree: a declared consumer of a topic nothing publishes, a topic code publishes that no contract declares | no |
 | `iam-usage` | risk | Code that reads or writes an S3 bucket, DynamoDB table, SQS queue, SNS topic or Kinesis stream its IAM role does not allow (AccessDenied waiting to happen), and grants the code never uses | no |
 | `race-risk` | risk | Shared state with several writers (module globals; databases written by several services) | no |
 | `data-exposure` | risk | Personal or secret-looking fields (by name and value shape) sent to external APIs | yes |
@@ -474,8 +476,8 @@ Conventions:
 | `otel` | ✅ | OTLP JSON traces: services, endpoints, call edges with protocols, datastores, topics, external APIs, one replayable execution per trace |
 | `infra` | ✅ | Terraform/OpenTofu configuration (`.tf`, `.tofu`, `.tf.json`, var files), `show -json` plans and state, and raw `.tfstate`; Kubernetes YAML (workloads, Services, Ingress, ConfigMaps/Secrets by key only, PVCs, NetworkPolicies). [More below](#terraform-and-opentofu) |
 | `netflow` | stub | VPC flow logs, service mesh: [spec](collectors/src/netflow/README.md) |
-| `messaging` | stub | Kafka, SQS/SNS, RabbitMQ, AsyncAPI: [spec](collectors/src/messaging/README.md) |
-| `cicd` | stub | GitHub Actions, GitLab CI, Argo CD: [spec](collectors/src/cicd/README.md) |
+| `messaging` | ✅ | AsyncAPI 2.x and 3.x contracts: which application sends to and receives from which topic, with which message; merges with the code's topics and services. Broker admin APIs are [planned](collectors/src/messaging/README.md) |
+| `cicd` | ✅ | GitHub Actions and GitLab CI: workflows, jobs, `needs`, triggers and watched paths, images built, secrets by name, and what jobs deploy (kubectl, helm, `terraform apply`, Lambda, ECS, Cloud Run, Argo CD), matched with the services and Terraform roots of the other layers. CircleCI and Argo CD manifests are [planned](collectors/src/cicd/README.md) |
 | `org` | stub | CODEOWNERS, Backstage: [spec](collectors/src/org/README.md) |
 
 ### Terraform and OpenTofu

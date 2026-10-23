@@ -1,4 +1,6 @@
-# `cicd` collector (stub, not implemented)
+# `cicd` collector
+
+Implemented: GitHub Actions (`.github/workflows/*.yml`) and GitLab CI (`.gitlab-ci.yml`, without `include:`). The table below is the full mapping; CircleCI, GitLab `include:`, Argo CD / Flux manifests and Helm charts are still planned.
 
 Shows how code becomes running software: pipelines, their jobs, and what they deploy where.
 

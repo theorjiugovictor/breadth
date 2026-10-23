@@ -188,3 +188,11 @@ resource "aws_iam_role_policy" "api" {
     expect(titles).toHaveLength(3);
   });
 });
+
+describe("CI and contract rules", () => {
+  it("flags pull_request_target with the PR's code, write-all and unpinned actions", async () => {
+    const { cicdGraph } = await import("@breadth/collectors");
+    const g = cicdGraph([{ path: ".github/workflows/x.yml", text: "name: x\non: pull_request_target\npermissions: write-all\njobs:\n  t:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: ${{ github.event.pull_request.head.sha }}\n      - uses: evil/thing@v1\n" }]);
+    expect(runInsights(g, { rules: ["ci-risk"] }).map((i) => i.severity)).toEqual(["critical", "warning", "info"]);
+  });
+});

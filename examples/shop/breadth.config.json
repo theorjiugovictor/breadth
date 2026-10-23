@@ -1,4 +1,12 @@
 {
-  "collectors": ["code", "infra"],
-  "exclude": ["**/generate.mjs", "traces/"]
+  "collectors": [
+    "code",
+    "infra",
+    "cicd",
+    "messaging"
+  ],
+  "exclude": [
+    "**/generate.mjs",
+    "traces/"
+  ]
 }

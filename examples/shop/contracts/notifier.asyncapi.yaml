@@ -1,0 +1,45 @@
+asyncapi: 3.0.0
+info:
+  title: notifier
+  version: 1.0.0
+  description: Sends confirmation emails when orders are created.
+servers:
+  events:
+    host: shop-events.kafka.eu-west-1.amazonaws.com:9098
+    protocol: kafka-secure
+channels:
+  orderCreated:
+    address: order-created
+    description: One message per order that was placed.
+    messages:
+      OrderCreated:
+        $ref: "#/components/messages/OrderCreated"
+  orderCancelled:
+    address: order-cancelled
+    messages:
+      OrderCancelled:
+        $ref: "#/components/messages/OrderCancelled"
+operations:
+  onOrderCreated:
+    action: receive
+    channel:
+      $ref: "#/channels/orderCreated"
+  onOrderCancelled:
+    action: receive
+    channel:
+      $ref: "#/channels/orderCancelled"
+components:
+  messages:
+    OrderCreated:
+      name: OrderCreated
+      payload:
+        type: object
+        properties:
+          orderId: { type: string }
+          email: { type: string }
+    OrderCancelled:
+      name: OrderCancelled
+      payload:
+        type: object
+        properties:
+          orderId: { type: string }

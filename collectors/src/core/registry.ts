@@ -50,8 +50,27 @@ export async function runCollectors(target: string, names: string[] | undefined,
     graphs.push(g);
   }
   const merged = graphs.length === 1 ? graphs[0] : mergeGraphs(...graphs);
+  dropPlaceholders(merged);
   const linked = linkCodeToInfra(merged);
   if (linked) options.log?.info(`linked ${linked} resource${linked === 1 ? "" : "s"} used in code to the infrastructure that defines ${linked === 1 ? "it" : "them"}`);
   assertValidGraph(merged, "merged graph");
   return merged;
+}
+
+/**
+ * Collectors may emit placeholder nodes aliased like another collector's node (a CI job's
+ * "deploys service:orders", "triggered by changes in code:dir:services/orders") so the two
+ * merge. A code-folder placeholder nothing claimed is dropped with its edges; claimed ones lose
+ * the flag.
+ */
+function dropPlaceholders(g: FlowGraph): void {
+  const drop = new Set(g.nodes.filter((n) => n.metadata?.placeholder && n.id.startsWith("ci:path:")).map((n) => n.id));
+  g.nodes = g.nodes.filter((n) => !drop.has(n.id));
+  g.edges = g.edges.filter((e) => !drop.has(e.from.node) && !drop.has(e.to.node));
+  for (const n of g.nodes) {
+    if (!n.metadata?.placeholder) continue;
+    if (n.id.startsWith("deploy:")) continue; // deployed but not collected: still worth showing
+    const { placeholder: _p, ...rest } = n.metadata;
+    n.metadata = rest;
+  }
 }
