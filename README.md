@@ -109,6 +109,32 @@ jobs:
 
 The action posts one comment per pull request and updates it on every push, writes the same summary to the job page, and uploads the diff graph as an artifact. Pull requests from forks get a read-only token, so for those the summary is on the job page only.
 
+### Compared with the request
+
+An agent asked to "add bulk refunds" that also drops the fraud check has done two things, and only one was asked for. With `--intent` (or `check-intent: true` in the action, which uses the pull request's title and description), an LLM compares the request with the list of behaviour changes. The comment then gets a section on top:
+
+> #### Compared with the request
+> > Adds bulk refunds, but also removes the fraud check from charges and opens Postgres to the internet.
+>
+> **Not in the request** (2):
+> - 🔴 charge no longer calls risk_score: a check was removed · fraud check removed, not asked for
+> - 🔴 postgresql is now reachable from the internet (tcp/5432) · unrelated to refunds
+
+```sh
+breadth diff --intent "Add bulk refunds for support agents" --llm-provider anthropic
+```
+
+```yaml
+      - uses: theorjiugovictor/noodles@main
+        with:
+          check-intent: true
+          llm-provider: anthropic
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+Only the request text and the behaviour-change sentences are sent, never source code. Any provider `breadth llm` lists works, including local ones (Ollama, LM Studio). The result is advice: the changes themselves come from the graphs, not from the model.
+
 ### Terraform
 
 breadth reads `.tf` files directly, so a Terraform pull request gets the same comment with no extra setup:

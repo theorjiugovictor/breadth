@@ -18,6 +18,18 @@ inputs:
   terraform-plan:
     description: "Terraform plans in JSON (`terraform show -json tfplan > plan.json`), one per line, each `plan.json` or `dir=plan.json` for the root module in dir. Adds what applying the change replaces or destroys."
     default: ""
+  check-intent:
+    description: "Compare the change with what the pull request says it does (its title and description, or `intent`), with an LLM. Needs `llm-provider` and the provider's API key in the step's env (e.g. ANTHROPIC_API_KEY). Only the request and the list of behaviour changes are sent, never code."
+    default: "false"
+  intent:
+    description: "What the change was asked to do. Default: the pull request's title and description."
+    default: ""
+  llm-provider:
+    description: "LLM for check-intent: anthropic, openai, gemini, ollama, openrouter, ... (see `breadth llm`)."
+    default: ""
+  llm-model:
+    description: "Model for check-intent (default: the provider's default)."
+    default: ""
   fail-on:
     description: "Fail the check when the change has a behaviour change of this severity or higher (high, medium or low). Empty never fails."
     default: ""
@@ -57,6 +69,10 @@ runs:
         INPUT_BASE: ${{ inputs.base }}
         INPUT_FAIL_ON: ${{ inputs['fail-on'] }}
         INPUT_TERRAFORM_PLAN: ${{ inputs['terraform-plan'] }}
+        INPUT_CHECK_INTENT: ${{ inputs['check-intent'] }}
+        INPUT_INTENT: ${{ inputs.intent }}
+        INPUT_LLM_PROVIDER: ${{ inputs['llm-provider'] }}
+        INPUT_LLM_MODEL: ${{ inputs['llm-model'] }}
       run: |
         base="$INPUT_BASE"
         if [ -z "$base" ] && [ -n "$GITHUB_BASE_REF" ]; then
@@ -68,11 +84,23 @@ runs:
           p="${p#"${p%%[![:space:]]*}"}"; p="${p%"${p##*[![:space:]]}"}"
           [ -n "$p" ] && plans+=(--plan "$p")
         done <<< "$INPUT_TERRAFORM_PLAN"
+        intent=()
+        if [ "$INPUT_CHECK_INTENT" = "true" ]; then
+          req="$RUNNER_TEMP/breadth-intent.txt"
+          if [ -n "$INPUT_INTENT" ]; then
+            printf '%s' "$INPUT_INTENT" > "$req"
+          else
+            node -e 'const e=require(process.env.GITHUB_EVENT_PATH).pull_request||{}; process.stdout.write([e.title,e.body].filter(Boolean).join("\n\n"))' > "$req" || true
+          fi
+          if [ -s "$req" ]; then
+            intent=(--intent-file "$req" ${INPUT_LLM_PROVIDER:+--llm-provider "$INPUT_LLM_PROVIDER"} ${INPUT_LLM_MODEL:+--llm-model "$INPUT_LLM_MODEL"})
+          fi
+        fi
         md="$RUNNER_TEMP/breadth-diff.md"
         graph="$RUNNER_TEMP/breadth-diff.flowgraph.json"
         set +e
         node "$GITHUB_ACTION_PATH/cli/dist/breadth.mjs" diff "$INPUT_PATH" ${base:+--base "$base"} \
-          --markdown "$md" -o "$graph" ${INPUT_FAIL_ON:+--fail-on "$INPUT_FAIL_ON"} "${plans[@]}"
+          --markdown "$md" -o "$graph" ${INPUT_FAIL_ON:+--fail-on "$INPUT_FAIL_ON"} "${plans[@]}" "${intent[@]}"
         code=$?
         set -e
         if [ "$code" != 0 ] && [ "$code" != 2 ]; then exit "$code"; fi

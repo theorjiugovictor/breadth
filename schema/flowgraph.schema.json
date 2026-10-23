@@ -112,6 +112,29 @@
             "type": "string"
           }
         },
+        "intent": {
+          "type": "object",
+          "description": "The change checked against what it was asked to do (breadth diff --intent, with an LLM).",
+          "required": ["request"],
+          "additionalProperties": false,
+          "properties": {
+            "request": { "type": "string", "description": "What was asked: the PR description or the agent's task." },
+            "summary": { "type": "string", "description": "One sentence: does the change do what was asked, and what else." },
+            "matches": { "type": "array", "items": { "type": "integer" }, "description": "Indexes into changes that do what was asked." },
+            "unrequested": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["change"],
+                "additionalProperties": false,
+                "properties": { "change": { "type": "integer" }, "why": { "type": "string" } }
+              },
+              "description": "Changes nothing in the request explains."
+            },
+            "missing": { "type": "array", "items": { "type": "string" }, "description": "Things asked for that no change shows." },
+            "model": { "type": "string" }
+          }
+        },
         "changes": {
           "type": "array",
           "description": "Behaviour-level changes, most important first.",
