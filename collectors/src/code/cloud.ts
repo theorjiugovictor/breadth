@@ -20,7 +20,7 @@ export interface CloudAccess {
   mode: "read" | "write" | "call";
 }
 
-export const AWS_PACKAGES = /^(boto3|aioboto3|botocore|aws-sdk|@aws-sdk\/.+)$/;
+export const AWS_PACKAGES = /^(boto3|aioboto3|botocore|aws-sdk|@aws-sdk\/.+|github\.com\/aws\/aws-sdk-go.*|software\.amazon\.awssdk.*)$/;
 
 /** The argument that names the resource, per service. */
 const RESOURCE_KEYS: [string, AwsService, (v: string) => string][] = [

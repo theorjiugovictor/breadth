@@ -17,6 +17,8 @@ const WORKLOADS = new Set(["Deployment", "StatefulSet", "DaemonSet", "ReplicaSet
 /** Parse one YAML/JSON file into Kubernetes objects (multi-doc and `kind: List` aware). */
 export function parseK8s(text: string, file: string): K8sObject[] {
   const out: K8sObject[] = [];
+  // Helm / Go templates ({{ .Values.x }}) are not manifests until rendered.
+  if (/\{\{[-\s]*[.$\w]/.test(text)) return out;
   let docs: unknown[];
   try {
     docs = parseAllDocuments(text).map((d) => d.toJSON());
@@ -27,7 +29,8 @@ export function parseK8s(text: string, file: string): K8sObject[] {
     if (!d || typeof d !== "object") return;
     const o = d as Json;
     if (o.kind === "List" && Array.isArray(o.items)) return o.items.forEach(push);
-    if (typeof o.apiVersion === "string" && typeof o.kind === "string" && o.metadata?.name) out.push({ ...(o as K8sObject), file });
+    const ns = o.metadata?.namespace;
+    if (typeof o.apiVersion === "string" && typeof o.kind === "string" && typeof o.metadata?.name === "string" && (ns === undefined || typeof ns === "string")) out.push({ ...(o as K8sObject), file });
   };
   docs.forEach(push);
   return out;

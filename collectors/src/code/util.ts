@@ -22,7 +22,8 @@ export function calleeParts(n: Node, memberType: string, objectField: string, pr
 
 /** Return the value of a plain string literal node, or undefined. */
 export function stringLiteral(n: Node): string | undefined {
-  if (n.type === "string" || n.type === "template_string") {
+  // python / js "string", "template_string"; go "interpreted_string_literal", "raw_string_literal"; java "string_literal"
+  if (n.type === "string" || n.type === "template_string" || n.type === "interpreted_string_literal" || n.type === "raw_string_literal" || n.type === "string_literal") {
     const raw = n.text;
     const m = raw.match(/^[rbufRBUF]*(["'`]{1,3})([\s\S]*)\1$/);
     if (!m) return undefined;
@@ -80,7 +81,7 @@ export function argIdentifiers(args: Node | null): string[] | undefined {
     else if (a.type === "keyword_argument") {
       const v = a.childForFieldName("value");
       if (v?.type === "identifier") out.push(v.text);
-    } else if (a.type === "member_expression" || a.type === "attribute") {
+    } else if (a.type === "member_expression" || a.type === "attribute" || a.type === "selector_expression" || a.type === "field_access") {
       if (/^[\w.]+$/.test(a.text)) out.push(a.text);
     }
   }
@@ -160,7 +161,9 @@ export function envRead(n: Node): string | undefined {
     t.match(/^(?:os\.)?environ\[["'](\w+)["']\]$/) ??
     t.match(/^(?:os\.)?(?:environ\.get|getenv)\(["'](\w+)["'](?:,.*)?\)$/) ??
     t.match(/^process\.env\.(\w+)$/) ??
-    t.match(/^process\.env\[["'](\w+)["']\]$/);
+    t.match(/^process\.env\[["'](\w+)["']\]$/) ??
+    t.match(/^os\.(?:Getenv|LookupEnv)\("(\w+)"\)$/) ??
+    t.match(/^System\.getenv\("(\w+)"\)$/);
   if (m) return m[1];
   // X ?? "default", X || "default", X or "default": the variable decides
   if (n.type === "binary_expression" || n.type === "boolean_operator") {

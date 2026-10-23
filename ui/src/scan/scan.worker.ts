@@ -17,7 +17,7 @@ self.onmessage = async (e: MessageEvent<{ repo: RepoRef; wasmBase: string }>) =>
   try {
     post({ type: "progress", phase: "list" });
     const listing = await listRepo(repo);
-    if (!listing.code.length && !listing.terraform.length) throw new ScanError(`No Python, TypeScript, JavaScript or Terraform files found in ${repoLabel(repo)}.`);
+    if (!listing.code.length && !listing.terraform.length) throw new ScanError(`No Python, TypeScript, JavaScript, Go, Java or Terraform files found in ${repoLabel(repo)}.`);
     const wanted = [...listing.code, ...listing.terraform];
     const total = wanted.length;
     post({ type: "progress", phase: "download", done: 0, total });

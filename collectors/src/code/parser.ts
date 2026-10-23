@@ -7,6 +7,8 @@ export const GRAMMAR_FILES: Record<Lang, string> = {
   typescript: "tree-sitter-typescript.wasm",
   tsx: "tree-sitter-tsx.wasm",
   javascript: "tree-sitter-javascript.wasm",
+  go: "tree-sitter-go.wasm",
+  java: "tree-sitter-java.wasm",
 };
 
 /**
@@ -59,6 +61,10 @@ export function langForFile(file: string): Lang | undefined {
     case ".cjs":
     case ".jsx":
       return "javascript";
+    case ".go":
+      return "go";
+    case ".java":
+      return "java";
     default:
       return undefined;
   }

@@ -420,7 +420,7 @@ Conventions:
 
 | Name | Status | Reads |
 |---|---|---|
-| `code` | ✅ | Python, TypeScript, JavaScript (tree-sitter, WASM, no native build). Modules, classes, functions, params as inputs, return types as outputs, call edges (imports, re-exports, `self`/`this`, typed locals, attributes), loops, recursion, globals, DB/HTTP/queue clients, HTTP routes |
+| `code` | ✅ | Python, TypeScript, JavaScript, Go, Java (tree-sitter, WASM, no native build). Modules, classes, functions, params as inputs, return types as outputs, call edges (imports, re-exports, `self`/`this`, typed locals, attributes), loops, recursion, globals, DB/HTTP/queue clients, AWS SDK calls by resource, HTTP routes (FastAPI/Flask, Express/Nest, net/http/gin/chi/gorilla, Spring/JAX-RS). Go packages and Java packages span their folder; Java fields injected through constructors and JPA repositories are followed. Generated files (`DO NOT EDIT`) are skipped |
 | `otel` | ✅ | OTLP JSON traces: services, endpoints, call edges with protocols, datastores, topics, external APIs, one replayable execution per trace |
 | `infra` | ✅ | Terraform/OpenTofu configuration (`.tf`, `.tofu`, `.tf.json`, var files), `show -json` plans and state, and raw `.tfstate`; Kubernetes YAML (workloads, Services, Ingress, ConfigMaps/Secrets by key only, PVCs, NetworkPolicies). [More below](#terraform-and-opentofu) |
 | `netflow` | stub | VPC flow logs, service mesh: [spec](collectors/src/netflow/README.md) |
@@ -533,7 +533,7 @@ To capture your own graph, serve it and pass the URL: `node scripts/screenshots.
 `app/?repo=owner/repo` (or the box on the landing page) scans a public GitHub repository without a server:
 
 1. One GitHub API request lists the files (`git/trees/HEAD?recursive=1`). Anonymous requests are limited to 60 per hour per visitor.
-2. Python, TypeScript, JavaScript and Terraform files are downloaded from `raw.githubusercontent.com` (not counted against that limit). Repositories with more than 1,200 code files are sampled, application code first, with a notice.
+2. Python, TypeScript, JavaScript, Go, Java and Terraform files are downloaded from `raw.githubusercontent.com` (not counted against that limit). Repositories with more than 1,200 code files are sampled, application code first, with a notice.
 3. A Web Worker parses them with tree-sitter (WebAssembly) and the Terraform reader, builds the graph and runs the insights.
 4. The Source tab shows the lines straight from GitHub, with a link to the file.
 

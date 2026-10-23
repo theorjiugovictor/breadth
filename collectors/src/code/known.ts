@@ -86,14 +86,80 @@ const QUEUE_PKGS: Record<string, string> = {
   "@google-cloud/pubsub": "pubsub",
 };
 
+/** Go and Java libraries, by import-path prefix. */
+const PREFIX_CLASSES: [Lang, string, PackageClass][] = [
+  // Go
+  ["go", "net/http", { type: "http" }],
+  ["go", "github.com/go-resty/resty", { type: "http" }],
+  ["go", "database/sql", { type: "db", engine: "sql" }],
+  ["go", "github.com/jmoiron/sqlx", { type: "db", engine: "sql" }],
+  ["go", "gorm.io", { type: "db", engine: "sql" }],
+  ["go", "github.com/jackc/pgx", { type: "db", engine: "postgresql" }],
+  ["go", "github.com/lib/pq", { type: "db", engine: "postgresql" }],
+  ["go", "github.com/go-sql-driver/mysql", { type: "db", engine: "mysql" }],
+  ["go", "go.mongodb.org/mongo-driver", { type: "db", engine: "mongodb" }],
+  ["go", "github.com/redis/go-redis", { type: "db", engine: "redis" }],
+  ["go", "github.com/go-redis/redis", { type: "db", engine: "redis" }],
+  ["go", "github.com/aws/aws-sdk-go", { type: "db", engine: "aws" }],
+  ["go", "github.com/segmentio/kafka-go", { type: "queue", system: "kafka" }],
+  ["go", "github.com/IBM/sarama", { type: "queue", system: "kafka" }],
+  ["go", "github.com/Shopify/sarama", { type: "queue", system: "kafka" }],
+  ["go", "github.com/confluentinc/confluent-kafka-go", { type: "queue", system: "kafka" }],
+  ["go", "github.com/rabbitmq/amqp091-go", { type: "queue", system: "rabbitmq" }],
+  ["go", "github.com/streadway/amqp", { type: "queue", system: "rabbitmq" }],
+  ["go", "github.com/nats-io/nats.go", { type: "queue", system: "nats" }],
+  ["go", "cloud.google.com/go/pubsub", { type: "queue", system: "pubsub" }],
+  // Java
+  ["java", "java.net.http", { type: "http" }],
+  ["java", "org.springframework.web.client", { type: "http" }],
+  ["java", "org.springframework.web.reactive.function.client", { type: "http" }],
+  ["java", "okhttp3", { type: "http" }],
+  ["java", "org.apache.http", { type: "http" }],
+  ["java", "feign", { type: "http" }],
+  ["java", "java.sql", { type: "db", engine: "sql" }],
+  ["java", "javax.sql", { type: "db", engine: "sql" }],
+  ["java", "org.springframework.jdbc", { type: "db", engine: "sql" }],
+  ["java", "org.springframework.data.jpa", { type: "db", engine: "sql" }],
+  ["java", "org.springframework.data.repository", { type: "db", engine: "sql" }],
+  ["java", "jakarta.persistence", { type: "db", engine: "sql" }],
+  ["java", "javax.persistence", { type: "db", engine: "sql" }],
+  ["java", "org.hibernate", { type: "db", engine: "sql" }],
+  ["java", "org.jooq", { type: "db", engine: "sql" }],
+  ["java", "org.springframework.data.mongodb", { type: "db", engine: "mongodb" }],
+  ["java", "com.mongodb", { type: "db", engine: "mongodb" }],
+  ["java", "org.springframework.data.redis", { type: "db", engine: "redis" }],
+  ["java", "redis.clients.jedis", { type: "db", engine: "redis" }],
+  ["java", "io.lettuce", { type: "db", engine: "redis" }],
+  ["java", "software.amazon.awssdk", { type: "db", engine: "aws" }],
+  ["java", "org.springframework.kafka", { type: "queue", system: "kafka" }],
+  ["java", "org.apache.kafka", { type: "queue", system: "kafka" }],
+  ["java", "org.springframework.amqp", { type: "queue", system: "rabbitmq" }],
+  ["java", "com.rabbitmq", { type: "queue", system: "rabbitmq" }],
+  ["java", "io.nats", { type: "queue", system: "nats" }],
+  ["java", "org.springframework.jms", { type: "queue", system: "jms" }],
+  ["java", "jakarta.jms", { type: "queue", system: "jms" }],
+];
+
 export function packageName(spec: string, lang: Lang): string {
   if (lang === "python") return spec.split(".")[0];
+  // Go: the module (github.com/org/repo), or the full path for the standard library
+  if (lang === "go") return spec.split("/")[0].includes(".") ? spec.split("/").slice(0, 3).join("/") : spec;
+  // Java: a known library prefix, else the first three name parts (org.springframework.kafka)
+  if (lang === "java") return PREFIX_CLASSES.find(([l, p]) => l === "java" && (spec === p || spec.startsWith(`${p}.`)))?.[1] ?? spec.split(".").slice(0, 3).join(".");
   if (spec.startsWith("node:")) return spec;
   if (spec.startsWith("@")) return spec.split("/").slice(0, 2).join("/");
   return spec.split("/")[0];
 }
 
 export function classifyPackage(pkg: string, lang: Lang): PackageClass {
+  if (lang === "go" || lang === "java") {
+    const sep = lang === "go" ? "/" : ".";
+    // github.com/aws/aws-sdk-go-v2 is the aws-sdk-go family; github.com/redis/go-redis/v9 is go-redis
+    const hit = PREFIX_CLASSES.find(([l, p]) => l === lang && (pkg === p || pkg.startsWith(`${p}${sep}`) || p.startsWith(`${pkg}${sep}`) || (lang === "go" && pkg.startsWith(`${p}-`))));
+    if (hit) return hit[2];
+    if (lang === "go" ? !pkg.split("/")[0].includes(".") : /^(java|javax|jdk|sun)\./.test(pkg)) return { type: "stdlib" };
+    return { type: "lib" };
+  }
   if (lang === "python" ? PY_STDLIB.has(pkg) && pkg !== "sqlite3" : pkg.startsWith("node:") || NODE_BUILTINS.has(pkg)) {
     return { type: "stdlib" };
   }
@@ -129,5 +195,6 @@ export function sqlLabel(sql?: string): string | undefined {
   return table ? `${verb} ${table}` : verb;
 }
 
-export const PRODUCE_METHODS = /^(send\w*|produce\w*|publish\w*|basic_publish|emit|add|enqueue|delay|apply_async)$/;
-export const CONSUME_METHODS = /^(subscribe|consume|poll|basic_consume|on_message|KafkaConsumer|Consumer|AIOKafkaConsumer|Worker)$/;
+// Case-insensitive: Go and C#-style SDKs capitalise (WriteMessages, Publish, Subscribe).
+export const PRODUCE_METHODS = /^(send\w*|produce\w*|publish\w*|basic_publish|emit|add|enqueue|delay|apply_async|writeMessages?|convertAndSend)$/i;
+export const CONSUME_METHODS = /^(subscribe|consume|poll|basic_consume|on_message|KafkaConsumer|Consumer|AIOKafkaConsumer|Worker|readMessage|fetchMessage|chanSubscribe|queueSubscribe|receive)$/i;

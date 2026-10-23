@@ -1,6 +1,6 @@
 import type { Port } from "@breadth/schema";
 
-export type Lang = "python" | "typescript" | "tsx" | "javascript";
+export type Lang = "python" | "typescript" | "tsx" | "javascript" | "go" | "java";
 
 /** A function, method or class found in a file. */
 export interface Def {
