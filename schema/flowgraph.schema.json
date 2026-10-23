@@ -206,6 +206,93 @@
               }
             }
           }
+        },
+        "spec": {
+          "type": "object",
+          "description": "The change checked against the spec change it implements (OpenSpec change, Spec Kit feature, Kiro spec). Absent in repositories without specs.",
+          "additionalProperties": false,
+          "properties": {
+            "changes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "title",
+                  "reasons"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "format": {
+                    "type": "string"
+                  },
+                  "reasons": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "tasks": {
+                    "type": "object",
+                    "properties": {
+                      "done": {
+                        "type": "integer"
+                      },
+                      "total": {
+                        "type": "integer"
+                      }
+                    }
+                  },
+                  "requirements": {
+                    "type": "object",
+                    "properties": {
+                      "total": {
+                        "type": "integer"
+                      },
+                      "implemented": {
+                        "type": "integer"
+                      },
+                      "newlyImplemented": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  "missing": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "complete": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            },
+            "outOfScope": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              },
+              "description": "Indexes into changes that fall outside everything the spec change says it touches."
+            },
+            "scoped": {
+              "type": "boolean"
+            },
+            "noChange": {
+              "type": "boolean",
+              "description": "The repository keeps specs but no spec change matches this pull request."
+            }
+          }
         }
       }
     },

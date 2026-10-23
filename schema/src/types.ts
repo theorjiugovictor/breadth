@@ -179,6 +179,31 @@ export interface GraphDiffInfo {
   changes: BehaviorChange[];
   /** The change checked against what it was asked to do. */
   intent?: IntentCheck;
+  /** The change checked against the spec change it implements (repositories with specs only). */
+  spec?: SpecCheck;
+}
+
+export interface SpecCheck {
+  changes: {
+    id: string;
+    title: string;
+    /** openspec, spec-kit, kiro */
+    format?: string;
+    /** Why this pull request is taken to implement it. */
+    reasons: string[];
+    tasks?: { done: number; total: number };
+    requirements?: { total: number; implemented: number; newlyImplemented: string[] };
+    /** References in its requirements that match nothing yet. */
+    missing?: string[];
+    /** All tasks checked and every requirement implemented. */
+    complete?: boolean;
+  }[];
+  /** Indexes into `changes` (the behaviour changes) outside the spec change's scope. */
+  outOfScope: number[];
+  /** Whether the spec change names anything to scope by (Implemented by / Target). */
+  scoped?: boolean;
+  /** The repository keeps specs, but no spec change matches this pull request. */
+  noChange?: boolean;
 }
 
 export interface IntentCheck {

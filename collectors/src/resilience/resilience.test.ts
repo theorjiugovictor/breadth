@@ -59,7 +59,7 @@ describe("resilience collector on the shop", async () => {
     // from "Verified by:" in the spec, and from @pytest.mark.requirement(...) in the test
     expect(rel(g, "verifies", "code:fn:services/orders/tests/test_resilience.py#test_postgres_latency", "scenario:checkout/checkout-survives-a-slow-database/postgres-latency")).toBeTruthy();
     expect(rel(g, "verifies", "code:fn:services/orders/tests/test_resilience.py#test_postgres_latency", req)).toBeTruthy();
-    expect(g.nodes.find((n) => n.id === "req:refunds/support-agents-can-refund-many-orders-at-once")?.metadata?.unresolved).toEqual(["refund_orders", "POST /orders/refunds"]);
+    expect(g.nodes.find((n) => n.id === "req:refunds/support-agents-can-refund-many-orders-at-once")?.metadata?.unresolved).toEqual(["refund_orders", "POST /orders/refunds", "POST /refunds"]);
   });
 
   it("judges runs against the scenario's criteria", () => {

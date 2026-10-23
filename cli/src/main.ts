@@ -8,7 +8,7 @@ import { collectors, importOtlp, linkTracesToCode, runCollectors, spansToGraph, 
 import { SpanBuffer, startOtlpServer } from "./otlp.js";
 import { createSource, parseDuration, pullLive, type LiveSource } from "./sources/index.js";
 import { parseTime, recordEvidence } from "./evidence.js";
-import { RULES, runInsights, describeChanges, diffGraph, withoutRemoved, type ChangeReport } from "@breadth/insights";
+import { RULES, checkSpec, runInsights, describeChanges, diffGraph, withoutRemoved, type ChangeReport } from "@breadth/insights";
 import type { Insight, Severity } from "@breadth/schema";
 import { loadConfig } from "./config.js";
 import { createProvider, noneProvider, PRESETS, privacyNotice, resolveSettings, summarizeGraph, type LLMProvider } from "./llm/provider.js";
@@ -608,6 +608,8 @@ async function cmdDiff(args: string[]) {
       "intent-file": { type: "string" },
       live: { type: "string" },
       since: { type: "string", default: "1h" },
+      "spec-change": { type: "string" },
+      "pr-text-file": { type: "string" },
       ...LLM_FLAGS,
     },
   });
@@ -633,7 +635,11 @@ async function cmdDiff(args: string[]) {
       plans,
     }));
   }
-  const request = values["intent-file"] ? readFileSync(values["intent-file"], "utf8") : values.intent;
+  // Repositories with specs: the spec change this pull request implements, and what falls outside it.
+  const prText = values["pr-text-file"] && existsSync(values["pr-text-file"]) ? readFileSync(values["pr-text-file"], "utf8") : undefined;
+  let request = values["intent-file"] ? readFileSync(values["intent-file"], "utf8") : values.intent;
+  report.spec = checkSpec(before, after, report, { branch: currentBranch(positionals.length === 2 ? undefined : path.resolve(positionals[0] ?? "."), values.head), text: [prText, request].filter(Boolean).join("\n\n") || undefined, change: values["spec-change"] });
+  if (request?.trim() && report.spec?.changes.length) request = `${request}\n\n${specRequest(after, report.spec.changes.map((c) => c.id))}`;
   if (request?.trim()) {
     const llm = llmFrom(loadConfig(path.resolve(positionals.length === 2 ? "." : (positionals[0] ?? ".")), values.config), values);
     if (llm === noneProvider) log.warn("--intent needs an LLM to compare the request with the change; configure one (see `breadth llm`). Skipped.");
@@ -689,6 +695,28 @@ async function cmdDiff(args: string[]) {
     if (limit === undefined) throw new Error("--fail-on takes high, medium or low");
     if (report.changes.some((c) => rank[c.severity] <= limit)) process.exitCode = 2;
   }
+}
+
+/** The branch a diff is about: the PR's head in GitHub Actions, the named ref, or the checkout's. */
+function currentBranch(target: string | undefined, head?: string): string | undefined {
+  if (process.env.GITHUB_HEAD_REF) return process.env.GITHUB_HEAD_REF;
+  if (head) return head;
+  if (!target) return undefined;
+  const r = spawnSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], { cwd: target });
+  const b = r.status === 0 ? r.stdout.toString().trim() : undefined;
+  return b && b !== "HEAD" ? b : undefined;
+}
+
+/** The spec change as a request, for the intent check: what it says it does. */
+function specRequest(g: FlowGraph, ids: string[]): string {
+  const parts: string[] = [];
+  for (const id of ids) {
+    const c = g.nodes.find((n) => n.id === `change:${id}`);
+    if (!c) continue;
+    const reqs = g.nodes.filter((n) => n.role === "requirement" && (n.metadata?.change === id || n.parent === `spec:${id}` || n.parent === `change:${id}/spec:${n.id.split("/")[0].slice(4)}`));
+    parts.push(`Spec change ${id}: ${c.name}${c.description ? `. Why: ${c.description}` : ""}`, ...reqs.map((r) => `- Requirement: ${r.name}${r.description ? `: ${r.description}` : ""}`));
+  }
+  return parts.join("\n");
 }
 
 /** The ledger file for a path: <repo root>/.breadth/ledger.json, or next to the path outside git. */

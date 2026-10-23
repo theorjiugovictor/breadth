@@ -27,6 +27,7 @@ export { expectedKinds } from "./rules/contract-drift.js";
 export { describeChanges, diffGraph, withoutRemoved, type ChangeReport } from "./changes.js";
 export { behaviourUnits, serviceFingerprint, type Unit } from "./units.js";
 export { staleEvidence } from "./rules/evidence-status.js";
+export { checkSpec, type SpecHints } from "./spec.js";
 
 export const RULES: Rule[] = [
   nPlusOne,

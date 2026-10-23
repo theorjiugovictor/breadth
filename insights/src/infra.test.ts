@@ -207,7 +207,7 @@ describe("requirement evidence", () => {
     expect(titles).toEqual(
       expect.arrayContaining([
         'critical "Checkout survives a slow database" is contradicted by run 2026-10-20-postgres-down',
-        'info "Support agents can refund many orders at once" refers to refund_orders, POST /orders/refunds, which do not exist',
+        'info "Support agents can refund many orders at once" refers to refund_orders, POST /orders/refunds, POST /refunds, which do not exist',
       ]),
     );
     // evidence recorded on the current behaviour is fresh; on different behaviour, stale
