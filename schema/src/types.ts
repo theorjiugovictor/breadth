@@ -15,10 +15,12 @@ export const NODE_KINDS = [
   "team",
   "system",
   "org",
+  /** A record rather than a running thing (requirement, scenario, test, evidence...): see `role`. */
+  "artifact",
 ] as const;
 export type NodeKind = (typeof NODE_KINDS)[number];
 
-export const LAYERS = ["code", "runtime", "network", "messaging", "infra", "delivery", "org"] as const;
+export const LAYERS = ["code", "runtime", "network", "messaging", "infra", "delivery", "org", "resilience"] as const;
 export type Layer = (typeof LAYERS)[number];
 
 export const EDGE_KINDS = ["call", "data", "network", "event", "read", "write", "deploy", "depends_on"] as const;
@@ -57,6 +59,8 @@ export interface FlowNode {
   source?: SourceRef;
   tags?: string[];
   metadata?: Metadata;
+  /** What an `artifact` node is in its profile (requirement, scenario, evidence, ...). */
+  role?: string;
 }
 
 export interface Endpoint {
@@ -83,6 +87,8 @@ export interface FlowEdge {
   count?: number;
   samples?: Sample[];
   metadata?: Metadata;
+  /** Semantic relation from a profile (implements, verifies, supports, ...): never traffic. Kind is depends_on. */
+  relation?: string;
 }
 
 export interface Step {
@@ -144,6 +150,8 @@ export interface FlowGraph {
   edges: FlowEdge[];
   executions?: Execution[];
   insights?: Insight[];
+  /** Profiles whose roles and relations the graph uses, e.g. "resilience-v1". */
+  profiles?: string[];
   /** Set when the graph shows what changed between two versions (`breadth diff`). */
   diff?: GraphDiffInfo;
 }
@@ -171,6 +179,31 @@ export interface GraphDiffInfo {
   changes: BehaviorChange[];
   /** The change checked against what it was asked to do. */
   intent?: IntentCheck;
+  /** The change checked against the spec change it implements (repositories with specs only). */
+  spec?: SpecCheck;
+}
+
+export interface SpecCheck {
+  changes: {
+    id: string;
+    title: string;
+    /** openspec, spec-kit, kiro */
+    format?: string;
+    /** Why this pull request is taken to implement it. */
+    reasons: string[];
+    tasks?: { done: number; total: number };
+    requirements?: { total: number; implemented: number; newlyImplemented: string[] };
+    /** References in its requirements that match nothing yet. */
+    missing?: string[];
+    /** All tasks checked and every requirement implemented. */
+    complete?: boolean;
+  }[];
+  /** Indexes into `changes` (the behaviour changes) outside the spec change's scope. */
+  outOfScope: number[];
+  /** Whether the spec change names anything to scope by (Implemented by / Target). */
+  scoped?: boolean;
+  /** The repository keeps specs, but no spec change matches this pull request. */
+  noChange?: boolean;
 }
 
 export interface IntentCheck {

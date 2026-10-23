@@ -3,7 +3,8 @@
     "code",
     "infra",
     "cicd",
-    "messaging"
+    "messaging",
+    "resilience"
   ],
   "exclude": [
     "**/generate.mjs",

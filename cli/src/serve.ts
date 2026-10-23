@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import type { FlowGraph } from "@breadth/schema";
 import { EXPLAIN_SYSTEM, explainPrompt, noneProvider, type LLMProvider } from "./llm/provider.js";
 import type { LiveSession } from "./live.js";
+import { handleOtlp } from "./otlp.js";
 
 const TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -72,6 +73,8 @@ export async function serve(opts: ServeOptions): Promise<string> {
   const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     try {
+      // OTLP/HTTP on the same port: OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:<port>
+      if (opts.live && url.pathname.startsWith("/v1/") && (await handleOtlp(req, res, (spans) => opts.live!.ingestSpans(spans)))) return;
       switch (url.pathname) {
         case "/flowgraph.json":
           if (opts.live) return json(res, 200, opts.live.graph);

@@ -222,6 +222,99 @@ jobs:
           mode: review
 ```
 
+## From requirement to evidence
+
+breadth can hold the whole chain in one graph: what was promised (a spec), the code that implements it, the tests and experiments that check it, and the evidence that supports or contradicts it. Nodes for requirements, scenarios and evidence are `artifact` nodes with a `role`. The links between them are edges with a `relation` (`implements`, `verifies`, `targets`, `supports`, `contradicts`, ...), drawn in indigo and never mistaken for traffic. This is the `resilience-v1` profile.
+
+**This layer is optional.** Without specs, breadth works exactly as before: no requirement nodes, no spec findings, nothing about specs in pull request comments. It switches on when one of these is in the repository:
+
+| Format | Read from |
+| --- | --- |
+| [OpenSpec](https://github.com/Fission-AI/OpenSpec) | `openspec/specs/<capability>/spec.md`, `openspec/changes/<change>/` (proposal, tasks, delta specs), `openspec/changes/archive/` |
+| [Spec Kit](https://github.com/github/spec-kit) | `specs/<NNN-feature>/spec.md` and `tasks.md` (user stories with Given/When/Then, `FR-xxx`, `SC-xxx`). Only folders that look like Spec Kit; a plain `specs/` of tests is left alone |
+| [Kiro](https://kiro.dev) | `.kiro/specs/<feature>/requirements.md` and `tasks.md` (numbered requirements, EARS acceptance criteria) |
+
+**Specs.** All three are read as written. Three optional lines connect a requirement or scenario to the rest of the graph, and success criteria in `THEN` lines become checkable:
+
+```markdown
+### Requirement: Checkout survives a slow database
+Placing an order SHALL keep working while Postgres is slow.
+Implemented by: create_order, POST /orders
+Target: service orders
+
+#### Scenario: Postgres latency
+- **WHEN** Postgres adds 100 ms to every query for 10 s at 10 req/s
+- **THEN** p95 <= 300 ms and errors <= 1 % during and after the fault
+Verified by: services/orders/tests/test_resilience.py::test_postgres_latency
+```
+
+References can be a function, `file.py#qual`, `path::test`, a route (`POST /orders`), `service x` or any node id. Tests can also point back themselves: `@pytest.mark.requirement("...")`, `@Verifies("...")` (Java), or `verifies: ...` in a docstring. References that match nothing are reported, which is how a renamed handler shows up as a broken promise.
+
+**Evidence.** A run record in `.breadth/runs/<id>.json` says which scenario was exercised, when and how, and what was measured. breadth judges it against the scenario's criteria on every scan: **supports**, **contradicts**, or **inconclusive** when a criterion was not measured. The verdict is computed, never guessed. `breadth evidence` records runs for you, measuring the window from a live source:
+
+```sh
+# after a 10-minute chaos experiment against orders
+breadth evidence "Postgres latency" --service orders --endpoint "POST /orders" --from 10m --live datadog --fault "Postgres +100 ms" --approved-by dana
+✔ supports: Postgres latency
+   ✓ p95_ms 140 (<= 300)
+   ✓ error_pct 0.4 (<= 1)
+   recorded .breadth/runs/2026-10-23-09-50-postgres-latency.json
+```
+
+Each run stores the source snapshot (git revision and a digest of every file) and the **behaviour fingerprint** of the service it is about. When that service's calls, data access or endpoints change, the `evidence-status` insight reports the evidence as stale ("about older behaviour of orders"), and a pull request that causes it says so. Contradicted requirements, requirements nothing verifies, and dangling references are reported too. `--results p95_ms=180,error_pct=0.4` records measurements from any other tool, and `--fail-on contradicts` gates CI on the verdict.
+
+**Pull requests against their spec change.** `breadth diff` finds the spec change a pull request implements: by branch name (Spec Kit names branches after the feature), by the spec files it edits, by code it links to a requirement, by a mention in the PR title or description (`--pr-text-file`, which the action passes), or explicitly with `--spec-change <id>`. The comment then shows the change's tasks and how many requirements have code, and lists every behaviour change outside it: anything not reached from the code or targets its requirements name. With `--intent`, the change's requirements are added to the request the LLM compares against. A repository with specs but none matching says so in one line; one without specs sees nothing.
+
+```markdown
+#### Against the spec
+**OpenSpec change `add-bulk-refunds`**: Add bulk refunds · tasks 1/3 · requirements implemented 2/2 (2 by this pull request)
+
+**Outside the spec change** (4): not reached from the code or targets its requirements name.
+- 🔴 postgresql is now reachable from the internet (tcp/5432): PostgreSQL (5432)
+- 🔴 shop-payments is now allowed s3:* on *
+```
+
+The `spec-lifecycle` insight reports changes whose tasks are all ticked while code they name does not exist, and finished OpenSpec changes that are still open. Agents get `breadth_requirements` over MCP: what a function implements or verifies, with its scenarios, tests and evidence.
+
+## Live data: traces and traffic from running systems
+
+Two ways in. Neither needs a vendor agent, and nothing is sent anywhere.
+
+**Push (OpenTelemetry).** `breadth watch` accepts OTLP/HTTP on its own port, protobuf or JSON, gzip or not. `--otlp-port 4318` also listens on the standard port. Point any SDK or Collector at it and traces appear on the live canvas, linked to the functions that produced them:
+
+```sh
+breadth watch --otlp-port 4318
+OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 python app.py
+breadth receive --merge flowgraph.json   # without the canvas: merge traces into a graph file as they arrive
+```
+
+**Pull (your observability backend).** `breadth pull` reads recent traces and traffic (request rate, p95, error rate per endpoint) from Datadog, Prometheus (OpenTelemetry span metrics by default; any PromQL), Grafana Tempo or Jaeger:
+
+```json
+{
+  "sources": {
+    "datadog": { "site": "datadoghq.eu", "env": "prod", "apiKeyEnv": "DD_API_KEY", "appKeyEnv": "DD_APP_KEY" },
+    "prometheus": { "url": "https://prometheus.internal", "tokenEnv": "PROM_TOKEN" },
+    "tempo": { "url": "http://tempo:3200" },
+    "services": ["orders", "payments"]
+  }
+}
+```
+
+```sh
+breadth pull datadog --since 1h            # traces as executions, traffic on endpoints and services
+breadth watch --live datadog --every 60s   # keep it current on the live canvas
+breadth diff --live datadog                # traffic on every changed endpoint and function in the PR comment
+```
+
+Keys are only ever read from the environment variables the config names. Access is read only, and breadth says what it reads before it reads it. With traffic on the graph:
+
+- the PR comment shows the blast radius of each change (`charge no longer calls risk_score · 📈 1.2k req/min, p95 180 ms, 3.1% errors via POST /checkout`). A changed helper inherits the traffic of the endpoints that reach it.
+- the `unexercised` insight lists endpoints that got no requests while their service did.
+- `breadth evidence --live` measures experiment windows.
+
+In the GitHub Action, set `live: datadog` (and `live-since`) and pass the keys in the step's `env`.
+
 ## Live mode: watch a coding agent
 
 ```sh
@@ -287,6 +380,7 @@ The **breadth live** extension sends unsaved editor buffers to `breadth watch` (
 | `breadth_find` | Functions, classes, files, endpoints and datastores by name or path |
 | `breadth_node` | Where a node lives, its inputs and outputs, callers, callees, data reads and writes, and insights |
 | `breadth_impact` | Everything that depends on a node, up to N hops, and the endpoints it is reachable from |
+| `breadth_requirements` | The spec requirements a node implements or verifies, with scenarios, success criteria, tests and evidence; or every open spec change. One line for repositories without specs |
 | `breadth_insights` | Findings, optionally for one file or folder |
 
 MCP does not replace hooks. An MCP server hears from the agent only when the agent decides to call a tool, so it cannot observe edits; hooks and file watching capture those. What MCP adds is the other direction: the agent can use the graph instead of reading every file, and can say what it is doing. When `breadth watch` is running, the tools read its live graph. Otherwise they scan the project themselves.
@@ -396,6 +490,9 @@ When a graph is a graph, many problems stop hiding in code and become shapes. br
 | `broad-iam` | risk | IAM roles allowed `*`, `service:*` on every resource, or `NotAction` | no |
 | `ci-risk` | risk | `pull_request_target` jobs that check out the pull request's code (secrets exposed to anyone who opens a PR), `write-all` tokens, third-party actions pinned by tag instead of commit | no |
 | `contract-gap` | risk | AsyncAPI contracts and code disagree: a declared consumer of a topic nothing publishes, a topic code publishes that no contract declares | no |
+| `evidence-status` | risk | Requirements (OpenSpec, Spec Kit, Kiro) contradicted by run evidence, evidence recorded on behaviour that has since changed (stale), requirements nothing verifies, references that match nothing | no |
+| `spec-lifecycle` | risk | Spec changes whose tasks are all ticked although code they name does not exist; complete OpenSpec changes not yet archived | no |
+| `unexercised` | redundancy | Endpoints in code that got no traffic while their service did (needs `breadth pull` / `watch --live`) | live data |
 | `iam-usage` | risk | Code that reads or writes an S3 bucket, DynamoDB table, SQS queue, SNS topic or Kinesis stream its IAM role does not allow (AccessDenied waiting to happen), and grants the code never uses | no |
 | `race-risk` | risk | Shared state with several writers (module globals; databases written by several services) | no |
 | `data-exposure` | risk | Personal or secret-looking fields (by name and value shape) sent to external APIs | yes |
@@ -484,11 +581,12 @@ Conventions:
 | Name | Status | Reads |
 |---|---|---|
 | `code` | ✅ | Python, TypeScript, JavaScript, Go, Java (tree-sitter, WASM, no native build). Modules, classes, functions, params as inputs, return types as outputs, call edges (imports, re-exports, `self`/`this`, typed locals, attributes), loops, recursion, globals, DB/HTTP/queue clients, AWS SDK calls by resource, HTTP routes (FastAPI/Flask, Express/Nest, net/http/gin/chi/gorilla, Spring/JAX-RS). Go packages and Java packages span their folder; Java fields injected through constructors and JPA repositories are followed. Generated files (`DO NOT EDIT`) are skipped |
-| `otel` | ✅ | OTLP JSON traces: services, endpoints, call edges with protocols, datastores, topics, external APIs, one replayable execution per trace |
+| `otel` | ✅ | OTLP traces from files (JSON), pushed live (OTLP/HTTP protobuf or JSON to `watch` or `receive`) or pulled from Datadog, Tempo or Jaeger (`breadth pull`): services, endpoints, call edges with protocols, datastores, topics, external APIs, one replayable execution per trace |
 | `infra` | ✅ | Terraform/OpenTofu configuration (`.tf`, `.tofu`, `.tf.json`, var files), `show -json` plans and state, and raw `.tfstate`; Kubernetes YAML (workloads, Services, Ingress, ConfigMaps/Secrets by key only, PVCs, NetworkPolicies). [More below](#terraform-and-opentofu) |
 | `netflow` | stub | VPC flow logs, service mesh: [spec](collectors/src/netflow/README.md) |
 | `messaging` | ✅ | AsyncAPI 2.x and 3.x contracts: which application sends to and receives from which topic, with which message; merges with the code's topics and services. Broker admin APIs are [planned](collectors/src/messaging/README.md) |
 | `cicd` | ✅ | GitHub Actions and GitLab CI: workflows, jobs, `needs`, triggers and watched paths, images built, secrets by name, and what jobs deploy (kubectl, helm, `terraform apply`, Lambda, ECS, Cloud Run, Argo CD), matched with the services and Terraform roots of the other layers. CircleCI and Argo CD manifests are [planned](collectors/src/cicd/README.md) |
+| `resilience` | ✅ | OpenSpec specs and changes (requirements, scenarios with measurable criteria), run records in `.breadth/runs`, the source snapshot. See [From requirement to evidence](#from-requirement-to-evidence) |
 | `org` | stub | CODEOWNERS, Backstage: [spec](collectors/src/org/README.md) |
 
 ### Terraform and OpenTofu

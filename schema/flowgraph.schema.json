@@ -115,24 +115,55 @@
         "intent": {
           "type": "object",
           "description": "The change checked against what it was asked to do (breadth diff --intent, with an LLM).",
-          "required": ["request"],
+          "required": [
+            "request"
+          ],
           "additionalProperties": false,
           "properties": {
-            "request": { "type": "string", "description": "What was asked: the PR description or the agent's task." },
-            "summary": { "type": "string", "description": "One sentence: does the change do what was asked, and what else." },
-            "matches": { "type": "array", "items": { "type": "integer" }, "description": "Indexes into changes that do what was asked." },
+            "request": {
+              "type": "string",
+              "description": "What was asked: the PR description or the agent's task."
+            },
+            "summary": {
+              "type": "string",
+              "description": "One sentence: does the change do what was asked, and what else."
+            },
+            "matches": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              },
+              "description": "Indexes into changes that do what was asked."
+            },
             "unrequested": {
               "type": "array",
               "items": {
                 "type": "object",
-                "required": ["change"],
+                "required": [
+                  "change"
+                ],
                 "additionalProperties": false,
-                "properties": { "change": { "type": "integer" }, "why": { "type": "string" } }
+                "properties": {
+                  "change": {
+                    "type": "integer"
+                  },
+                  "why": {
+                    "type": "string"
+                  }
+                }
               },
               "description": "Changes nothing in the request explains."
             },
-            "missing": { "type": "array", "items": { "type": "string" }, "description": "Things asked for that no change shows." },
-            "model": { "type": "string" }
+            "missing": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Things asked for that no change shows."
+            },
+            "model": {
+              "type": "string"
+            }
           }
         },
         "changes": {
@@ -175,8 +206,103 @@
               }
             }
           }
+        },
+        "spec": {
+          "type": "object",
+          "description": "The change checked against the spec change it implements (OpenSpec change, Spec Kit feature, Kiro spec). Absent in repositories without specs.",
+          "additionalProperties": false,
+          "properties": {
+            "changes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "title",
+                  "reasons"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "format": {
+                    "type": "string"
+                  },
+                  "reasons": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "tasks": {
+                    "type": "object",
+                    "properties": {
+                      "done": {
+                        "type": "integer"
+                      },
+                      "total": {
+                        "type": "integer"
+                      }
+                    }
+                  },
+                  "requirements": {
+                    "type": "object",
+                    "properties": {
+                      "total": {
+                        "type": "integer"
+                      },
+                      "implemented": {
+                        "type": "integer"
+                      },
+                      "newlyImplemented": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  "missing": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "complete": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            },
+            "outOfScope": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              },
+              "description": "Indexes into changes that fall outside everything the spec change says it touches."
+            },
+            "scoped": {
+              "type": "boolean"
+            },
+            "noChange": {
+              "type": "boolean",
+              "description": "The repository keeps specs but no spec change matches this pull request."
+            }
+          }
         }
       }
+    },
+    "profiles": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true,
+      "description": "Profiles whose node roles and edge relations the graph uses, e.g. 'resilience-v1'."
     }
   },
   "$defs": {
@@ -220,7 +346,8 @@
         "pipeline",
         "team",
         "system",
-        "org"
+        "org",
+        "artifact"
       ]
     },
     "layer": {
@@ -231,7 +358,8 @@
         "messaging",
         "infra",
         "delivery",
-        "org"
+        "org",
+        "resilience"
       ]
     },
     "edgeKind": {
@@ -368,6 +496,10 @@
         },
         "metadata": {
           "$ref": "#/$defs/metadata"
+        },
+        "role": {
+          "type": "string",
+          "description": "What an 'artifact' node is, in its profile: capability, requirement, scenario, change, test, experiment, evidence, approval, snapshot, run (resilience-v1)."
         }
       }
     },
@@ -459,6 +591,10 @@
         },
         "metadata": {
           "$ref": "#/$defs/metadata"
+        },
+        "relation": {
+          "type": "string",
+          "description": "Semantic relation (never traffic), from a profile. resilience-v1: implements, verifies, targets, deployed_as, built_from, has_scenario, contains, approves, supports, contradicts, associated_with, stored_in. Such edges use kind 'depends_on' so rules and layout that read kinds are unaffected."
         }
       }
     },

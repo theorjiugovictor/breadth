@@ -10,6 +10,8 @@ export interface BreadthConfig {
   /** Per-collector settings, keyed by collector name. */
   settings?: Record<string, unknown>;
   llm?: LLMSettings;
+  /** Live observability backends for `breadth pull`, `watch --live`, `diff --live` and evidence. */
+  sources?: import("./sources/index.js").SourcesConfig;
 }
 
 export const CONFIG_FILE = "breadth.config.json";

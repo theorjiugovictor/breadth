@@ -84,6 +84,58 @@ function insightLine(i: Insight, byId: Map<string, FlowNode>): string {
   return `- [${i.severity}] ${i.title}${subject ? ` — ${subject.name}${where(subject)}` : ""}${i.detail ? `\n  ${i.detail.split("\n")[0]}` : ""}`;
 }
 
+
+/** Requirements a node implements or verifies, or every open spec change (breadth_requirements). */
+export function requirementsText(g: FlowGraph, ref?: string): string {
+  const reqs = g.nodes.filter((n) => n.role === "requirement");
+  if (!reqs.length) return "This repository keeps no specs (OpenSpec, Spec Kit or Kiro), so there are no requirements to check against.";
+  const byId = new Map(g.nodes.map((n) => [n.id, n]));
+  const { incoming } = edgeIndex(g);
+  const stale = new Set((g.insights ?? []).filter((i) => i.id.startsWith("evidence-status:stale:")).map((i) => i.nodes[0]));
+  const reqOf = (n: FlowNode | undefined) => (n?.role === "scenario" ? byId.get(n.parent ?? "") : n);
+  const describe = (r: FlowNode): string[] => {
+    const into = incoming.get(r.id) ?? [];
+    const scenarios = g.nodes.filter((n) => n.role === "scenario" && n.parent === r.id);
+    const by = (rel: string, ids: string[]) => [...new Set(g.edges.filter((e) => e.relation === rel && ids.includes(e.to.node)).map((e) => byId.get(e.from.node)?.name ?? e.from.node))];
+    const evidence = into.filter((e) => e.relation === "supports" || e.relation === "contradicts").map((e) => byId.get(e.from.node)).filter(Boolean) as FlowNode[];
+    const unresolved = (r.metadata?.unresolved as string[] | undefined) ?? [];
+    const change = byId.get(r.parent ?? "")?.metadata?.change ?? r.metadata?.change;
+    return [
+      `- ${r.name}${where(r)}  [${r.id}]${change ? ` (change ${String(change)})` : ""}`,
+      r.description ? `  ${r.description.slice(0, 300)}` : "",
+      ...scenarios.slice(0, 8).map((s) => `  scenario: ${s.name}${(s.metadata?.slos as { text: string }[] | undefined)?.length ? ` — ${(s.metadata!.slos as { text: string }[]).map((x) => x.text).join(", ")}` : ""}`),
+      `  implemented by: ${by("implements", [r.id]).join(", ") || "nothing found"}`,
+      `  verified by: ${by("verifies", [r.id, ...scenarios.map((s) => s.id)]).join(", ") || "no test"}`,
+      evidence.length ? `  evidence: ${evidence.map((e) => `${String(e.metadata?.verdict ?? "?")}${stale.has(e.id) ? " (stale: behaviour changed since)" : ""} from run ${String(e.metadata?.run ?? e.name)}`).join("; ")}` : "  evidence: none",
+      unresolved.length ? `  refers to ${unresolved.join(", ")}, which ${unresolved.length === 1 ? "does" : "do"} not exist` : "",
+    ].filter(Boolean);
+  };
+  if (ref) {
+    const n = resolveNode(g, ref);
+    if (!n) return "Unknown node. Use breadth_find first.";
+    if (n.role === "requirement" || n.role === "scenario") return describe(reqOf(n)!).join("\n");
+    const ids = new Set([n.id, ...g.nodes.filter((x) => x.parent === n.id).map((x) => x.id)]);
+    const hit = new Map<string, FlowNode>();
+    for (const e of g.edges) if ((e.relation === "implements" || e.relation === "verifies") && ids.has(e.from.node)) {
+      const r = reqOf(byId.get(e.to.node));
+      if (r) hit.set(r.id, r);
+    }
+    if (!hit.size) return `${n.name} implements or verifies no requirement that breadth knows of (link one with "Implemented by: ${n.name}" in the spec).`;
+    return [`${n.name} is linked to ${hit.size} requirement(s):`, ...[...hit.values()].flatMap(describe)].join("\n");
+  }
+  const changes = g.nodes.filter((n) => n.role === "change" && !n.metadata?.archived);
+  const head = changes.map((c) => {
+    const t = c.metadata?.tasks as { done: number; total: number } | undefined;
+    const own = reqs.filter((r) => (byId.get(r.parent ?? "")?.metadata?.change ?? r.metadata?.change) === c.metadata?.change);
+    return `- ${String(c.metadata?.format ?? "spec")} change ${String(c.metadata?.change ?? c.id)}: ${c.name}${t?.total ? ` · tasks ${t.done}/${t.total}` : ""} · ${own.length} requirement(s)`;
+  });
+  return [
+    changes.length ? `Open spec changes:\n${head.join("\n")}\n` : "No open spec changes.\n",
+    `Requirements (${reqs.length}${reqs.length > 40 ? ", first 40" : ""}):`,
+    ...reqs.slice(0, 40).flatMap(describe),
+  ].join("\n");
+}
+
 const TOOLS: Tool[] = [
   {
     name: "breadth_changes",
@@ -217,6 +269,16 @@ const TOOLS: Tool[] = [
         ...rows.map(([id, d]) => (byId.get(id) ? `${"  ".repeat(d - 1)}${line(byId.get(id)!)}` : `- ${id}`)),
         entry.length ? `\nReachable from: ${entry.map(([id]) => byId.get(id)!.name).join(", ")}` : "",
       ].join("\n");
+    },
+  },
+  {
+    name: "breadth_requirements",
+    description:
+      "Spec requirements (OpenSpec, Spec Kit, Kiro) a function, endpoint or file implements or verifies, with their scenarios, success criteria, tests and evidence (supports, contradicts, stale). Without a node: the open spec changes and all requirements. Call it before changing code a spec covers. Repositories without specs get a one-line answer.",
+    inputSchema: schema({ node: { type: "string", description: "Node id or name; a requirement's id or name also works. Optional." } }),
+    async run(args, ctx) {
+      const { graph } = await ctx.graph();
+      return requirementsText(graph, args.node ? String(args.node) : undefined);
     },
   },
   {

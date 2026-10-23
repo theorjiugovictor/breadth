@@ -95,12 +95,15 @@ export function mergeGraphs(...graphs: FlowGraph[]): FlowGraph {
   const sources = graphs.flatMap((g) => g.sources ?? []);
   if (sources.length) out.sources = sources;
   if (executions.size) out.executions = [...executions.values()];
+  const profiles = [...new Set(graphs.flatMap((g) => g.profiles ?? []))];
+  if (profiles.length) out.profiles = profiles;
   return out;
 }
 
 function mergeNode(a: FlowNode, b: FlowNode): FlowNode {
   const out: FlowNode = { ...a };
   out.description ||= b.description;
+  out.role ??= b.role;
   if (out.parent === undefined && b.parent !== undefined) out.parent = b.parent;
   out.aliases = union(a.aliases, [...(b.aliases ?? []), b.id]);
   out.inputs = mergePorts(a.inputs, b.inputs);
@@ -115,6 +118,7 @@ function mergeEdge(a: FlowEdge, b: FlowEdge): FlowEdge {
   const out: FlowEdge = { ...a };
   out.protocol ??= b.protocol;
   out.label ??= b.label;
+  out.relation ??= b.relation;
   if (b.loop) out.loop = true;
   if (b.conditional) out.conditional = true;
   if (a.count !== undefined || b.count !== undefined) out.count = (a.count ?? 0) + (b.count ?? 0);

@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createProvider, noneProvider, resolveSettings } from "./llm/provider.js";
 import { hookPayload, hookReply } from "./hook.js";
 import { integrations, writeConfig } from "./connect.js";
-import { runMcp } from "./mcp.js";
+import { requirementsText, runMcp } from "./mcp.js";
 import { diffRefs, renderMarkdown, COMMENT_MARKER } from "./diff.js";
 import { execFileSync } from "node:child_process";
 import { LiveSession, type ActivityEntry } from "./live.js";
@@ -181,6 +181,7 @@ describe("mcp", () => {
     send({ id: 3, method: "tools/call", params: { name: "breadth_impact", arguments: { node: "parse" } } });
     send({ id: 4, method: "tools/call", params: { name: "breadth_report_task", arguments: { summary: "x" } } });
     send({ id: 6, method: "tools/call", params: { name: "breadth_find", arguments: { query: "pars" } } });
+    send({ id: 7, method: "tools/call", params: { name: "breadth_requirements", arguments: {} } });
     send({ id: 5, method: "nope" });
     input.end();
     await done;
@@ -191,7 +192,25 @@ describe("mcp", () => {
     expect(byId.get(4).result.content[0].text).toMatch(/not running/);
     expect(byId.get(5).error.code).toBe(-32601);
     expect(byId.get(6).result.content[0].text.split("\n")).toEqual([expect.stringContaining("- parse (function) app.py:4")]);
-    expect(lines).toHaveLength(6);
+    // A repository without specs gets one line, not an error.
+    expect(byId.get(7).result.content[0].text).toMatch(/keeps no specs/);
+    expect(lines).toHaveLength(7);
+  });
+});
+
+describe("requirementsText", () => {
+  it("lists what a function implements, with tests and evidence", async () => {
+    const { runCollectors } = await import("@breadth/collectors");
+    const { runInsights } = await import("@breadth/insights");
+    const g = await runCollectors(path.resolve(__dirname, "../../examples/shop"), undefined, {});
+    g.insights = runInsights(g);
+    const one = requirementsText(g, "create_order");
+    expect(one).toContain("Checkout survives a slow database");
+    expect(one).toContain("verified by: test_postgres_latency");
+    expect(one).toMatch(/evidence: contradicts from run/);
+    const all = requirementsText(g);
+    expect(all).toContain("openspec change add-bulk-refunds: Add bulk refunds · tasks 1/3 · 2 requirement(s)");
+    expect(all).toContain("refers to store_receipt, which does not exist");
   });
 });
 
@@ -262,6 +281,10 @@ describe("diff", () => {
     expect(md.startsWith(COMMENT_MARKER)).toBe(true);
     expect(md).toContain("```mermaid");
     expect(md).toContain("hooks.slack.com");
+    // No specs in this repository: nothing about specs, whatever the branch is called.
+    const { checkSpec } = await import("@breadth/insights");
+    expect(checkSpec(before, after, report, { branch: "add-bulk-refunds", text: "Implements add-bulk-refunds" })).toBeUndefined();
+    expect(md).not.toMatch(/spec/i);
     // The base version was read from git, not from the working tree.
     expect(before.nodes.some((n) => n.name === "notify")).toBe(false);
   });

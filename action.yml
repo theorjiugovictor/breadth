@@ -33,6 +33,12 @@ inputs:
   llm-model:
     description: "Model for check-intent (default: the provider's default)."
     default: ""
+  live:
+    description: "Live sources for production traffic on each change (blast radius): datadog, prometheus, tempo or jaeger, comma separated, configured under sources in breadth.config.json. Keys come from the step's env (e.g. DD_API_KEY, DD_APP_KEY)."
+    default: ""
+  live-since:
+    description: "Window of live traffic to read."
+    default: "1h"
   fail-on:
     description: "Fail the check when the change has a behaviour change of this severity or higher (high, medium or low). Empty never fails."
     default: ""
@@ -81,6 +87,8 @@ runs:
         INPUT_INTENT: ${{ inputs.intent }}
         INPUT_LLM_PROVIDER: ${{ inputs['llm-provider'] }}
         INPUT_LLM_MODEL: ${{ inputs['llm-model'] }}
+        INPUT_LIVE: ${{ inputs.live }}
+        INPUT_LIVE_SINCE: ${{ inputs['live-since'] }}
       run: |
         base="$INPUT_BASE"
         if [ -z "$base" ] && [ -n "$GITHUB_BASE_REF" ]; then
@@ -104,11 +112,14 @@ runs:
             intent=(--intent-file "$req" ${INPUT_LLM_PROVIDER:+--llm-provider "$INPUT_LLM_PROVIDER"} ${INPUT_LLM_MODEL:+--llm-model "$INPUT_LLM_MODEL"})
           fi
         fi
+        # the PR's title and description: links the spec change it names (no LLM involved)
+        prtext="$RUNNER_TEMP/breadth-pr.txt"
+        node -e 'const e=require(process.env.GITHUB_EVENT_PATH).pull_request||{}; process.stdout.write([e.title,e.body].filter(Boolean).join("\n\n"))' > "$prtext" 2>/dev/null || true
         md="$RUNNER_TEMP/breadth-diff.md"
         graph="$RUNNER_TEMP/breadth-diff.flowgraph.json"
         set +e
         node "$GITHUB_ACTION_PATH/cli/dist/breadth.mjs" diff "$INPUT_PATH" ${base:+--base "$base"} \
-          --markdown "$md" -o "$graph" ${INPUT_FAIL_ON:+--fail-on "$INPUT_FAIL_ON"} "${plans[@]}" "${intent[@]}"
+          --markdown "$md" -o "$graph" ${INPUT_FAIL_ON:+--fail-on "$INPUT_FAIL_ON"} "${plans[@]}" "${intent[@]}" --pr-text-file "$prtext" ${INPUT_LIVE:+--live "$INPUT_LIVE" --since "$INPUT_LIVE_SINCE"}
         code=$?
         set -e
         if [ "$code" != 0 ] && [ "$code" != 2 ]; then exit "$code"; fi

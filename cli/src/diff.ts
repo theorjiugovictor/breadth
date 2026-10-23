@@ -5,6 +5,7 @@ import path from "node:path";
 import type { BehaviorChange, FlowGraph, FlowNode } from "@breadth/schema";
 import { applyPlan, runCollectors, type CollectorOptions } from "@breadth/collectors";
 import { describeChanges, runInsights, type ChangeReport } from "@breadth/insights";
+import { liveText, type LiveInfo } from "./sources/apply.js";
 
 /** Marker so the GitHub Action updates its own comment instead of adding a new one each push. */
 export const COMMENT_MARKER = "<!-- breadth-diff -->";
@@ -198,7 +199,53 @@ export function mermaid(report: ChangeReport, before: FlowGraph, after: FlowGrap
 }
 
 /** The PR comment: behaviour first, structure second, details folded away. */
-export function renderMarkdown(report: ChangeReport, before: FlowGraph, after: FlowGraph, opts: { title?: string; link?: string; comprehension?: string } = {}): string {
+/**
+ * Live traffic behind a node (diff --live): its own, else the endpoints that reach it through
+ * calls (up to a few hops), else its service's. So a change to a helper says how much
+ * production traffic runs through it.
+ */
+export function trafficOf(g: FlowGraph, id: string): { text: string; via?: string } | undefined {
+  const byId = new Map(g.nodes.map((n) => [n.id, n]));
+  const own = byId.get(id)?.metadata?.live as LiveInfo | undefined;
+  if (own) return { text: liveText(own)! };
+  const callers = new Map<string, string[]>();
+  for (const e of g.edges) if (e.kind === "call" && e.metadata?.diff !== "removed") callers.set(e.to.node, [...(callers.get(e.to.node) ?? []), e.from.node]);
+  const seen = new Set([id]);
+  let frontier = [id];
+  const found: LiveInfo[] = [];
+  const names: string[] = [];
+  for (let hop = 0; hop < 4 && frontier.length && !found.length; hop++) {
+    const next: string[] = [];
+    for (const f of frontier) {
+      for (const c of callers.get(f) ?? []) {
+        if (seen.has(c)) continue;
+        seen.add(c);
+        const live = byId.get(c)?.metadata?.live as LiveInfo | undefined;
+        if (live && byId.get(c)?.kind === "network_endpoint") {
+          found.push(live);
+          names.push(byId.get(c)!.name);
+        } else next.push(c);
+      }
+    }
+    frontier = next;
+  }
+  if (found.length) {
+    const rpm = found.reduce((a, l) => a + l.rpm, 0);
+    const errors = found.reduce((a, l) => a + l.rpm * ((l.error_pct ?? 0) / 100), 0);
+    const p95 = Math.max(...found.map((l) => l.p95_ms ?? 0));
+    return { text: liveText({ ...found[0], rpm, error_pct: rpm ? Math.round((errors / rpm) * 10000) / 100 : undefined, p95_ms: p95 || undefined })!, via: names.slice(0, 3).join(", ") };
+  }
+  let cur = byId.get(id);
+  const guard = new Set<string>();
+  while (cur && !guard.has(cur.id)) {
+    guard.add(cur.id);
+    if (cur.kind === "service" && cur.metadata?.live) return { text: liveText(cur.metadata.live as LiveInfo)!, via: `service ${cur.name}` };
+    cur = cur.parent ? byId.get(cur.parent) : undefined;
+  }
+  return undefined;
+}
+
+export function renderMarkdown(report: ChangeReport, before: FlowGraph, after: FlowGraph, opts: { title?: string; link?: string; comprehension?: string; live?: string } = {}): string {
   const c = report.counts;
   const attention = report.changes.filter((x) => x.severity === "high");
   const other = report.changes.filter((x) => x.severity !== "high");
@@ -212,11 +259,16 @@ export function renderMarkdown(report: ChangeReport, before: FlowGraph, after: F
     (c.edgesAdded || c.edgesRemoved) && `${c.edgesAdded} connections added, ${c.edgesRemoved} removed`,
   ].filter(Boolean);
   const unrequested = new Map((report.intent?.unrequested ?? []).map((u) => [u.change, u.why]));
+  const outside = new Set(report.spec?.outOfScope ?? []);
+  const specName = report.spec?.changes.map((c) => c.id).join(", ");
   const line = (x: BehaviorChange) => {
     const file = fileOf(x.nodes[0], before, after);
     const i = report.changes.indexOf(x);
-    const flag = unrequested.has(i) ? ` · **not in the request**${unrequested.get(i) ? `: ${unrequested.get(i)}` : ""}` : "";
-    return `- ${ICON[x.severity]} ${x.text}${file && !x.text.includes(file) ? ` <sub>\`${file}\`</sub>` : ""}${flag}`;
+    const flag =
+      (unrequested.has(i) ? ` · **not in the request**${unrequested.get(i) ? `: ${unrequested.get(i)}` : ""}` : "") + (outside.has(i) ? ` · **outside spec change \`${specName}\`**` : "");
+    const traffic = opts.live && x.severity !== "low" ? trafficOf(after, x.nodes[0]) : undefined;
+    const prod = traffic ? ` · 📈 ${traffic.text}${traffic.via ? ` <sub>via ${traffic.via}</sub>` : ""}` : "";
+    return `- ${ICON[x.severity]} ${x.text}${file && !x.text.includes(file) ? ` <sub>\`${file}\`</sub>` : ""}${prod}${flag}`;
   };
   const out: string[] = [COMMENT_MARKER, `### ${opts.title ?? "breadth · what this change does"}`, ""];
   if (!report.changes.length && !parts.length) {
@@ -226,6 +278,7 @@ export function renderMarkdown(report: ChangeReport, before: FlowGraph, after: F
       `**${attention.length ? `${n(attention.length, "change")} worth a close look` : "Nothing high-risk"}**${parts.length ? ` · ${parts.join(" · ")}` : ""}`,
       "",
     );
+    if (report.spec) out.push(...specSection(report), "");
     if (report.intent) out.push(...intentSection(report), "");
     if (attention.length) out.push("#### Worth a close look", ...attention.slice(0, 25).map(line), "");
     if (other.length) out.push("#### Also changes", ...other.slice(0, 25).map(line), other.length > 25 ? `- …and ${other.length - 25} more` : "", "");
@@ -241,10 +294,32 @@ export function renderMarkdown(report: ChangeReport, before: FlowGraph, after: F
     if (details.length) out.push("<details><summary>All structural changes</summary>", "", ...details, "</details>", "");
   }
   if (opts.comprehension) out.push(opts.comprehension, "");
+  if (opts.live) out.push(`<sub>📈 Live traffic: ${opts.live}.</sub>`, "");
   out.push(
     `<sub>breadth compared ${report.base ?? "base"} → ${report.head ?? "head"} by scanning both versions. It maps structure and data flow; dynamic calls and runtime-only behaviour are not visible.${opts.link ? ` [Open the map](${opts.link})` : ""}</sub>`,
   );
   return out.filter((l, i, a) => !(l === "" && a[i - 1] === "")).join("\n") + "\n";
+}
+
+/** The pull request against the spec change it implements (repositories with specs only). */
+function specSection(report: ChangeReport): string[] {
+  const s = report.spec!;
+  const FORMAT: Record<string, string> = { openspec: "OpenSpec change", "spec-kit": "Spec Kit feature", kiro: "Kiro spec" };
+  if (s.noChange) return ["📐 This repository keeps specs, but no spec change matches this pull request (by branch, files or description). Name one with `--spec-change <id>` if it implements one."];
+  const out = ["#### Against the spec"];
+  for (const c of s.changes) {
+    const reqs = c.requirements ? `requirements implemented ${c.requirements.implemented}/${c.requirements.total}${c.requirements.newlyImplemented.length ? ` (${c.requirements.newlyImplemented.length} by this pull request)` : ""}` : "";
+    const tasks = c.tasks?.total ? `tasks ${c.tasks.done}/${c.tasks.total}` : "";
+    out.push(`**${FORMAT[c.format ?? ""] ?? "Spec change"} \`${c.id}\`**: ${c.title} · ${[tasks, reqs].filter(Boolean).join(" · ")}${c.complete ? " · ✅ complete" : ""} <sub>(${c.reasons.join("; ")})</sub>`);
+    if (c.missing?.length) out.push(`Not built yet: ${c.missing.slice(0, 8).map((m) => `\`${m}\``).join(", ")}`);
+  }
+  const extra = s.outOfScope.filter((i) => report.changes[i]);
+  if (extra.length) {
+    out.push("", `**Outside the spec change** (${extra.length}): not reached from the code or targets its requirements name.`);
+    for (const i of extra.slice(0, 15)) out.push(`- ${ICON[report.changes[i].severity]} ${report.changes[i].text}`);
+  } else if (s.scoped) out.push("", "Every behaviour change is within what the spec change names.");
+  else out.push("", "<sub>The spec change names no code (Implemented by:) or targets (Target:), so its scope cannot be checked.</sub>");
+  return out;
 }
 
 /** The request compared with the change (breadth diff --intent). */
@@ -273,7 +348,10 @@ export function renderText(report: ChangeReport): string {
   const extra = new Map((report.intent?.unrequested ?? []).map((u) => [u.change, u.why]));
   const lines = [head, ""];
   if (report.intent?.summary) lines.push(`Request: ${report.intent.summary}`, "");
-  lines.push(...report.changes.map((x, i) => `${mark[x.severity]} ${x.text}${extra.has(i) ? `   <- not in the request${extra.get(i) ? `: ${extra.get(i)}` : ""}` : ""}`));
+  const outside = new Set(report.spec?.outOfScope ?? []);
+  for (const c of report.spec?.changes ?? []) lines.push(`Spec change ${c.id}: ${c.title}${c.tasks?.total ? `, tasks ${c.tasks.done}/${c.tasks.total}` : ""}${c.requirements ? `, requirements implemented ${c.requirements.implemented}/${c.requirements.total}` : ""}`, "");
+  if (report.spec?.noChange) lines.push("No spec change matches this pull request.", "");
+  lines.push(...report.changes.map((x, i) => `${mark[x.severity]} ${x.text}${extra.has(i) ? `   <- not in the request${extra.get(i) ? `: ${extra.get(i)}` : ""}` : ""}${outside.has(i) ? "   <- outside the spec change" : ""}`));
   if (report.intent?.missing?.length) lines.push("", "Asked for, not visible:", ...report.intent.missing.map((m) => `   ${m}`));
   return lines.join("\n") + "\n";
 }

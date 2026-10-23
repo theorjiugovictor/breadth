@@ -4,8 +4,11 @@ import { parseArgs } from "node:util";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { assertValidGraph, mergeGraphs, validateGraph, type FlowGraph } from "@breadth/schema";
-import { collectors, importOtlp, linkTracesToCode, runCollectors, type Logger } from "@breadth/collectors";
-import { RULES, runInsights, describeChanges, diffGraph, withoutRemoved, type ChangeReport } from "@breadth/insights";
+import { collectors, importOtlp, linkTracesToCode, runCollectors, spansToGraph, type Logger } from "@breadth/collectors";
+import { SpanBuffer, startOtlpServer } from "./otlp.js";
+import { createSource, parseDuration, pullLive, type LiveSource } from "./sources/index.js";
+import { parseTime, recordEvidence } from "./evidence.js";
+import { RULES, checkSpec, runInsights, describeChanges, diffGraph, withoutRemoved, type ChangeReport } from "@breadth/insights";
 import type { Insight, Severity } from "@breadth/schema";
 import { loadConfig } from "./config.js";
 import { createProvider, noneProvider, PRESETS, privacyNotice, resolveSettings, summarizeGraph, type LLMProvider } from "./llm/provider.js";
@@ -26,13 +29,16 @@ const HELP = `breadth ${VERSION}: turn any codebase or system into an n8n-style 
 
 Usage:
   breadth scan <path> [--collector code,infra] [-o flowgraph.json] [--config file] [--exclude glob]... [--plan [dir=]plan.json]
-  breadth diff [path] [--base ref] [--head ref] [-o diff.json] [--markdown pr.md] [--fail-on high] [--plan [dir=]plan.json] [--intent "what was asked"]   what a change does, in behaviour
+  breadth diff [path] [--base ref] [--head ref] [-o diff.json] [--markdown pr.md] [--fail-on high] [--plan [dir=]plan.json] [--intent "what was asked"] [--live datadog --since 1h]   what a change does, in behaviour
   breadth diff before.json after.json
   breadth review [path] --changed | --from diff.json | --nodes ids | --all [--by name]   record what you reviewed (.breadth/ledger.json)
   breadth debt [path] [--record] [--json] [--fail-above 30]   comprehension debt: behaviour nobody has reviewed, per service
   breadth import-traces <otlp.json>... [--merge flowgraph.json] [-o out.json]
+  breadth pull <datadog|prometheus|tempo|jaeger>[,...] [path] [--merge flowgraph.json] [--since 1h]   traces and live traffic from your observability backend
+  breadth evidence "<scenario>" [path] --service x --from 15m [--live datadog | --results p95_ms=180]   judge an experiment window, record the run
+  breadth receive [--port 4318] [--merge flowgraph.json]   OTLP/HTTP receiver: traces from running services, merged as they arrive
   breadth serve [flowgraph.json] [--port 4321] [--host 127.0.0.1] [--no-open]
-  breadth watch [path] [--port 4321] [--traces otlp.json] [-o flowgraph.json] [--llm]   live canvas while you (or an agent) code
+  breadth watch [path] [--port 4321] [--traces otlp.json] [--otlp-port 4318] [--live datadog --every 60s] [-o flowgraph.json] [--llm]   live canvas while you (or an agent) code; also takes OTLP on /v1/traces
   breadth connect <agent>... [--write]   hooks + MCP for claude, copilot, cursor, gemini, windsurf, antigravity, codex
   breadth hook [--port 4321] [--agent name]   (run by agent hooks) forward an agent's prompt and edits to \`breadth watch\`
   breadth mcp [path] [--port 4321]   MCP server (stdio): the graph as tools for any coding agent
@@ -182,6 +188,139 @@ async function cmdImportTraces(args: string[]) {
   );
 }
 
+/** Sources named on the command line ("datadog,prometheus"), configured in breadth.config.json. */
+function liveSources(names: string, config: import("./config.js").BreadthConfig): LiveSource[] {
+  return names
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .map((n) => createSource(n, config.sources));
+}
+
+/** Traces and traffic from live backends into a graph. */
+async function cmdPull(args: string[]) {
+  const { values, positionals } = parseArgs({
+    args,
+    allowPositionals: true,
+    options: {
+      merge: { type: "string", short: "m" },
+      out: { type: "string", short: "o" },
+      since: { type: "string", default: "1h" },
+      limit: { type: "string", default: "500" },
+      services: { type: "string" },
+      "no-traces": { type: "boolean" },
+      "no-stats": { type: "boolean" },
+      config: { type: "string" },
+      quiet: { type: "boolean", short: "q" },
+    },
+  });
+  log.quiet = !!values.quiet;
+  const [names, target = "."] = positionals;
+  if (!names) throw new Error("usage: breadth pull <datadog|prometheus|tempo|jaeger>[,...] [path] [--merge flowgraph.json] [--since 1h]");
+  const config = loadConfig(path.resolve(target), values.config);
+  const sources = liveSources(names, config);
+  const merge = values.merge ?? (existsSync("flowgraph.json") && !positionals[1] ? "flowgraph.json" : undefined);
+  let base: FlowGraph;
+  if (merge && existsSync(merge)) base = readGraph(merge);
+  else {
+    process.stderr.write(`breadth: scanning ${path.resolve(target)}\n`);
+    base = await scanTarget(path.resolve(target), values);
+  }
+  process.stderr.write(`breadth: reading ${sources.map((x) => x.describe).join(", ")}, last ${values.since}: span metadata and request counts, latency and errors (read only)\n`);
+  const r = await pullLive(base, sources, {
+    since: parseDuration(values.since!),
+    traces: !values["no-traces"],
+    stats: !values["no-stats"],
+    limit: Number(values.limit),
+    services: values.services?.split(",").map((x) => x.trim()).filter(Boolean) ?? config.sources?.services,
+    window: values.since!,
+  });
+  attachInsights(r.graph);
+  const out = values.out ?? merge ?? "flowgraph.json";
+  writeGraph(out, r.graph);
+  process.stderr.write(`breadth: ${r.traces} traces (${r.spans} spans), traffic for ${r.matched} of ${r.stats} endpoints and services → ${out}${insightSummary(r.graph, true)}\n`);
+}
+
+/** Judge a scenario from an experiment window and record the run as evidence. */
+async function cmdEvidence(args: string[]) {
+  const { values, positionals } = parseArgs({
+    args,
+    allowPositionals: true,
+    options: {
+      service: { type: "string" },
+      endpoint: { type: "string" },
+      from: { type: "string" },
+      to: { type: "string", default: "now" },
+      live: { type: "string" },
+      results: { type: "string" },
+      id: { type: "string" },
+      tool: { type: "string" },
+      fault: { type: "string" },
+      "approved-by": { type: "string" },
+      store: { type: "string" },
+      "fail-on": { type: "string" },
+      config: { type: "string" },
+    },
+  });
+  const [scenario, target = "."] = positionals;
+  if (!scenario || !values.service || !values.from) throw new Error('usage: breadth evidence "<scenario>" [path] --service <name> --from <time|15m> [--to now] [--endpoint "POST /x"] [--live datadog | --results p95_ms=180,error_pct=0.4]');
+  if (!values.live && !values.results) throw new Error("say where the measurements come from: --live <source> or --results metric=value,...");
+  const root = path.resolve(target);
+  const config = loadConfig(root, values.config);
+  const source = values.live ? liveSources(values.live, config)[0] : undefined;
+  const results = values.results ? Object.fromEntries(values.results.split(",").map((kv) => kv.split("=")).map(([k, v]) => [k.trim(), Number(v)])) : undefined;
+  process.stderr.write(`breadth: scanning ${root}\n`);
+  const graph = await scanTarget(root, values);
+  const from = parseTime(values.from);
+  const to = parseTime(values.to!);
+  if (source) process.stderr.write(`breadth: measuring ${values.service}${values.endpoint ? ` ${values.endpoint}` : ""} from ${new Date(from).toISOString()} to ${new Date(to).toISOString()} with ${source.describe} (read only)\n`);
+  const r = await recordEvidence({ graph, root, scenario, service: values.service, endpoint: values.endpoint, from, to, source, results, id: values.id, tool: values.tool, fault: values.fault, approvedBy: values["approved-by"], store: values.store });
+  const mark = { supports: "✔", contradicts: "✖", inconclusive: "?" }[r.verdict];
+  const lines = [`${mark} ${r.verdict}: ${r.scenario.name}`, ...r.checks.map((c) => `   ${c.ok === undefined ? "?" : c.ok ? "✓" : "✗"} ${c.metric} ${c.actual ?? "not measured"} (${c.op} ${c.expected})`), `   recorded ${path.relative(process.cwd(), r.file)}${r.record.fingerprint ? "" : " (no behaviour fingerprint: service not found in the scan, so this evidence cannot go stale)"}`];
+  process.stdout.write(lines.join("\n") + "\n");
+  const fail = values["fail-on"];
+  if (fail && (r.verdict === "contradicts" || (fail === "inconclusive" && r.verdict === "inconclusive"))) process.exitCode = 2;
+}
+
+/** A standalone OTLP/HTTP receiver: traces from running services, merged into a graph file as they arrive. */
+async function cmdReceive(args: string[]) {
+  const { values } = parseArgs({
+    args,
+    allowPositionals: true,
+    options: {
+      port: { type: "string", short: "p", default: "4318" },
+      host: { type: "string", default: "127.0.0.1" },
+      merge: { type: "string", short: "m", default: "flowgraph.json" },
+      out: { type: "string", short: "o" },
+      "max-traces": { type: "string", default: "2000" },
+    },
+  });
+  const base = existsSync(values.merge!) ? readGraph(values.merge!) : undefined;
+  const out = values.out ?? values.merge!;
+  const buffer = new SpanBuffer(Number(values["max-traces"]));
+  let timer: NodeJS.Timeout | undefined;
+  const flush = () => {
+    const traces = spansToGraph(buffer.spans, ["otlp"]);
+    const graph = base ? mergeGraphs(base, linkTracesToCode(traces, base)) : traces;
+    attachInsights(graph);
+    writeGraph(out, graph);
+    log.info(`${buffer.size} traces → ${out}`);
+  };
+  await startOtlpServer({
+    port: Number(values.port),
+    host: values.host!,
+    onSpans: (spans) => {
+      buffer.add(spans);
+      clearTimeout(timer);
+      timer = setTimeout(flush, 1000);
+    },
+  });
+  process.stderr.write(
+    `breadth: receiving OTLP on http://${values.host}:${values.port}/v1/traces${base ? `, merging into ${values.merge}` : ""} (writing ${out})\n` +
+      `         point an SDK or Collector at it: OTEL_EXPORTER_OTLP_ENDPOINT=http://${values.host}:${values.port}\n`,
+  );
+}
+
 async function cmdServe(args: string[]) {
   const { values, positionals } = parseArgs({
     args,
@@ -216,6 +355,9 @@ async function cmdWatch(args: string[]) {
       config: { type: "string" },
       exclude: { type: "string", multiple: true },
       traces: { type: "string", multiple: true },
+      "otlp-port": { type: "string" },
+      live: { type: "string" },
+      every: { type: "string", default: "60s" },
       llm: { type: "boolean" },
       ...LLM_FLAGS,
     },
@@ -238,6 +380,32 @@ async function cmdWatch(args: string[]) {
   });
   await live.start();
   const url = await serve({ live, port: Number(values.port), host: values.host!, open: !values["no-open"], llm });
+  if (values.live) {
+    const sources = liveSources(values.live, config);
+    const every = parseDuration(values.every!);
+    const window = values.every!;
+    process.stderr.write(`breadth: reading ${sources.map((x) => x.describe).join(", ")} every ${window}: span metadata and request counts, latency and errors (read only)\n`);
+    let last = Date.now() - every;
+    const poll = async () => {
+      const now = Date.now();
+      for (const src of sources) {
+        try {
+          if (src.traces) live.ingestSpans(await src.traces({ from: last, to: now, services: config.sources?.services, limit: 300 }));
+          if (src.stats) live.setLiveStats(src.name, window, await src.stats({ from: now - every, to: now, services: config.sources?.services }));
+        } catch (err) {
+          log.warn((err as Error).message);
+        }
+      }
+      last = now;
+    };
+    await poll();
+    setInterval(() => void poll(), every).unref?.();
+    // keep the process alive: the server already does
+  }
+  if (values["otlp-port"]) {
+    await startOtlpServer({ port: Number(values["otlp-port"]), host: values.host!, onSpans: (spans) => live.ingestSpans(spans) });
+    process.stderr.write(`breadth: receiving OTLP traces on http://${values.host}:${values["otlp-port"]}/v1/traces (and on ${url}v1/traces)\n`);
+  }
   process.stderr.write(
     `breadth: ${live.graph.nodes.length} nodes in ${((Date.now() - started) / 1000).toFixed(1)}s; live canvas at ${url}\n` +
       `         edits appear as they happen. Coding agent hooks: breadth hook --print-config\n`,
@@ -438,6 +606,10 @@ async function cmdDiff(args: string[]) {
       plan: { type: "string", multiple: true },
       intent: { type: "string" },
       "intent-file": { type: "string" },
+      live: { type: "string" },
+      since: { type: "string", default: "1h" },
+      "spec-change": { type: "string" },
+      "pr-text-file": { type: "string" },
       ...LLM_FLAGS,
     },
   });
@@ -463,7 +635,11 @@ async function cmdDiff(args: string[]) {
       plans,
     }));
   }
-  const request = values["intent-file"] ? readFileSync(values["intent-file"], "utf8") : values.intent;
+  // Repositories with specs: the spec change this pull request implements, and what falls outside it.
+  const prText = values["pr-text-file"] && existsSync(values["pr-text-file"]) ? readFileSync(values["pr-text-file"], "utf8") : undefined;
+  let request = values["intent-file"] ? readFileSync(values["intent-file"], "utf8") : values.intent;
+  report.spec = checkSpec(before, after, report, { branch: currentBranch(positionals.length === 2 ? undefined : path.resolve(positionals[0] ?? "."), values.head), text: [prText, request].filter(Boolean).join("\n\n") || undefined, change: values["spec-change"] });
+  if (request?.trim() && report.spec?.changes.length) request = `${request}\n\n${specRequest(after, report.spec.changes.map((c) => c.id))}`;
   if (request?.trim()) {
     const llm = llmFrom(loadConfig(path.resolve(positionals.length === 2 ? "." : (positionals[0] ?? ".")), values.config), values);
     if (llm === noneProvider) log.warn("--intent needs an LLM to compare the request with the change; configure one (see `breadth llm`). Skipped.");
@@ -489,7 +665,20 @@ async function cmdDiff(args: string[]) {
     const now = computeDebt(afterUnits, ledger).debt;
     comprehension = `🧠 ${touched.length} behaviour${touched.length === 1 ? "" : "s"} in this change ${touched.length === 1 ? "is" : "are"} not in the comprehension ledger yet. Unreviewed behaviour overall: ${was}% → ${now}%. After reviewing, record it with \`breadth review --changed\`.`;
   }
-  const md = renderMarkdown(report, before, after, { link: values.link, comprehension });
+  // Production traffic on what changed (blast radius): stats only, onto the head graph.
+  let liveNote: string | undefined;
+  if (values.live) {
+    const config = loadConfig(path.resolve(positionals.length === 2 ? "." : (positionals[0] ?? ".")), values.config);
+    try {
+      const sources = liveSources(values.live, config);
+      process.stderr.write(`breadth: reading request counts, latency and errors from ${sources.map((x) => x.describe).join(", ")} (read only)\n`);
+      const r = await pullLive(after, sources, { since: parseDuration(values.since!), traces: false, stats: true, limit: 0, services: config.sources?.services, window: values.since! });
+      liveNote = `${sources.map((x) => x.name).join(", ")}, last ${values.since} (${r.matched} endpoints and services matched)`;
+    } catch (err) {
+      log.warn(`--live: ${(err as Error).message}; the comment goes out without traffic`);
+    }
+  }
+  const md = renderMarkdown(report, before, after, { link: values.link, comprehension, live: liveNote });
   if (values.out) {
     writeFileSync(values.out, JSON.stringify(diffGraph(before, after, report)) + "\n");
     process.stderr.write(`breadth: wrote the diff graph to ${values.out} (open it with \`breadth serve ${values.out}\`)\n`);
@@ -506,6 +695,28 @@ async function cmdDiff(args: string[]) {
     if (limit === undefined) throw new Error("--fail-on takes high, medium or low");
     if (report.changes.some((c) => rank[c.severity] <= limit)) process.exitCode = 2;
   }
+}
+
+/** The branch a diff is about: the PR's head in GitHub Actions, the named ref, or the checkout's. */
+function currentBranch(target: string | undefined, head?: string): string | undefined {
+  if (process.env.GITHUB_HEAD_REF) return process.env.GITHUB_HEAD_REF;
+  if (head) return head;
+  if (!target) return undefined;
+  const r = spawnSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], { cwd: target });
+  const b = r.status === 0 ? r.stdout.toString().trim() : undefined;
+  return b && b !== "HEAD" ? b : undefined;
+}
+
+/** The spec change as a request, for the intent check: what it says it does. */
+function specRequest(g: FlowGraph, ids: string[]): string {
+  const parts: string[] = [];
+  for (const id of ids) {
+    const c = g.nodes.find((n) => n.id === `change:${id}`);
+    if (!c) continue;
+    const reqs = g.nodes.filter((n) => n.role === "requirement" && (n.metadata?.change === id || n.parent === `spec:${id}` || n.parent === `change:${id}/spec:${n.id.split("/")[0].slice(4)}`));
+    parts.push(`Spec change ${id}: ${c.name}${c.description ? `. Why: ${c.description}` : ""}`, ...reqs.map((r) => `- Requirement: ${r.name}${r.description ? `: ${r.description}` : ""}`));
+  }
+  return parts.join("\n");
 }
 
 /** The ledger file for a path: <repo root>/.breadth/ledger.json, or next to the path outside git. */
@@ -697,6 +908,12 @@ async function main(argv: string[]) {
       return cmdDiff(rest);
     case "review":
       return cmdReview(rest);
+    case "receive":
+      return cmdReceive(rest);
+    case "pull":
+      return cmdPull(rest);
+    case "evidence":
+      return cmdEvidence(rest);
     case "debt":
       return cmdDebt(rest);
     case "hook":
