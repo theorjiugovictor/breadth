@@ -247,6 +247,8 @@ export interface GraphOptions {
   idPrefix?: string;
   /** Module calls, so that registry modules (whose resources are not visible) still get a node. */
   modules?: { address: string; source: string; file?: string; line?: number }[];
+  /** Emit cross-layer aliases (datastore:postgresql, service:x). Off for non-primary root modules. */
+  aliases?: boolean;
 }
 
 /** "${aws_vpc.main.id}" (a reference kept by the .tf reader) -> "aws_vpc.main.id". */
@@ -271,8 +273,22 @@ export function terraformGraph(resources: TfResource[], sourceFile: string, root
     if (byAddress.has(ref)) return ref;
     const clean = ref.replace(/\[[^\]]*\]$/, "");
     if (byAddress.has(clean)) return clean;
-    return addresses.find((a) => ref.startsWith(`${a}.`) || ref.startsWith(`${a}[`) || clean === a.replace(/\[[^\]]*\]$/, ""));
+    return addresses.find((a) => ref.startsWith(`${a}.`) || ref.startsWith(`${a}[`) || clean === a.replace(/\[[^\]]*\]$/, "")) ?? resolveRefs(ref)[0];
   };
+  // aws_sqs_queue.jobs["a"], aws_sqs_queue.jobs["b"]: a reference to aws_sqs_queue.jobs (no key, or [*]) means all of them.
+  const instancesOf = new Map<string, string[]>();
+  for (const a of byAddress.keys()) {
+    const m = a.match(/^(.*)\[[^\]]*\]$/);
+    if (m) instancesOf.set(m[1], [...(instancesOf.get(m[1]) ?? []), a]);
+  }
+  const bases = [...instancesOf.keys()].sort((a, b) => b.length - a.length);
+  function resolveRefs(raw: string): string[] {
+    const ref = markerRef(raw) ?? raw;
+    const base = bases.find((b) => ref === b || ref.startsWith(`${b}.`) || ref.startsWith(`${b}[`));
+    if (!base) return [];
+    const exact = instancesOf.get(base)!.find((a) => ref === a || ref.startsWith(`${a}.`) || ref.startsWith(`${a}[`));
+    return exact ? [exact] : instancesOf.get(base)!;
+  }
 
   const moduleInfo = new Map((opts.modules ?? []).map((m) => [m.address, m]));
   const ensureModule = (mod: string): string => {
@@ -337,7 +353,7 @@ export function terraformGraph(resources: TfResource[], sourceFile: string, root
       kind,
       layer,
       parent: r.module ? ensureModule(r.module) : rootId,
-      aliases: aliasesFor(r).length ? aliasesFor(r) : undefined,
+      aliases: opts.aliases !== false && aliasesFor(r).length ? aliasesFor(r) : undefined,
       source: compact({ resource_ref: r.address, file: r.file ?? sourceFile, line: r.line }) as FlowNode["source"],
       tags: Object.keys(tags).length ? Object.entries(tags).map(([k, val]) => `${k}=${val}`) : undefined,
       metadata: compact({
@@ -368,8 +384,9 @@ export function terraformGraph(resources: TfResource[], sourceFile: string, root
     if (isRule(r.type)) continue;
     const refs = new Set<string>();
     for (const ref of r.refs) {
-      const a = resolveRef(ref);
-      if (a && a !== r.address) refs.add(a);
+      const multi = resolveRefs(ref);
+      const a = multi.length > 1 ? multi[0] : resolveRef(ref);
+      for (const x of multi.length > 1 ? multi : a ? [a] : []) if (x !== r.address) refs.add(x);
       // module outputs (module.network.vpc_id): depend on the module as a whole
       const mod = !a ? ref.match(/^((?:module\.[^.[]+(?:\[[^\]]*\])?\.)*module\.[^.[]+)/)?.[1] : undefined;
       if (mod && nodes.has(`tf:${prefix}${mod}`) && !(r.module ?? "").startsWith(mod)) addEdge("depends_on", idOf(r.address), `tf:${prefix}${mod}`);

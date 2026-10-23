@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { validateGraph, type FlowGraph } from "@breadth/schema";
 import { scanTerraformSources } from "../browser.js";
 import { parseHcl, type Expr } from "./hcl.js";
-import { loadTerraform } from "./terraform-hcl.js";
+import { loadTerraform, primaryRoot } from "./terraform-hcl.js";
 import { applyPlan } from "./terraform.js";
 
 const tf = (files: Record<string, string>, rootName = "repo"): FlowGraph => {
@@ -134,9 +134,72 @@ output "subnet_group" { value = aws_db_subnet_group.this.name }`,
     expect(root.resources.find((r) => r.address === "module.net.aws_db_subnet_group.this")!.values.name).toBe("shop-prod");
   });
 
-  it("skips resources switched off with count = 0, keeps for_each ones with unknown names", () => {
-    expect(root.resources.some((r) => r.address === "aws_s3_bucket.flagged")).toBe(false);
-    expect(root.resources.find((r) => r.address === "aws_sqs_queue.each")!.values.name).toBe("q-${?}");
+  it("skips resources switched off with count = 0 and expands known for_each keys", () => {
+    expect(root.resources.some((r) => r.address.startsWith("aws_s3_bucket.flagged"))).toBe(false);
+    expect(root.resources.filter((r) => r.type === "aws_sqs_queue").map((r) => [r.address, r.values.name])).toEqual([
+      ['aws_sqs_queue.each["a"]', "q-a"],
+      ['aws_sqs_queue.each["b"]', "q-b"],
+    ]);
+  });
+
+  it("keeps one node when the instances are not known, and links references to every instance", () => {
+    const g = tf({
+      "main.tf": `
+variable "names" {}
+resource "aws_sqs_queue" "dynamic" {
+  for_each = var.names
+  name     = each.key
+}
+resource "aws_sqs_queue" "counted" {
+  count = 2
+  name  = "c-\${count.index}"
+}
+resource "aws_sns_topic_subscription" "all" {
+  topic_arn = "x"
+  endpoint  = aws_sqs_queue.counted[*].arn
+}
+resource "aws_sns_topic_subscription" "one" {
+  topic_arn = "x"
+  endpoint  = aws_sqs_queue.counted[1].arn
+}`,
+    });
+    expect(node(g, "tf:aws_sqs_queue.dynamic")?.name).toBe("aws_sqs_queue.dynamic");
+    expect(node(g, "tf:aws_sqs_queue.counted[1]")?.name).toBe("c-1");
+    expect(edge(g, "depends_on", "tf:aws_sns_topic_subscription.all", "tf:aws_sqs_queue.counted[0]")).toBeTruthy();
+    expect(edge(g, "depends_on", "tf:aws_sns_topic_subscription.all", "tf:aws_sqs_queue.counted[1]")).toBeTruthy();
+    expect(edge(g, "depends_on", "tf:aws_sns_topic_subscription.one", "tf:aws_sqs_queue.counted[0]")).toBeUndefined();
+  });
+
+  it("reads JSON syntax (.tf.json, .tfvars.json)", () => {
+    const g = tf({
+      "main.tf.json": JSON.stringify({
+        variable: { env: { default: "dev" } },
+        resource: {
+          aws_security_group: { db: { name: "db-${var.env}", ingress: [{ from_port: 5432, to_port: 5432, protocol: "tcp", cidr_blocks: ["0.0.0.0/0"] }] } },
+          aws_db_instance: { main: { identifier: "main-${var.env}", engine: "postgres", vpc_security_group_ids: ["${aws_security_group.db.id}"] } },
+        },
+      }),
+      "terraform.tfvars.json": JSON.stringify({ env: "prod" }),
+    });
+    expect(node(g, "tf:aws_db_instance.main")?.name).toBe("main-prod");
+    expect(edge(g, "network", "net:internet", "tf:aws_db_instance.main")?.label).toBe("tcp/5432");
+  });
+
+  it("applies configured var files and links only the primary root by name", () => {
+    const files = [
+      { path: "envs/prod/main.tf", text: `variable "size" { default = "small" }\nresource "aws_db_instance" "db" {\n  identifier = "db-\${var.size}"\n  engine = "postgres"\n}` },
+      { path: "envs/prod/big.tfvars", text: `size = "big"` },
+      { path: "envs/staging/main.tf", text: `resource "aws_db_instance" "db" {\n  identifier = "db"\n  engine = "postgres"\n}` },
+    ];
+    const roots = loadTerraform(files, { varFiles: { "envs/prod": ["big.tfvars"] } });
+    expect(roots.find((r) => r.dir === "envs/prod")!.resources[0].values.identifier).toBe("db-big");
+    expect(loadTerraform(files)[0].resources[0].values.identifier).toBe("db-small");
+    expect(primaryRoot(["envs/prod", "envs/staging"])).toBe("envs/prod");
+    expect(primaryRoot(["a", "b"])).toBeUndefined();
+    expect(primaryRoot(["a", "b"], "b")).toBe("b");
+    const g = scanTerraformSources(files, "repo");
+    expect(node(g, "tf:envs/prod/aws_db_instance.db")?.aliases).toEqual(["datastore:postgresql"]);
+    expect(node(g, "tf:envs/staging/aws_db_instance.db")?.aliases).toBeUndefined();
   });
 
   it("builds a graph with module nodes, registry modules and readable names", () => {
@@ -145,9 +208,7 @@ output "subnet_group" { value = aws_db_subnet_group.this.name }`,
     expect(node(g, "tf:module.registry")).toMatchObject({ kind: "module", metadata: { module_source: "terraform-aws-modules/vpc/aws" } });
     expect(edge(g, "depends_on", "tf:aws_security_group.db", "tf:module.registry")).toBeTruthy();
     expect(edge(g, "depends_on", "tf:aws_db_instance.main", "tf:module.net.aws_db_subnet_group.this")).toBeTruthy();
-    // an unresolved name falls back to the address, never to a template
-    expect(node(g, "tf:aws_sqs_queue.each")?.name).toBe("aws_sqs_queue.each");
-    expect(node(g, "tf:aws_sqs_queue.each")?.aliases).toBeUndefined();
+    expect(node(g, 'tf:aws_sqs_queue.each["a"]')?.name).toBe("q-a");
   });
 
   it("keeps several root modules apart", () => {
@@ -328,8 +389,8 @@ resource "azurerm_network_security_group" "web" {
   }
 }`,
     });
-    // the port comes from a dynamic block's iterator: unknown, so the rule covers all of its range
-    expect(edge(g, "network", "net:internet", "tf:aws_instance.bastion")).toBeTruthy();
+    // the port comes from a dynamic block's iterator over a known list
+    expect(edge(g, "network", "net:internet", "tf:aws_instance.bastion")?.label).toBe("tcp/22");
     expect(edge(g, "network", "net:10.0.0.0/8", "tf:aws_instance.bastion")?.label).toBe("tcp/22");
     expect(edge(g, "network", "net:internet", "tf:google_compute_instance.vm")?.label).toBe("tcp/22");
     expect(edge(g, "network", "net:internet", "tf:azurerm_network_security_group.web")?.label).toBe("tcp/3389");

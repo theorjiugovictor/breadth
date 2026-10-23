@@ -547,3 +547,75 @@ class Parser {
     return new Parser(text).templateOnly();
   }
 }
+
+/* ---------------- JSON syntax (.tf.json) ---------------- */
+
+/** A string in JSON syntax is a template: "${var.name}-db". */
+export function parseTemplate(text: string): Expr {
+  return new Parser(text).templateOnly();
+}
+
+/** How many labels each top-level block type takes in JSON syntax. */
+const JSON_LABELS: Record<string, number> = { resource: 2, data: 2, variable: 1, output: 1, module: 1, provider: 1, check: 1, ephemeral: 2 };
+/** Nested keys that are blocks (lists of objects in plan JSON), not map attributes. JSON syntax cannot tell them apart without provider schemas. */
+const JSON_BLOCKS = new Set(["ingress", "egress", "statement", "principals", "not_principals", "condition", "default_action", "vpc_config", "inline_policy", "security_rule", "allow", "deny", "encrypt_at_rest", "network_interface", "lifecycle", "dynamic", "content", "scaling_config", "broker_node_group_info", "instance_configuration", "server_side_encryption_configuration", "rule", "versioning", "logging", "access_config", "container_definitions_block"]);
+
+/** Parse Terraform's JSON configuration syntax (.tf.json) into the same tree as native syntax. */
+export function parseTfJson(text: string): Body {
+  let doc: unknown;
+  try {
+    doc = JSON.parse(text);
+  } catch (err) {
+    throw new HclError((err as Error).message, 1);
+  }
+  const lineOf = (key: string) => {
+    const i = text.indexOf(JSON.stringify(key));
+    return i < 0 ? 1 : text.slice(0, i).split("\n").length;
+  };
+  const expr = (v: unknown): Expr => {
+    if (typeof v === "string") return parseTemplate(v);
+    if (Array.isArray(v)) return { t: "tuple", items: v.map(expr) };
+    if (v && typeof v === "object") return { t: "object", items: Object.entries(v).filter(([k]) => k !== "//").map(([k, x]) => ({ key: { t: "lit", v: k }, value: expr(x) })) };
+    return { t: "lit", v: v as string | number | boolean | null };
+  };
+  const body = (o: unknown, line: number): Body => {
+    const out: Body = { attrs: [], blocks: [] };
+    for (const item of Array.isArray(o) ? o : [o]) {
+      if (!item || typeof item !== "object") continue;
+      for (const [k, v] of Object.entries(item as Record<string, unknown>)) {
+        if (k === "//") continue;
+        if (JSON_BLOCKS.has(k) && v && typeof v === "object") {
+          if (k === "dynamic") {
+            for (const [label, dyn] of Object.entries(v as Record<string, unknown>)) out.blocks.push({ type: "dynamic", labels: [label], body: body(dyn, line), line });
+          } else for (const b of Array.isArray(v) ? v : [v]) out.blocks.push({ type: k, labels: [], body: body(b, line), line });
+        } else out.attrs.push({ name: k, expr: expr(v), line });
+      }
+    }
+    return out;
+  };
+  const root: Body = { attrs: [], blocks: [] };
+  const top = (Array.isArray(doc) ? doc : [doc]) as Record<string, unknown>[];
+  for (const item of top) {
+    for (const [type, v] of Object.entries(item ?? {})) {
+      if (type === "//") continue;
+      const depth = JSON_LABELS[type] ?? 0;
+      const walk = (x: unknown, labels: string[]) => {
+        if (labels.length === depth) {
+          for (const b of Array.isArray(x) ? x : [x]) root.blocks.push({ type, labels, body: body(b, lineOf(labels[labels.length - 1] ?? type)), line: lineOf(labels[labels.length - 1] ?? type) });
+          return;
+        }
+        for (const part of Array.isArray(x) ? x : [x]) for (const [k, inner] of Object.entries((part as Record<string, unknown>) ?? {})) walk(inner, [...labels, k]);
+      };
+      walk(v, []);
+    }
+  }
+  return root;
+}
+
+/** A .tfvars.json file: plain values, no templates. */
+export function parseTfvarsJson(text: string): Body {
+  const doc = JSON.parse(text) as Record<string, unknown>;
+  const lit = (v: unknown): Expr =>
+    Array.isArray(v) ? { t: "tuple", items: v.map(lit) } : v && typeof v === "object" ? { t: "object", items: Object.entries(v).map(([k, x]) => ({ key: { t: "lit", v: k }, value: lit(x) })) } : { t: "lit", v: v as string };
+  return { attrs: Object.entries(doc).map(([name, v]) => ({ name, expr: lit(v), line: 1 })), blocks: [] };
+}

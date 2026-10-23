@@ -395,7 +395,7 @@ Conventions:
 |---|---|---|
 | `code` | ✅ | Python, TypeScript, JavaScript (tree-sitter, WASM, no native build). Modules, classes, functions, params as inputs, return types as outputs, call edges (imports, re-exports, `self`/`this`, typed locals, attributes), loops, recursion, globals, DB/HTTP/queue clients, HTTP routes |
 | `otel` | ✅ | OTLP JSON traces: services, endpoints, call edges with protocols, datastores, topics, external APIs, one replayable execution per trace |
-| `infra` | ✅ | Terraform/OpenTofu configuration (`.tf`, `.tofu`, `terraform.tfvars`), `show -json` plans and state, and raw `.tfstate`; Kubernetes YAML (workloads, Services, Ingress, ConfigMaps/Secrets by key only, PVCs, NetworkPolicies). [More below](#terraform-and-opentofu) |
+| `infra` | ✅ | Terraform/OpenTofu configuration (`.tf`, `.tofu`, `.tf.json`, var files), `show -json` plans and state, and raw `.tfstate`; Kubernetes YAML (workloads, Services, Ingress, ConfigMaps/Secrets by key only, PVCs, NetworkPolicies). [More below](#terraform-and-opentofu) |
 | `netflow` | stub | VPC flow logs, service mesh: [spec](collectors/src/netflow/README.md) |
 | `messaging` | stub | Kafka, SQS/SNS, RabbitMQ, AsyncAPI: [spec](collectors/src/messaging/README.md) |
 | `cicd` | stub | GitHub Actions, GitLab CI, Argo CD: [spec](collectors/src/cicd/README.md) |
@@ -412,7 +412,23 @@ The `infra` collector reads `.tf` source with its own HCL parser. It needs no `t
 - **Security posture.** Public stores (S3 ACLs and bucket policies, unless a public access block overrides them; `publicly_accessible` databases; GCS `allUsers`; public Azure containers) and storage without encryption at rest are marked on the node. The `internet-exposed`, `public-data`, `unencrypted-storage` and `broad-iam` [insights](#insights) report them.
 - **Plans.** With a `terraform show -json` plan, each resource is marked with what applying does to it (`create`, `update`, `replace`, `delete`, and the attributes that force a replacement).
 
-JSON-syntax configuration (`.tf.json`) and `-var-file` values are not read. Resources whose names come from `for_each` keys keep their address as the name.
+- **Instances.** A resource with a known `count` or `for_each` (up to 25 instances) becomes one node per instance, `aws_sqs_queue.jobs["emails"]`, with its own name. `dynamic` blocks expand the same way. When the keys are only known at apply time, one node stands for all of them.
+- **JSON syntax.** `.tf.json` and `.tfvars.json` are read like native syntax.
+
+Two settings in `breadth.config.json` cover what a CLI flag would otherwise pass:
+
+```json
+{
+  "settings": {
+    "infra": {
+      "varFiles": { "envs/prod": ["prod.tfvars"], "envs/staging": ["staging.tfvars"] },
+      "primaryRoot": "envs/prod"
+    }
+  }
+}
+```
+
+`varFiles` are the `-var-file` files of each root module (or a list tried in every root). `primaryRoot` is the environment matched with the code and Kubernetes layers by name. With several environments, only one of them can be "the postgresql the code writes to", or every environment's database would merge into one node. By default that is a root named `prod`, `production` or `live`, or the only root.
 
 ## Write a collector
 
