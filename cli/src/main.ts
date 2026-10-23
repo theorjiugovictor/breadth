@@ -4,7 +4,8 @@ import { parseArgs } from "node:util";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { assertValidGraph, mergeGraphs, validateGraph, type FlowGraph } from "@breadth/schema";
-import { collectors, importOtlp, linkTracesToCode, runCollectors, type Logger } from "@breadth/collectors";
+import { collectors, importOtlp, linkTracesToCode, runCollectors, spansToGraph, type Logger } from "@breadth/collectors";
+import { SpanBuffer, startOtlpServer } from "./otlp.js";
 import { RULES, runInsights, describeChanges, diffGraph, withoutRemoved, type ChangeReport } from "@breadth/insights";
 import type { Insight, Severity } from "@breadth/schema";
 import { loadConfig } from "./config.js";
@@ -31,8 +32,9 @@ Usage:
   breadth review [path] --changed | --from diff.json | --nodes ids | --all [--by name]   record what you reviewed (.breadth/ledger.json)
   breadth debt [path] [--record] [--json] [--fail-above 30]   comprehension debt: behaviour nobody has reviewed, per service
   breadth import-traces <otlp.json>... [--merge flowgraph.json] [-o out.json]
+  breadth receive [--port 4318] [--merge flowgraph.json]   OTLP/HTTP receiver: traces from running services, merged as they arrive
   breadth serve [flowgraph.json] [--port 4321] [--host 127.0.0.1] [--no-open]
-  breadth watch [path] [--port 4321] [--traces otlp.json] [-o flowgraph.json] [--llm]   live canvas while you (or an agent) code
+  breadth watch [path] [--port 4321] [--traces otlp.json] [--otlp-port 4318] [-o flowgraph.json] [--llm]   live canvas while you (or an agent) code; also takes OTLP on /v1/traces
   breadth connect <agent>... [--write]   hooks + MCP for claude, copilot, cursor, gemini, windsurf, antigravity, codex
   breadth hook [--port 4321] [--agent name]   (run by agent hooks) forward an agent's prompt and edits to \`breadth watch\`
   breadth mcp [path] [--port 4321]   MCP server (stdio): the graph as tools for any coding agent
@@ -182,6 +184,45 @@ async function cmdImportTraces(args: string[]) {
   );
 }
 
+/** A standalone OTLP/HTTP receiver: traces from running services, merged into a graph file as they arrive. */
+async function cmdReceive(args: string[]) {
+  const { values } = parseArgs({
+    args,
+    allowPositionals: true,
+    options: {
+      port: { type: "string", short: "p", default: "4318" },
+      host: { type: "string", default: "127.0.0.1" },
+      merge: { type: "string", short: "m", default: "flowgraph.json" },
+      out: { type: "string", short: "o" },
+      "max-traces": { type: "string", default: "2000" },
+    },
+  });
+  const base = existsSync(values.merge!) ? readGraph(values.merge!) : undefined;
+  const out = values.out ?? values.merge!;
+  const buffer = new SpanBuffer(Number(values["max-traces"]));
+  let timer: NodeJS.Timeout | undefined;
+  const flush = () => {
+    const traces = spansToGraph(buffer.spans, ["otlp"]);
+    const graph = base ? mergeGraphs(base, linkTracesToCode(traces, base)) : traces;
+    attachInsights(graph);
+    writeGraph(out, graph);
+    log.info(`${buffer.size} traces → ${out}`);
+  };
+  await startOtlpServer({
+    port: Number(values.port),
+    host: values.host!,
+    onSpans: (spans) => {
+      buffer.add(spans);
+      clearTimeout(timer);
+      timer = setTimeout(flush, 1000);
+    },
+  });
+  process.stderr.write(
+    `breadth: receiving OTLP on http://${values.host}:${values.port}/v1/traces${base ? `, merging into ${values.merge}` : ""} (writing ${out})\n` +
+      `         point an SDK or Collector at it: OTEL_EXPORTER_OTLP_ENDPOINT=http://${values.host}:${values.port}\n`,
+  );
+}
+
 async function cmdServe(args: string[]) {
   const { values, positionals } = parseArgs({
     args,
@@ -216,6 +257,7 @@ async function cmdWatch(args: string[]) {
       config: { type: "string" },
       exclude: { type: "string", multiple: true },
       traces: { type: "string", multiple: true },
+      "otlp-port": { type: "string" },
       llm: { type: "boolean" },
       ...LLM_FLAGS,
     },
@@ -238,6 +280,10 @@ async function cmdWatch(args: string[]) {
   });
   await live.start();
   const url = await serve({ live, port: Number(values.port), host: values.host!, open: !values["no-open"], llm });
+  if (values["otlp-port"]) {
+    await startOtlpServer({ port: Number(values["otlp-port"]), host: values.host!, onSpans: (spans) => live.ingestSpans(spans) });
+    process.stderr.write(`breadth: receiving OTLP traces on http://${values.host}:${values["otlp-port"]}/v1/traces (and on ${url}v1/traces)\n`);
+  }
   process.stderr.write(
     `breadth: ${live.graph.nodes.length} nodes in ${((Date.now() - started) / 1000).toFixed(1)}s; live canvas at ${url}\n` +
       `         edits appear as they happen. Coding agent hooks: breadth hook --print-config\n`,
@@ -697,6 +743,8 @@ async function main(argv: string[]) {
       return cmdDiff(rest);
     case "review":
       return cmdReview(rest);
+    case "receive":
+      return cmdReceive(rest);
     case "debt":
       return cmdDebt(rest);
     case "hook":
