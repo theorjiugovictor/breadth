@@ -706,8 +706,9 @@ export function buildGraph(input: BuildInput): FlowGraph {
           }
           if (t.cls.type === "db") {
             const mode = dbAccessMode(method, c.firstArg);
-            // boto3.client("s3") / boto3.resource(...) only make a client: no "aws" datastore until it is used.
-            if (!mode && t.cls.engine === "aws") continue;
+            // boto3.client("s3"), S3Client.create(), DynamoDbClient.builder().build() only make a client:
+            // no "aws" datastore until it is used.
+            if (t.cls.engine === "aws" && (!mode || /^(create|builder|build|close)$/.test(method))) continue;
             const store = storeNode(t.cls.engine);
             if (mode === "write") addEdge("write", from, store, site, { protocol: t.cls.engine, label: sqlLabel(c.firstArg) });
             else if (mode === "read") addEdge("read", store, from, site, { protocol: t.cls.engine, label: sqlLabel(c.firstArg) });

@@ -147,6 +147,16 @@ describe("code collector: java", async () => {
   const base = "src/main/java/com/shop/orders";
   const fn = (q: string) => `code:fn:${base}/${q}`;
 
+  it("links AWS SDK v2 calls to the resource their request builder names", () => {
+    const store = (q: string) => fn(`ReceiptStore.java#ReceiptStore.${q}`);
+    expect(edge(g, "write", store("save"), "cloud:aws:s3:shop-receipts")?.label).toBe("s3:PutObject");
+    expect(edge(g, "read", "cloud:aws:s3:shop-receipts", store("load"))?.label).toBe("s3:GetObject");
+    expect(edge(g, "event", store("announce"), "cloud:aws:sqs:env:RECEIPTS_QUEUE_URL")?.label).toBe("sqs:SendMessage");
+    expect(edge(g, "write", store("index"), "cloud:aws:dynamodb:receipts")?.label).toBe("dynamodb:PutItem");
+    // making a client is not a write
+    expect(g.nodes.some((n) => n.id === "store:aws")).toBe(false);
+  });
+
   it("produces a valid graph", () => {
     expect(validateGraph(g)).toEqual({ valid: true, errors: [] });
   });

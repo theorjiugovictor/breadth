@@ -1,8 +1,9 @@
 import type { CallSite, FileModel } from "./model.js";
 
 /**
- * Calls into AWS SDKs (boto3, AWS SDK for JavaScript v2 and v3) that name the resource they
- * touch: s3.put_object(Bucket=...), new PutObjectCommand({ Bucket }), table.put_item(...).
+ * Calls into AWS SDKs (boto3, AWS SDK for JavaScript v2 and v3, Go v2, Java v2) that name the
+ * resource they touch: s3.put_object(Bucket=...), new PutObjectCommand({ Bucket }), table.put_item(...),
+ * s3.putObject(PutObjectRequest.builder().bucket(...).build()).
  * The resource name comes from a literal, a constant or an environment variable, so the
  * call can be matched with the Terraform resource it is (see link.ts).
  */
@@ -34,13 +35,14 @@ const RESOURCE_KEYS: [string, AwsService, (v: string) => string][] = [
   ["StreamName", "kinesis", (v) => v],
 ];
 
-const DYNAMO_ITEM = /^(put_item|get_item|update_item|delete_item|query|scan|batch_writer|batch_get_item|batch_write_item|put|get|update|delete)$/;
+const DYNAMO_ITEM = /^(put_item|get_item|update_item|delete_item|query|scan|batch_writer|batch_get_item|batch_write_item|put|get|update|delete|putItem|getItem|updateItem|deleteItem)$/;
 
 /** CamelCase action name for an SDK method or command: put_object -> PutObject, PutObjectCommand -> PutObject, put (DocumentClient) -> PutItem. */
 function actionName(service: AwsService, call: CallSite): string {
   const last = call.parts[call.parts.length - 1];
   if (call.isNew && /Command$/.test(last)) return last.replace(/Command$/, "");
-  const camel = last.replace(/(^|_)([a-z])/g, (_, __, c: string) => c.toUpperCase());
+  // Java v2 convenience variants are the same IAM action: getObjectAsBytes -> GetObject
+  const camel = last.replace(/(^|_)([a-z])/g, (_, __, c: string) => c.toUpperCase()).replace(/As(Bytes|String|InputStream)$/, "");
   if (service === "dynamodb" && /^(Put|Get|Update|Delete)$/.test(camel)) return `${camel}Item`;
   if (service === "dynamodb" && camel === "BatchWriter") return "BatchWriteItem";
   return camel;
@@ -67,7 +69,8 @@ function resolveArg(f: FileModel, v: string | undefined): { name?: string; env?:
  * name. When a file names exactly one table that way, its item calls are taken to use it.
  */
 export function dynamoTableOf(f: FileModel): { name?: string; env?: string } | undefined {
-  const tables = f.calls.filter((c) => c.parts[c.parts.length - 1] === "Table" && c.parts.length >= 2 && c.kwargs?.["0"]);
+  // boto3 dynamodb.Table("orders"); Java enhanced client enhanced.table("orders", schema)
+  const tables = f.calls.filter((c) => (c.parts[c.parts.length - 1] === "Table" || (f.lang === "java" && c.parts[c.parts.length - 1] === "table")) && c.parts.length >= 2 && c.kwargs?.["0"]);
   const distinct = [...new Set(tables.map((c) => c.kwargs!["0"]))];
   return distinct.length === 1 ? resolveArg(f, distinct[0]) : undefined;
 }
