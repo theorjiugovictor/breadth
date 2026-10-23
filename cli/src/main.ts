@@ -7,6 +7,7 @@ import { assertValidGraph, mergeGraphs, validateGraph, type FlowGraph } from "@b
 import { collectors, importOtlp, linkTracesToCode, runCollectors, spansToGraph, type Logger } from "@breadth/collectors";
 import { SpanBuffer, startOtlpServer } from "./otlp.js";
 import { createSource, parseDuration, pullLive, type LiveSource } from "./sources/index.js";
+import { parseTime, recordEvidence } from "./evidence.js";
 import { RULES, runInsights, describeChanges, diffGraph, withoutRemoved, type ChangeReport } from "@breadth/insights";
 import type { Insight, Severity } from "@breadth/schema";
 import { loadConfig } from "./config.js";
@@ -28,12 +29,13 @@ const HELP = `breadth ${VERSION}: turn any codebase or system into an n8n-style 
 
 Usage:
   breadth scan <path> [--collector code,infra] [-o flowgraph.json] [--config file] [--exclude glob]... [--plan [dir=]plan.json]
-  breadth diff [path] [--base ref] [--head ref] [-o diff.json] [--markdown pr.md] [--fail-on high] [--plan [dir=]plan.json] [--intent "what was asked"]   what a change does, in behaviour
+  breadth diff [path] [--base ref] [--head ref] [-o diff.json] [--markdown pr.md] [--fail-on high] [--plan [dir=]plan.json] [--intent "what was asked"] [--live datadog --since 1h]   what a change does, in behaviour
   breadth diff before.json after.json
   breadth review [path] --changed | --from diff.json | --nodes ids | --all [--by name]   record what you reviewed (.breadth/ledger.json)
   breadth debt [path] [--record] [--json] [--fail-above 30]   comprehension debt: behaviour nobody has reviewed, per service
   breadth import-traces <otlp.json>... [--merge flowgraph.json] [-o out.json]
   breadth pull <datadog|prometheus|tempo|jaeger>[,...] [path] [--merge flowgraph.json] [--since 1h]   traces and live traffic from your observability backend
+  breadth evidence "<scenario>" [path] --service x --from 15m [--live datadog | --results p95_ms=180]   judge an experiment window, record the run
   breadth receive [--port 4318] [--merge flowgraph.json]   OTLP/HTTP receiver: traces from running services, merged as they arrive
   breadth serve [flowgraph.json] [--port 4321] [--host 127.0.0.1] [--no-open]
   breadth watch [path] [--port 4321] [--traces otlp.json] [--otlp-port 4318] [--live datadog --every 60s] [-o flowgraph.json] [--llm]   live canvas while you (or an agent) code; also takes OTLP on /v1/traces
@@ -237,6 +239,47 @@ async function cmdPull(args: string[]) {
   const out = values.out ?? merge ?? "flowgraph.json";
   writeGraph(out, r.graph);
   process.stderr.write(`breadth: ${r.traces} traces (${r.spans} spans), traffic for ${r.matched} of ${r.stats} endpoints and services → ${out}${insightSummary(r.graph, true)}\n`);
+}
+
+/** Judge a scenario from an experiment window and record the run as evidence. */
+async function cmdEvidence(args: string[]) {
+  const { values, positionals } = parseArgs({
+    args,
+    allowPositionals: true,
+    options: {
+      service: { type: "string" },
+      endpoint: { type: "string" },
+      from: { type: "string" },
+      to: { type: "string", default: "now" },
+      live: { type: "string" },
+      results: { type: "string" },
+      id: { type: "string" },
+      tool: { type: "string" },
+      fault: { type: "string" },
+      "approved-by": { type: "string" },
+      store: { type: "string" },
+      "fail-on": { type: "string" },
+      config: { type: "string" },
+    },
+  });
+  const [scenario, target = "."] = positionals;
+  if (!scenario || !values.service || !values.from) throw new Error('usage: breadth evidence "<scenario>" [path] --service <name> --from <time|15m> [--to now] [--endpoint "POST /x"] [--live datadog | --results p95_ms=180,error_pct=0.4]');
+  if (!values.live && !values.results) throw new Error("say where the measurements come from: --live <source> or --results metric=value,...");
+  const root = path.resolve(target);
+  const config = loadConfig(root, values.config);
+  const source = values.live ? liveSources(values.live, config)[0] : undefined;
+  const results = values.results ? Object.fromEntries(values.results.split(",").map((kv) => kv.split("=")).map(([k, v]) => [k.trim(), Number(v)])) : undefined;
+  process.stderr.write(`breadth: scanning ${root}\n`);
+  const graph = await scanTarget(root, values);
+  const from = parseTime(values.from);
+  const to = parseTime(values.to!);
+  if (source) process.stderr.write(`breadth: measuring ${values.service}${values.endpoint ? ` ${values.endpoint}` : ""} from ${new Date(from).toISOString()} to ${new Date(to).toISOString()} with ${source.describe} (read only)\n`);
+  const r = await recordEvidence({ graph, root, scenario, service: values.service, endpoint: values.endpoint, from, to, source, results, id: values.id, tool: values.tool, fault: values.fault, approvedBy: values["approved-by"], store: values.store });
+  const mark = { supports: "✔", contradicts: "✖", inconclusive: "?" }[r.verdict];
+  const lines = [`${mark} ${r.verdict}: ${r.scenario.name}`, ...r.checks.map((c) => `   ${c.ok === undefined ? "?" : c.ok ? "✓" : "✗"} ${c.metric} ${c.actual ?? "not measured"} (${c.op} ${c.expected})`), `   recorded ${path.relative(process.cwd(), r.file)}${r.record.fingerprint ? "" : " (no behaviour fingerprint: service not found in the scan, so this evidence cannot go stale)"}`];
+  process.stdout.write(lines.join("\n") + "\n");
+  const fail = values["fail-on"];
+  if (fail && (r.verdict === "contradicts" || (fail === "inconclusive" && r.verdict === "inconclusive"))) process.exitCode = 2;
 }
 
 /** A standalone OTLP/HTTP receiver: traces from running services, merged into a graph file as they arrive. */
@@ -563,6 +606,8 @@ async function cmdDiff(args: string[]) {
       plan: { type: "string", multiple: true },
       intent: { type: "string" },
       "intent-file": { type: "string" },
+      live: { type: "string" },
+      since: { type: "string", default: "1h" },
       ...LLM_FLAGS,
     },
   });
@@ -614,7 +659,20 @@ async function cmdDiff(args: string[]) {
     const now = computeDebt(afterUnits, ledger).debt;
     comprehension = `🧠 ${touched.length} behaviour${touched.length === 1 ? "" : "s"} in this change ${touched.length === 1 ? "is" : "are"} not in the comprehension ledger yet. Unreviewed behaviour overall: ${was}% → ${now}%. After reviewing, record it with \`breadth review --changed\`.`;
   }
-  const md = renderMarkdown(report, before, after, { link: values.link, comprehension });
+  // Production traffic on what changed (blast radius): stats only, onto the head graph.
+  let liveNote: string | undefined;
+  if (values.live) {
+    const config = loadConfig(path.resolve(positionals.length === 2 ? "." : (positionals[0] ?? ".")), values.config);
+    try {
+      const sources = liveSources(values.live, config);
+      process.stderr.write(`breadth: reading request counts, latency and errors from ${sources.map((x) => x.describe).join(", ")} (read only)\n`);
+      const r = await pullLive(after, sources, { since: parseDuration(values.since!), traces: false, stats: true, limit: 0, services: config.sources?.services, window: values.since! });
+      liveNote = `${sources.map((x) => x.name).join(", ")}, last ${values.since} (${r.matched} endpoints and services matched)`;
+    } catch (err) {
+      log.warn(`--live: ${(err as Error).message}; the comment goes out without traffic`);
+    }
+  }
+  const md = renderMarkdown(report, before, after, { link: values.link, comprehension, live: liveNote });
   if (values.out) {
     writeFileSync(values.out, JSON.stringify(diffGraph(before, after, report)) + "\n");
     process.stderr.write(`breadth: wrote the diff graph to ${values.out} (open it with \`breadth serve ${values.out}\`)\n`);
@@ -826,6 +884,8 @@ async function main(argv: string[]) {
       return cmdReceive(rest);
     case "pull":
       return cmdPull(rest);
+    case "evidence":
+      return cmdEvidence(rest);
     case "debt":
       return cmdDebt(rest);
     case "hook":

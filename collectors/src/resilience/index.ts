@@ -45,6 +45,8 @@ export interface RunRecord {
   results?: Record<string, number>;
   /** Where the full evidence lives (a quality lake, an artifact URL). */
   store?: string;
+  /** The live source the results were measured with (breadth evidence --live). */
+  measured_by?: string;
 }
 
 const node = (n: FlowNode): FlowNode => n;

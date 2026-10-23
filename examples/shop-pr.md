@@ -1,7 +1,7 @@
 <!-- breadth-diff -->
 ### breadth · what this change does
 
-**12 changes worth a close look** · +6 functions · 1 changed · +2 endpoints · 18 connections added, 1 removed
+**12 changes worth a close look** · +6 functions · 1 changed · +2 endpoints · 20 connections added, 1 removed
 
 #### Worth a close look
 - 🔴 postgresql is now reachable from the internet (tcp/5432): PostgreSQL (5432) <sub>`infra/terraform/data.tf`</sub>
@@ -20,6 +20,8 @@
 #### Also changes
 - 🟠 refund now calls POST /refunds <sub>`services/orders/app/payments.py`</sub>
 - 🟠 payments can now read from shop-refund-receipts (IAM: s3:*) <sub>`services/payments/app`</sub>
+- ⚪ refund_orders now implements "Support agents can refund many orders at once" <sub>`services/orders/app/main.py`</sub>
+- ⚪ POST /orders/refunds now implements "Support agents can refund many orders at once" <sub>`services/orders/app/main.py`</sub>
 - ⚪ new infrastructure payments-receipts (aws_iam_role_policy) <sub>`infra/terraform/receipts.tf`</sub>
 - ⚪ new finding: charge and refund are nearly identical <sub>`services/orders/app/payments.py`</sub>
 - ⚪ new finding: payments may read from shop-refund-receipts, but its code never does <sub>`services/payments/app`</sub>
@@ -46,7 +48,8 @@ flowchart LR
   n13["POST /refunds<br/><small>network endpoint</small>"]
   n14["payments<br/><small>service</small>"]
   n15["refund<br/><small>payments.py</small>"]
-  n16["payments-receipts<br/><small>infra resource</small>"]
+  n16["Support agents can refund many orders at once<br/><small>artifact</small>"]
+  n17["payments-receipts<br/><small>infra resource</small>"]
   n0 -->|"tcp/5432"| n1
   n3 -.-> n4
   n5 -->|"UPDATE orders"| n1
@@ -57,15 +60,17 @@ flowchart LR
   n14 -->|"s3:*"| n7
   n15 -->|"POST /refunds"| n13
   n7 -->|"s3:*"| n14
+  n10 -->|"depends_on"| n16
+  n12 -->|"depends_on"| n16
   n12 --> n10
   n10 --> n15
   n1 -->|"SELECT orders"| n11
-  n16 -->|"depends_on"| n2
-  n16 -->|"depends_on"| n7
+  n17 -->|"depends_on"| n2
+  n17 -->|"depends_on"| n7
   classDef added fill:#dcfce7,stroke:#16a34a,color:#14532d
   classDef removed fill:#fee2e2,stroke:#dc2626,color:#7f1d1d,stroke-dasharray:4 3
   classDef changed fill:#fef3c7,stroke:#d97706,color:#78350f
-  class n5,n6,n7,n8,n10,n12,n13,n15,n16 added
+  class n5,n6,n7,n8,n10,n12,n13,n15,n17 added
   class n2,n3 changed
   linkStyle 0 stroke:#16a34a
   linkStyle 1 stroke:#dc2626
@@ -79,11 +84,15 @@ flowchart LR
   linkStyle 9 stroke:#16a34a
   linkStyle 10 stroke:#16a34a
   linkStyle 11 stroke:#16a34a
+  linkStyle 12 stroke:#16a34a
   linkStyle 13 stroke:#16a34a
-  linkStyle 14 stroke:#16a34a
+  linkStyle 15 stroke:#16a34a
+  linkStyle 16 stroke:#16a34a
 ```
 
 </details>
+
+✅ Resolves: "Support agents can refund many orders at once" refers to refund_orders, POST /orders/refunds, which do not exist
 
 <details><summary>All structural changes</summary>
 

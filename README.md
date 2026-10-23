@@ -222,6 +222,78 @@ jobs:
           mode: review
 ```
 
+## From requirement to evidence
+
+breadth can hold the whole chain in one graph: what was promised (an [OpenSpec](https://github.com/Fission-AI/OpenSpec) spec), the code that implements it, the tests and experiments that check it, and the evidence that supports or contradicts it. Nodes for requirements, scenarios and evidence are `artifact` nodes with a `role`. The links between them are edges with a `relation` (`implements`, `verifies`, `targets`, `supports`, `contradicts`, ...), drawn in indigo and never mistaken for traffic. This is the `resilience-v1` profile.
+
+**Specs.** `openspec/specs/<capability>/spec.md` and `openspec/changes/<change>/` are read as written. Three optional lines connect a requirement or scenario to the rest of the graph, and success criteria in `THEN` lines become checkable:
+
+```markdown
+### Requirement: Checkout survives a slow database
+Placing an order SHALL keep working while Postgres is slow.
+Implemented by: create_order, POST /orders
+Target: service orders
+
+#### Scenario: Postgres latency
+- **WHEN** Postgres adds 100 ms to every query for 10 s at 10 req/s
+- **THEN** p95 <= 300 ms and errors <= 1 % during and after the fault
+Verified by: services/orders/tests/test_resilience.py::test_postgres_latency
+```
+
+References can be a function, `file.py#qual`, `path::test`, a route (`POST /orders`), `service x` or any node id. Tests can also point back themselves: `@pytest.mark.requirement("...")`, `@Verifies("...")` (Java), or `verifies: ...` in a docstring. References that match nothing are reported, which is how a renamed handler shows up as a broken promise.
+
+**Evidence.** A run record in `.breadth/runs/<id>.json` says which scenario was exercised, when and how, and what was measured. breadth judges it against the scenario's criteria on every scan: **supports**, **contradicts**, or **inconclusive** when a criterion was not measured. The verdict is computed, never guessed. `breadth evidence` records runs for you, measuring the window from a live source:
+
+```sh
+# after a 10-minute chaos experiment against orders
+breadth evidence "Postgres latency" --service orders --endpoint "POST /orders" --from 10m --live datadog --fault "Postgres +100 ms" --approved-by dana
+✔ supports: Postgres latency
+   ✓ p95_ms 140 (<= 300)
+   ✓ error_pct 0.4 (<= 1)
+   recorded .breadth/runs/2026-10-23-09-50-postgres-latency.json
+```
+
+Each run stores the source snapshot (git revision and a digest of every file) and the **behaviour fingerprint** of the service it is about. When that service's calls, data access or endpoints change, the `evidence-status` insight reports the evidence as stale ("about older behaviour of orders"), and a pull request that causes it says so. Contradicted requirements, requirements nothing verifies, and dangling references are reported too. `--results p95_ms=180,error_pct=0.4` records measurements from any other tool, and `--fail-on contradicts` gates CI on the verdict.
+
+## Live data: traces and traffic from running systems
+
+Two ways in. Neither needs a vendor agent, and nothing is sent anywhere.
+
+**Push (OpenTelemetry).** `breadth watch` accepts OTLP/HTTP on its own port, protobuf or JSON, gzip or not. `--otlp-port 4318` also listens on the standard port. Point any SDK or Collector at it and traces appear on the live canvas, linked to the functions that produced them:
+
+```sh
+breadth watch --otlp-port 4318
+OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 python app.py
+breadth receive --merge flowgraph.json   # without the canvas: merge traces into a graph file as they arrive
+```
+
+**Pull (your observability backend).** `breadth pull` reads recent traces and traffic (request rate, p95, error rate per endpoint) from Datadog, Prometheus (OpenTelemetry span metrics by default; any PromQL), Grafana Tempo or Jaeger:
+
+```json
+{
+  "sources": {
+    "datadog": { "site": "datadoghq.eu", "env": "prod", "apiKeyEnv": "DD_API_KEY", "appKeyEnv": "DD_APP_KEY" },
+    "prometheus": { "url": "https://prometheus.internal", "tokenEnv": "PROM_TOKEN" },
+    "tempo": { "url": "http://tempo:3200" },
+    "services": ["orders", "payments"]
+  }
+}
+```
+
+```sh
+breadth pull datadog --since 1h            # traces as executions, traffic on endpoints and services
+breadth watch --live datadog --every 60s   # keep it current on the live canvas
+breadth diff --live datadog                # traffic on every changed endpoint and function in the PR comment
+```
+
+Keys are only ever read from the environment variables the config names. Access is read only, and breadth says what it reads before it reads it. With traffic on the graph:
+
+- the PR comment shows the blast radius of each change (`charge no longer calls risk_score · 📈 1.2k req/min, p95 180 ms, 3.1% errors via POST /checkout`). A changed helper inherits the traffic of the endpoints that reach it.
+- the `unexercised` insight lists endpoints that got no requests while their service did.
+- `breadth evidence --live` measures experiment windows.
+
+In the GitHub Action, set `live: datadog` (and `live-since`) and pass the keys in the step's `env`.
+
 ## Live mode: watch a coding agent
 
 ```sh
@@ -396,6 +468,8 @@ When a graph is a graph, many problems stop hiding in code and become shapes. br
 | `broad-iam` | risk | IAM roles allowed `*`, `service:*` on every resource, or `NotAction` | no |
 | `ci-risk` | risk | `pull_request_target` jobs that check out the pull request's code (secrets exposed to anyone who opens a PR), `write-all` tokens, third-party actions pinned by tag instead of commit | no |
 | `contract-gap` | risk | AsyncAPI contracts and code disagree: a declared consumer of a topic nothing publishes, a topic code publishes that no contract declares | no |
+| `evidence-status` | risk | Requirements (OpenSpec) contradicted by run evidence, evidence recorded on behaviour that has since changed (stale), requirements nothing verifies, references that match nothing | no |
+| `unexercised` | redundancy | Endpoints in code that got no traffic while their service did (needs `breadth pull` / `watch --live`) | live data |
 | `iam-usage` | risk | Code that reads or writes an S3 bucket, DynamoDB table, SQS queue, SNS topic or Kinesis stream its IAM role does not allow (AccessDenied waiting to happen), and grants the code never uses | no |
 | `race-risk` | risk | Shared state with several writers (module globals; databases written by several services) | no |
 | `data-exposure` | risk | Personal or secret-looking fields (by name and value shape) sent to external APIs | yes |
@@ -484,11 +558,12 @@ Conventions:
 | Name | Status | Reads |
 |---|---|---|
 | `code` | ✅ | Python, TypeScript, JavaScript, Go, Java (tree-sitter, WASM, no native build). Modules, classes, functions, params as inputs, return types as outputs, call edges (imports, re-exports, `self`/`this`, typed locals, attributes), loops, recursion, globals, DB/HTTP/queue clients, AWS SDK calls by resource, HTTP routes (FastAPI/Flask, Express/Nest, net/http/gin/chi/gorilla, Spring/JAX-RS). Go packages and Java packages span their folder; Java fields injected through constructors and JPA repositories are followed. Generated files (`DO NOT EDIT`) are skipped |
-| `otel` | ✅ | OTLP JSON traces: services, endpoints, call edges with protocols, datastores, topics, external APIs, one replayable execution per trace |
+| `otel` | ✅ | OTLP traces from files (JSON), pushed live (OTLP/HTTP protobuf or JSON to `watch` or `receive`) or pulled from Datadog, Tempo or Jaeger (`breadth pull`): services, endpoints, call edges with protocols, datastores, topics, external APIs, one replayable execution per trace |
 | `infra` | ✅ | Terraform/OpenTofu configuration (`.tf`, `.tofu`, `.tf.json`, var files), `show -json` plans and state, and raw `.tfstate`; Kubernetes YAML (workloads, Services, Ingress, ConfigMaps/Secrets by key only, PVCs, NetworkPolicies). [More below](#terraform-and-opentofu) |
 | `netflow` | stub | VPC flow logs, service mesh: [spec](collectors/src/netflow/README.md) |
 | `messaging` | ✅ | AsyncAPI 2.x and 3.x contracts: which application sends to and receives from which topic, with which message; merges with the code's topics and services. Broker admin APIs are [planned](collectors/src/messaging/README.md) |
 | `cicd` | ✅ | GitHub Actions and GitLab CI: workflows, jobs, `needs`, triggers and watched paths, images built, secrets by name, and what jobs deploy (kubectl, helm, `terraform apply`, Lambda, ECS, Cloud Run, Argo CD), matched with the services and Terraform roots of the other layers. CircleCI and Argo CD manifests are [planned](collectors/src/cicd/README.md) |
+| `resilience` | ✅ | OpenSpec specs and changes (requirements, scenarios with measurable criteria), run records in `.breadth/runs`, the source snapshot. See [From requirement to evidence](#from-requirement-to-evidence) |
 | `org` | stub | CODEOWNERS, Backstage: [spec](collectors/src/org/README.md) |
 
 ### Terraform and OpenTofu

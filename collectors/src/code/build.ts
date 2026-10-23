@@ -15,6 +15,9 @@ import {
 
 const CLOUD_KIND: Record<AwsService, FlowNode["kind"]> = { s3: "datastore", dynamodb: "datastore", sqs: "queue", sns: "queue", kinesis: "queue", secretsmanager: "infra_resource", lambda: "external_api" };
 
+/** Test files: HTTP calls in them are test clients, not routes. */
+const TEST_FILE = /(^|\/)(tests?|__tests__|spec|e2e)\/|(^|\/)test_[^/]+\.py$|_test\.(py|go)$|\.(test|spec)\.[jt]sx?$/;
+
 /** Files that mark a directory as a deployable unit (a service). */
 export const SERVICE_MANIFESTS = new Set([
   "package.json",
@@ -613,8 +616,9 @@ export function buildGraph(input: BuildInput): FlowGraph {
         addEdge("call", id, handler && handler.kind === "def" ? ids.def(handler.file, handler.qual) : fromNodeId(f, c.from), { line: c.line, file: f.path }, { protocol: "http" });
         continue;
       }
-      // Java routes come from annotations; get("/x") there is a test client (MockMvc, RestAssured)
-      if (f.lang === "java" || c.parts.length !== 2 || !ROUTE_METHODS.test(c.parts[1]) || !c.firstArg?.startsWith("/")) continue;
+      // Java routes come from annotations; get("/x") there is a test client (MockMvc, RestAssured),
+      // and so is client.post("/x") in any test file
+      if (f.lang === "java" || TEST_FILE.test(f.path) || c.parts.length !== 2 || !ROUTE_METHODS.test(c.parts[1]) || !c.firstArg?.startsWith("/")) continue;
       const recv = resolveInScope(f, c.from, c.parts[0]);
       if (recv && !(recv.kind === "external" && recv.cls.type === "lib") && recv.kind !== "global") continue;
       routeSites.add(c);
