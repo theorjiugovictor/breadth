@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { assertValidGraph, mergeGraphs, validateGraph, type FlowGraph } from "@breadth/schema";
 import { collectors, importOtlp, linkTracesToCode, runCollectors, spansToGraph, type Logger } from "@breadth/collectors";
 import { SpanBuffer, startOtlpServer } from "./otlp.js";
+import { createSource, parseDuration, pullLive, type LiveSource } from "./sources/index.js";
 import { RULES, runInsights, describeChanges, diffGraph, withoutRemoved, type ChangeReport } from "@breadth/insights";
 import type { Insight, Severity } from "@breadth/schema";
 import { loadConfig } from "./config.js";
@@ -32,9 +33,10 @@ Usage:
   breadth review [path] --changed | --from diff.json | --nodes ids | --all [--by name]   record what you reviewed (.breadth/ledger.json)
   breadth debt [path] [--record] [--json] [--fail-above 30]   comprehension debt: behaviour nobody has reviewed, per service
   breadth import-traces <otlp.json>... [--merge flowgraph.json] [-o out.json]
+  breadth pull <datadog|prometheus|tempo|jaeger>[,...] [path] [--merge flowgraph.json] [--since 1h]   traces and live traffic from your observability backend
   breadth receive [--port 4318] [--merge flowgraph.json]   OTLP/HTTP receiver: traces from running services, merged as they arrive
   breadth serve [flowgraph.json] [--port 4321] [--host 127.0.0.1] [--no-open]
-  breadth watch [path] [--port 4321] [--traces otlp.json] [--otlp-port 4318] [-o flowgraph.json] [--llm]   live canvas while you (or an agent) code; also takes OTLP on /v1/traces
+  breadth watch [path] [--port 4321] [--traces otlp.json] [--otlp-port 4318] [--live datadog --every 60s] [-o flowgraph.json] [--llm]   live canvas while you (or an agent) code; also takes OTLP on /v1/traces
   breadth connect <agent>... [--write]   hooks + MCP for claude, copilot, cursor, gemini, windsurf, antigravity, codex
   breadth hook [--port 4321] [--agent name]   (run by agent hooks) forward an agent's prompt and edits to \`breadth watch\`
   breadth mcp [path] [--port 4321]   MCP server (stdio): the graph as tools for any coding agent
@@ -184,6 +186,59 @@ async function cmdImportTraces(args: string[]) {
   );
 }
 
+/** Sources named on the command line ("datadog,prometheus"), configured in breadth.config.json. */
+function liveSources(names: string, config: import("./config.js").BreadthConfig): LiveSource[] {
+  return names
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .map((n) => createSource(n, config.sources));
+}
+
+/** Traces and traffic from live backends into a graph. */
+async function cmdPull(args: string[]) {
+  const { values, positionals } = parseArgs({
+    args,
+    allowPositionals: true,
+    options: {
+      merge: { type: "string", short: "m" },
+      out: { type: "string", short: "o" },
+      since: { type: "string", default: "1h" },
+      limit: { type: "string", default: "500" },
+      services: { type: "string" },
+      "no-traces": { type: "boolean" },
+      "no-stats": { type: "boolean" },
+      config: { type: "string" },
+      quiet: { type: "boolean", short: "q" },
+    },
+  });
+  log.quiet = !!values.quiet;
+  const [names, target = "."] = positionals;
+  if (!names) throw new Error("usage: breadth pull <datadog|prometheus|tempo|jaeger>[,...] [path] [--merge flowgraph.json] [--since 1h]");
+  const config = loadConfig(path.resolve(target), values.config);
+  const sources = liveSources(names, config);
+  const merge = values.merge ?? (existsSync("flowgraph.json") && !positionals[1] ? "flowgraph.json" : undefined);
+  let base: FlowGraph;
+  if (merge && existsSync(merge)) base = readGraph(merge);
+  else {
+    process.stderr.write(`breadth: scanning ${path.resolve(target)}\n`);
+    base = await scanTarget(path.resolve(target), values);
+  }
+  process.stderr.write(`breadth: reading ${sources.map((x) => x.describe).join(", ")}, last ${values.since}: span metadata and request counts, latency and errors (read only)\n`);
+  const r = await pullLive(base, sources, {
+    since: parseDuration(values.since!),
+    traces: !values["no-traces"],
+    stats: !values["no-stats"],
+    limit: Number(values.limit),
+    services: values.services?.split(",").map((x) => x.trim()).filter(Boolean) ?? config.sources?.services,
+    window: values.since!,
+  });
+  attachInsights(r.graph);
+  const out = values.out ?? merge ?? "flowgraph.json";
+  writeGraph(out, r.graph);
+  process.stderr.write(`breadth: ${r.traces} traces (${r.spans} spans), traffic for ${r.matched} of ${r.stats} endpoints and services → ${out}${insightSummary(r.graph, true)}\n`);
+}
+
 /** A standalone OTLP/HTTP receiver: traces from running services, merged into a graph file as they arrive. */
 async function cmdReceive(args: string[]) {
   const { values } = parseArgs({
@@ -258,6 +313,8 @@ async function cmdWatch(args: string[]) {
       exclude: { type: "string", multiple: true },
       traces: { type: "string", multiple: true },
       "otlp-port": { type: "string" },
+      live: { type: "string" },
+      every: { type: "string", default: "60s" },
       llm: { type: "boolean" },
       ...LLM_FLAGS,
     },
@@ -280,6 +337,28 @@ async function cmdWatch(args: string[]) {
   });
   await live.start();
   const url = await serve({ live, port: Number(values.port), host: values.host!, open: !values["no-open"], llm });
+  if (values.live) {
+    const sources = liveSources(values.live, config);
+    const every = parseDuration(values.every!);
+    const window = values.every!;
+    process.stderr.write(`breadth: reading ${sources.map((x) => x.describe).join(", ")} every ${window}: span metadata and request counts, latency and errors (read only)\n`);
+    let last = Date.now() - every;
+    const poll = async () => {
+      const now = Date.now();
+      for (const src of sources) {
+        try {
+          if (src.traces) live.ingestSpans(await src.traces({ from: last, to: now, services: config.sources?.services, limit: 300 }));
+          if (src.stats) live.setLiveStats(src.name, window, await src.stats({ from: now - every, to: now, services: config.sources?.services }));
+        } catch (err) {
+          log.warn((err as Error).message);
+        }
+      }
+      last = now;
+    };
+    await poll();
+    setInterval(() => void poll(), every).unref?.();
+    // keep the process alive: the server already does
+  }
   if (values["otlp-port"]) {
     await startOtlpServer({ port: Number(values["otlp-port"]), host: values.host!, onSpans: (spans) => live.ingestSpans(spans) });
     process.stderr.write(`breadth: receiving OTLP traces on http://${values.host}:${values["otlp-port"]}/v1/traces (and on ${url}v1/traces)\n`);
@@ -745,6 +824,8 @@ async function main(argv: string[]) {
       return cmdReview(rest);
     case "receive":
       return cmdReceive(rest);
+    case "pull":
+      return cmdPull(rest);
     case "debt":
       return cmdDebt(rest);
     case "hook":

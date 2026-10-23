@@ -5,6 +5,7 @@ import ignore from "ignore";
 import { diffGraphs, isEmptyDiff, mergeGraphs, type FlowGraph, type GraphDiff } from "@breadth/schema";
 import { DEFAULT_EXCLUDES, importOtlp, linkTracesToCode, runCollectors, spansToGraph, type CollectorOptions, type Span } from "@breadth/collectors";
 import { SpanBuffer } from "./otlp.js";
+import { applyLiveStats, type LiveStat } from "./sources/index.js";
 import { runInsights } from "@breadth/insights";
 import { noneProvider, type LLMProvider } from "./llm/provider.js";
 
@@ -140,6 +141,14 @@ export class LiveSession {
     this.timer = setTimeout(() => void this.rescan(), delay);
   }
 
+  /** Latest traffic from live sources (watch --live), applied to every build. */
+  private liveStats: { source: string; window: string; stats: LiveStat[] }[] = [];
+
+  setLiveStats(source: string, window: string, stats: LiveStat[]) {
+    this.liveStats = [...this.liveStats.filter((x) => x.source !== source), { source, window, stats }];
+    this.schedule(200);
+  }
+
   /** Spans received over OTLP (`/v1/traces`), merged into every build. */
   readonly received = new SpanBuffer();
 
@@ -157,6 +166,7 @@ export class LiveSession {
       graph = mergeGraphs(graph, linkTracesToCode(traces, graph));
     }
     if (this.received.size) graph = mergeGraphs(graph, linkTracesToCode(spansToGraph(this.received.spans, ["otlp"]), graph));
+    for (const l of this.liveStats) applyLiveStats(graph, l.stats, l.source, l.window);
     graph.insights = runInsights(graph);
     return graph;
   }
