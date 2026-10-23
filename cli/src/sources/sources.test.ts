@@ -136,6 +136,48 @@ describe("tempo and jaeger", () => {
   });
 });
 
+describe("evidence scoped to the experiment's own requests (--run-id)", () => {
+  const run = { attr: "breadth.run_id", value: "chaos-42" };
+  const span = (trace: string, id: string, ms: number, extra: Record<string, unknown> = {}, status = "unset") =>
+    ({ traceId: trace, spanId: id, name: "POST /orders", kind: "server", service: "orders", start: T0 + 1000, end: T0 + 1000 + ms, attrs: { "http.request.method": "POST", "http.route": "/orders", ...extra }, status }) as any;
+
+  it("measures from spans: only traces carrying the run id count", async () => {
+    const { measureFromSpans } = await import("./measure.js");
+    const spans = [
+      span("a", "1", 100, { "breadth.run_id": "chaos-42" }),
+      span("b", "2", 300, {}, "error"),
+      // the run id sits on the load generator's root span; the server span is in the same trace
+      { ...span("c", "3", 50), kind: "client", service: "k6", attrs: { "breadth.run_id": "chaos-42" } },
+      span("c", "4", 200),
+      span("d", "5", 5000), // someone else's traffic in the same window
+    ];
+    const m = measureFromSpans(spans, { from: T0, to: T0 + 10_000, service: "orders", endpoint: "POST /orders", run });
+    expect(m).toMatchObject({ p50_ms: 100, p95_ms: 200, error_pct: 0, throughput_rps: 0.2 });
+    expect(measureFromSpans(spans, { from: T0, to: T0 + 10_000, service: "orders" }).error_pct).toBe(25);
+  });
+
+  it("asks each backend for only the run's spans", async () => {
+    process.env.DD_API_KEY = "k";
+    process.env.DD_APP_KEY = "a";
+    const dd = fakeFetch(() => ({ data: [{ attributes: { by: {}, compute: { c0: 10, c1: 9e7 } } }] }));
+    await datadogSource({}, dd.fetch).measure!({ from: T0, to: T0 + 60_000, service: "orders", run });
+    expect(dd.calls[0].body.data.attributes.filter.query).toContain('@breadth.run_id:"chaos-42"');
+
+    const tempo = fakeFetch((c) => (c.url.includes("/api/search") ? { traces: [] } : {}));
+    await tempoSource({ url: "http://tempo:3200" }, tempo.fetch).measure!({ from: T0, to: T0 + 60_000, service: "orders", run });
+    expect(decodeURIComponent(tempo.calls[0].url)).toContain('{ resource.service.name = "orders" } && { .breadth.run_id = "chaos-42" }');
+
+    const jaeger = fakeFetch(() => ({ data: [] }));
+    await jaegerSource({ url: "http://jaeger:16686" }, jaeger.fetch).measure!({ from: T0, to: T0 + 60_000, service: "orders", run });
+    expect(decodeURIComponent(jaeger.calls[0].url)).toContain('tags={"breadth.run_id":"chaos-42"}');
+
+    const prom = fakeFetch(() => ({ status: "success", data: { result: [] } }));
+    await expect(prometheusSource({ url: "http://prom:9090" }, prom.fetch).measure!({ from: T0, to: T0 + 60_000, service: "orders", run })).rejects.toThrow(/runLabel/);
+    await prometheusSource({ url: "http://prom:9090", runLabel: "run_id" }, prom.fetch).measure!({ from: T0, to: T0 + 60_000, service: "orders", run });
+    expect(decodeURIComponent(prom.calls[0].url)).toContain('service_name="orders",run_id="chaos-42"');
+  });
+});
+
 describe("pull into a graph", () => {
   it("adds Datadog traces as executions and traffic on the shop's endpoints", async () => {
     process.env.DD_API_KEY = "k";

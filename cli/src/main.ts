@@ -35,7 +35,7 @@ Usage:
   breadth debt [path] [--record] [--json] [--fail-above 30]   comprehension debt: behaviour nobody has reviewed, per service
   breadth import-traces <otlp.json>... [--merge flowgraph.json] [-o out.json]
   breadth pull <datadog|prometheus|tempo|jaeger>[,...] [path] [--merge flowgraph.json] [--since 1h]   traces and live traffic from your observability backend
-  breadth evidence "<scenario>" [path] --service x --from 15m [--live datadog | --results p95_ms=180]   judge an experiment window, record the run
+  breadth evidence "<scenario>" [path] --service x --from 15m [--live datadog | --results p95_ms=180] [--run-id chaos-42]   judge an experiment window, record the run
   breadth receive [--port 4318] [--merge flowgraph.json]   OTLP/HTTP receiver: traces from running services, merged as they arrive
   breadth serve [flowgraph.json] [--port 4321] [--host 127.0.0.1] [--no-open]
   breadth watch [path] [--port 4321] [--traces otlp.json] [--otlp-port 4318] [--live datadog --every 60s] [-o flowgraph.json] [--llm]   live canvas while you (or an agent) code; also takes OTLP on /v1/traces
@@ -260,6 +260,8 @@ async function cmdEvidence(args: string[]) {
       store: { type: "string" },
       "fail-on": { type: "string" },
       config: { type: "string" },
+      "run-id": { type: "string" },
+      "run-attr": { type: "string", default: "breadth.run_id" },
     },
   });
   const [scenario, target = "."] = positionals;
@@ -273,8 +275,9 @@ async function cmdEvidence(args: string[]) {
   const graph = await scanTarget(root, values);
   const from = parseTime(values.from);
   const to = parseTime(values.to!);
-  if (source) process.stderr.write(`breadth: measuring ${values.service}${values.endpoint ? ` ${values.endpoint}` : ""} from ${new Date(from).toISOString()} to ${new Date(to).toISOString()} with ${source.describe} (read only)\n`);
-  const r = await recordEvidence({ graph, root, scenario, service: values.service, endpoint: values.endpoint, from, to, source, results, id: values.id, tool: values.tool, fault: values.fault, approvedBy: values["approved-by"], store: values.store });
+  const run = values["run-id"] ? { attr: values["run-attr"]!, value: values["run-id"] } : undefined;
+  if (source) process.stderr.write(`breadth: measuring ${values.service}${values.endpoint ? ` ${values.endpoint}` : ""}${run ? ` (only spans with ${run.attr}=${run.value})` : ""} from ${new Date(from).toISOString()} to ${new Date(to).toISOString()} with ${source.describe} (read only)\n`);
+  const r = await recordEvidence({ graph, root, scenario, service: values.service, endpoint: values.endpoint, from, to, source, results, id: values.id ?? values["run-id"], tool: values.tool, fault: values.fault, approvedBy: values["approved-by"], store: values.store, run });
   const mark = { supports: "✔", contradicts: "✖", inconclusive: "?" }[r.verdict];
   const lines = [`${mark} ${r.verdict}: ${r.scenario.name}`, ...r.checks.map((c) => `   ${c.ok === undefined ? "?" : c.ok ? "✓" : "✗"} ${c.metric} ${c.actual ?? "not measured"} (${c.op} ${c.expected})`), `   recorded ${path.relative(process.cwd(), r.file)}${r.record.fingerprint ? "" : " (no behaviour fingerprint: service not found in the scan, so this evidence cannot go stale)"}`];
   process.stdout.write(lines.join("\n") + "\n");

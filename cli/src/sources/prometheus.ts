@@ -1,4 +1,4 @@
-import { getJson, secret, type Fetch, type LiveSource, type LiveStat, type Measure } from "./types.js";
+import { getJson, secret, SourceError, type Fetch, type LiveSource, type LiveStat, type Measure } from "./types.js";
 
 /**
  * Prometheus (or Mimir, Thanos, VictoriaMetrics, Grafana Cloud): stats and evidence measurements
@@ -17,6 +17,8 @@ export interface PrometheusSettings {
   serviceLabel?: string;
   endpointLabel?: string;
   queries?: Partial<Record<"requests" | "errors" | "p95_ms" | "p50_ms" | "p99_ms", string>>;
+  /** Label holding the experiment's run id (a spanmetrics dimension), for breadth evidence --run-id. */
+  runLabel?: string;
 }
 
 const SERVER = 'span_kind="SPAN_KIND_SERVER"';
@@ -41,11 +43,12 @@ export function prometheusSource(s: PrometheusSettings, fetchImpl: Fetch = fetch
     return h;
   };
   const esc = (v: string) => v.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-  const render = (name: keyof typeof DEFAULTS, o: { by: string[]; range: number; service?: string; endpoint?: string }) =>
+  const render = (name: keyof typeof DEFAULTS, o: { by: string[]; range: number; service?: string; endpoint?: string; run?: string }) =>
     (s.queries?.[name] ?? DEFAULTS[name])
       .replace(/\$by/g, o.by.join(", ") || "__name__")
       .replace(/\$range/g, `${Math.max(60, Math.round(o.range / 1000))}s`)
-      .replace(/\$filter/g, [o.service ? `,${svcLabel}="${esc(o.service)}"` : "", o.endpoint ? `,${epLabel}="${esc(o.endpoint)}"` : ""].join(""))
+      .replace(/\$filter/g, [o.service ? `,${svcLabel}="${esc(o.service)}"` : "", o.endpoint ? `,${epLabel}="${esc(o.endpoint)}"` : "", o.run && s.runLabel ? `,${s.runLabel}="${esc(o.run)}"` : ""].join(""))
+      .replace(/\$run/g, esc(o.run ?? ""))
       .replace(/\$service/g, esc(o.service ?? ""))
       .replace(/\$endpoint/g, esc(o.endpoint ?? ""));
   async function instant(query: string, at: number): Promise<{ metric: Record<string, string>; value: number }[]> {
@@ -78,7 +81,11 @@ export function prometheusSource(s: PrometheusSettings, fetchImpl: Fetch = fetch
     },
 
     async measure(q) {
-      const o = { by: [] as string[], range: q.to - q.from, service: q.service, endpoint: q.endpoint };
+      // Metrics are aggregates: without a run-id label they cannot tell the experiment's requests apart.
+      if (q.run && !s.runLabel && !Object.values(s.queries ?? {}).some((x) => x?.includes("$run"))) {
+        throw new SourceError("prometheus: metrics carry no run id. Add the run attribute as a spanmetrics dimension and set sources.prometheus.runLabel, or measure with a trace source (datadog, tempo, jaeger)");
+      }
+      const o = { by: [] as string[], range: q.to - q.from, service: q.service, endpoint: q.endpoint, run: q.run?.value };
       const one = async (name: keyof typeof DEFAULTS) => (await instant(render(name, o), q.to))[0]?.value;
       const [requests, errors, p95, p50, p99] = await Promise.all([one("requests"), one("errors"), one("p95_ms"), one("p50_ms"), one("p99_ms")]);
       const out: Partial<Record<Measure, number>> = {};

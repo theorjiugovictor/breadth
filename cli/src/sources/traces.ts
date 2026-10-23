@@ -1,4 +1,5 @@
 import { parseOtlp, type Span } from "@breadth/collectors";
+import { measureFromSpans } from "./measure.js";
 import { getJson, secret, type Fetch, type LiveSource } from "./types.js";
 
 /** Grafana Tempo: TraceQL / tag search, then each trace as OTLP JSON. */
@@ -27,7 +28,9 @@ export function tempoSource(s: TempoSettings, fetchImpl: Fetch = fetch as unknow
       const services = q.services?.length ? q.services : [undefined];
       const ids = new Set<string>();
       for (const svc of services) {
-        const traceql = svc ? `{ resource.service.name = "${svc.replace(/"/g, '\\"')}" }` : "{}";
+        const q2 = (v: string) => v.replace(/"/g, '\\"');
+        const parts = [svc ? `{ resource.service.name = "${q2(svc)}" }` : "", q.where ? `{ .${q.where.attr} = "${q2(q.where.value)}" }` : ""].filter(Boolean);
+        const traceql = parts.join(" && ") || "{}";
         const url = `${base}/api/search?q=${encodeURIComponent(traceql)}&start=${Math.floor(q.from / 1000)}&end=${Math.ceil(q.to / 1000)}&limit=${Math.min(q.limit, 500)}`;
         const out = await getJson(fetchImpl, url, { headers: headers() }, "tempo");
         for (const t of (out?.traces ?? []) as any[]) if (t.traceID) ids.add(String(t.traceID));
@@ -39,6 +42,9 @@ export function tempoSource(s: TempoSettings, fetchImpl: Fetch = fetch as unknow
         spans.push(...parseOtlp(JSON.stringify(out?.trace ?? out)));
       }
       return spans;
+    },
+    async measure(q) {
+      return measureFromSpans(await this.traces!({ from: q.from, to: q.to, services: [q.service], limit: 500, where: q.run }), q);
     },
   };
 }
@@ -64,12 +70,16 @@ export function jaegerSource(s: JaegerSettings, fetchImpl: Fetch = fetch as unkn
       const spans: Span[] = [];
       const per = Math.max(1, Math.floor(q.limit / Math.max(1, services!.length)));
       for (const svc of services!) {
-        const url = `${base}/api/traces?service=${encodeURIComponent(svc)}&start=${q.from * 1000}&end=${q.to * 1000}&limit=${per}`;
+        const tags = q.where ? `&tags=${encodeURIComponent(JSON.stringify({ [q.where.attr]: q.where.value }))}` : "";
+        const url = `${base}/api/traces?service=${encodeURIComponent(svc)}&start=${q.from * 1000}&end=${q.to * 1000}&limit=${per}${tags}`;
         const out = await getJson(fetchImpl, url, { headers: headers() }, "jaeger");
         for (const t of (out?.data ?? []) as any[]) spans.push(...fromJaeger(t));
       }
       const seen = new Set<string>();
       return spans.filter((s) => (seen.has(s.traceId + s.spanId) ? false : (seen.add(s.traceId + s.spanId), true)));
+    },
+    async measure(q) {
+      return measureFromSpans(await this.traces!({ from: q.from, to: q.to, services: [q.service], limit: 500, where: q.run }), q);
     },
   };
 }
