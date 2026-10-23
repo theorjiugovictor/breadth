@@ -6,6 +6,7 @@ import { SCHEMA_VERSION, type FlowEdge, type FlowGraph, type FlowNode } from "@b
 import type { Collector, CollectorOptions } from "../core/types.js";
 import { walkFiles } from "../core/walk.js";
 import { evaluateSlos, parseChange, parseSpec, slug, type Capability, type Change, type Scenario } from "./openspec.js";
+import { isSpecKit, parseKiro, parseSpecKit } from "./formats.js";
 
 export { evaluateSlos, parseSlos, parseSpec, type Slo, type Verdict, type Check } from "./openspec.js";
 export { linkResilience } from "./link.js";
@@ -65,7 +66,7 @@ export function resilienceGraph(input: { capabilities: Capability[]; changes: Ch
   };
 
   for (const c of input.changes) {
-    add(node({ id: `change:${c.id}`, name: c.title, kind: "artifact", role: "change", layer: "resilience", description: c.why, source: { file: c.file }, metadata: { change: c.id, tasks: c.tasks } }));
+    add(node({ id: `change:${c.id}`, name: c.title, kind: "artifact", role: "change", layer: "resilience", description: c.why, source: { file: c.file }, metadata: compact({ change: c.id, tasks: c.tasks, format: c.format, archived: c.archived, branch: c.branch }) }));
   }
   const scenarios = new Map<string, { s: Scenario; req: string }>();
   for (const cap of input.capabilities) {
@@ -205,21 +206,52 @@ async function read(root: string, rel: string, options: CollectorOptions): Promi
   return options.overlay?.get(abs) ?? (await fs.readFile(abs, "utf8").catch(() => undefined));
 }
 
+const SPEC_KIT = /(?:^|\/)specs\/([^/]+)\/spec\.md$/;
+
 async function inputs(target: string, options: CollectorOptions) {
   const root = target;
-  const files = await walkFiles(root, { exclude: options.exclude, include: options.include, filter: (f) => /(^|\/)openspec\/.+\.md$/.test(f) || /(^|\/)\.breadth\/runs\/[^/]+\.json$/.test(f) });
-  // .breadth/ is a dot folder some walkers skip: look for runs explicitly too
+  const files = await walkFiles(root, {
+    exclude: options.exclude,
+    include: options.include,
+    filter: (f) => /(^|\/)openspec\/.+\.md$/.test(f) || SPEC_KIT.test(f) || /(^|\/)\.breadth\/runs\/[^/]+\.json$/.test(f),
+  });
+  // dot folders some walkers skip: look for them explicitly too
   const runFiles = await walkFiles(path.join(root, ".breadth", "runs"), { filter: (f) => f.endsWith(".json") }).catch(() => [] as string[]);
+  const kiroFiles = await walkFiles(path.join(root, ".kiro", "specs"), { filter: (f) => /^[^/]+\/requirements\.md$/.test(f) }).catch(() => [] as string[]);
   const capabilities: Capability[] = [];
   const changes: Change[] = [];
   for (const f of files) {
+    // OpenSpec: openspec/specs/<cap>/spec.md, openspec/changes/<id>/specs/<cap>/spec.md
     const spec = f.match(/(?:^|\/)openspec\/(?:changes\/([^/]+)\/)?specs\/([^/]+)\/spec\.md$/);
     if (spec && !/\/archive\//.test(f)) {
       const text = await read(root, f, options);
       if (text) capabilities.push(parseSpec(text, f, spec[2], spec[1]));
+      continue;
     }
-    const prop = f.match(/(?:^|\/)openspec\/changes\/([^/]+)\/proposal\.md$/);
-    if (prop && prop[1] !== "archive") changes.push(parseChange(prop[1], await read(root, f, options), await read(root, f.replace(/proposal\.md$/, "tasks.md"), options), f));
+    const prop = f.match(/(?:^|\/)openspec\/changes\/(?:archive\/)?([^/]+)\/proposal\.md$/);
+    if (prop && prop[1] !== "archive") {
+      const c = parseChange(prop[1].replace(/^\d{4}-\d{2}-\d{2}-/, ""), await read(root, f, options), await read(root, f.replace(/proposal\.md$/, "tasks.md"), options), f);
+      changes.push({ ...c, format: "openspec", archived: /\/archive\//.test(f) || undefined });
+      continue;
+    }
+    // Spec Kit: specs/<NNN-feature>/spec.md (+ tasks.md), recognised by its template
+    const sk = f.match(SPEC_KIT);
+    if (sk && !/(^|\/)openspec\//.test(f)) {
+      const text = await read(root, f, options);
+      if (!text || !isSpecKit(text)) continue;
+      const r = parseSpecKit(sk[1], f, text, await read(root, f.replace(/spec\.md$/, "tasks.md"), options));
+      capabilities.push(r.capability);
+      changes.push(r.change);
+    }
+  }
+  for (const k of kiroFiles) {
+    const feature = k.split("/")[0];
+    const f = `.kiro/specs/${k}`;
+    const text = await read(root, f, options);
+    if (!text) continue;
+    const r = parseKiro(feature, f, text, await read(root, f.replace(/requirements\.md$/, "tasks.md"), options));
+    capabilities.push(r.capability);
+    changes.push(r.change);
   }
   const runs: { file: string; run: RunRecord }[] = [];
   for (const f of [...new Set([...files.filter((x) => x.endsWith(".json")), ...runFiles.map((x) => `.breadth/runs/${x}`)])]) {
@@ -234,19 +266,32 @@ async function inputs(target: string, options: CollectorOptions) {
   return { capabilities, changes, runs };
 }
 
+/** Spec Kit's specs/<feature>/spec.md, recognised by its template (not any specs/ folder). */
+async function hasSpecKit(root: string): Promise<boolean> {
+  if (await fs.stat(path.join(root, ".specify")).then((s) => s.isDirectory(), () => false)) return true;
+  const dirs = await fs.readdir(path.join(root, "specs")).catch(() => [] as string[]);
+  for (const d of dirs.slice(0, 50)) {
+    const text = await fs.readFile(path.join(root, "specs", d, "spec.md"), "utf8").catch(() => undefined);
+    if (text && isSpecKit(text)) return true;
+  }
+  return false;
+}
+
 export const resilienceCollector: Collector = {
   name: "resilience",
   description: "OpenSpec requirements and scenarios, tests that verify them, experiments and evidence (.breadth/runs) with verdicts",
   implemented: true,
+  // Only repositories that keep specs or run records: everything else never sees this layer.
   async detect(target) {
-    for (const p of ["openspec", path.join(".breadth", "runs")]) {
+    for (const p of ["openspec", path.join(".breadth", "runs"), path.join(".kiro", "specs")]) {
       if (await fs.stat(path.join(target, p)).then((s) => s.isDirectory(), () => false)) return true;
     }
-    return false;
+    return hasSpecKit(target);
   },
   async collect(target, options = {}) {
     const root = (await fs.stat(target)).isFile() ? path.dirname(target) : target;
     const inp = await inputs(root, options);
+    if (!inp.capabilities.length && !inp.changes.length && !inp.runs.length) return { version: SCHEMA_VERSION, nodes: [], edges: [] };
     const snapshot = await sourceSnapshot(root, options);
     const g = resilienceGraph({ ...inp, snapshot });
     options.log?.info(`resilience: ${inp.capabilities.reduce((n, c) => n + c.requirements.length, 0)} requirements, ${inp.runs.length} runs`);

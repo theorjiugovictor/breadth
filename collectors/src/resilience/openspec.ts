@@ -52,6 +52,12 @@ export interface Change {
   why?: string;
   tasks: { done: number; total: number };
   file: string;
+  /** openspec, spec-kit, kiro */
+  format?: string;
+  /** OpenSpec changes/archive/: done and merged into the specs */
+  archived?: boolean;
+  /** Spec Kit: the git branch the feature is built on */
+  branch?: string;
 }
 
 export const slug = (s: string) =>
@@ -61,24 +67,33 @@ export const slug = (s: string) =>
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
 
-const OPS: Record<string, Slo["op"]> = { "<=": "<=", "≤": "<=", "=<": "<=", "<": "<", ">=": ">=", "≥": ">=", "=>": ">=", ">": ">", "==": "==", "=": "==" };
+const OPS: Record<string, Slo["op"]> = {
+  "<=": "<=", "≤": "<=", "=<": "<=", "<": "<", ">=": ">=", "≥": ">=", "=>": ">=", ">": ">", "==": "==", "=": "==",
+  under: "<", below: "<", "less than": "<", "lower than": "<", "at most": "<=", "no more than": "<=", within: "<=",
+  above: ">", over: ">", "more than": ">", "at least": ">=", "no less than": ">=",
+};
+const opOf = (s: string) => OPS[s.toLowerCase().replace(/\s+/g, " ")];
 
 /** Success criteria in a sentence: "p95 <= 200 ms and errors <= 1 %", "availability >= 99.9%", "recovers within 30 s". */
 export function parseSlos(text: string): Slo[] {
   const out: Slo[] = [];
   const t = text.replace(/\*\*/g, "");
   const num = "(\\d+(?:\\.\\d+)?)";
-  const op = "(<=|≤|=<|<|>=|≥|=>|>|==|=)";
+  // symbols, or the words specs use: "under 200 ms", "less than 1 %", "at least 99.9 %"
+  const op = "(<=|≤|=<|<|>=|≥|=>|>|==|=|under|below|less than|lower than|at most|no more than|within|above|over|more than|at least|no less than)";
   for (const m of t.matchAll(new RegExp(`\\bp(50|90|95|99|999)\\s*(?:latency\\s*)?${op}\\s*${num}\\s*(ms|s)\\b`, "gi"))) {
-    out.push({ metric: `p${m[1]}_ms`, op: OPS[m[2]], value: Number(m[3]) * (m[4].toLowerCase() === "s" ? 1000 : 1), text: m[0] });
+    out.push({ metric: `p${m[1]}_ms`, op: opOf(m[2]), value: Number(m[3]) * (m[4].toLowerCase() === "s" ? 1000 : 1), text: m[0] });
   }
-  for (const m of t.matchAll(new RegExp(`\\berrors?(?:\\s*(?:rate|ratio))?\\s*${op}\\s*${num}\\s*%`, "gi"))) out.push({ metric: "error_pct", op: OPS[m[1]], value: Number(m[2]), text: m[0] });
-  for (const m of t.matchAll(new RegExp(`\\b(?:availability|success(?:\\s*rate)?)\\s*${op}\\s*${num}\\s*%`, "gi"))) out.push({ metric: "availability_pct", op: OPS[m[1]], value: Number(m[2]), text: m[0] });
-  for (const m of t.matchAll(new RegExp(`\\bthroughput\\s*${op}\\s*${num}\\s*(?:req|requests)\\s*/\\s*s`, "gi"))) out.push({ metric: "throughput_rps", op: OPS[m[1]], value: Number(m[2]), text: m[0] });
+  for (const m of t.matchAll(new RegExp(`\\berrors?(?:\\s*(?:rate|ratio))?\\s*${op}\\s*${num}\\s*%`, "gi"))) out.push({ metric: "error_pct", op: opOf(m[1]), value: Number(m[2]), text: m[0] });
+  for (const m of t.matchAll(new RegExp(`\\b(?:availability|success(?:\\s*rate)?)\\s*${op}\\s*${num}\\s*%`, "gi"))) out.push({ metric: "availability_pct", op: opOf(m[1]), value: Number(m[2]), text: m[0] });
+  for (const m of t.matchAll(new RegExp(`\\bthroughput\\s*${op}\\s*${num}\\s*(?:req|requests)\\s*/\\s*s`, "gi"))) out.push({ metric: "throughput_rps", op: opOf(m[1]), value: Number(m[2]), text: m[0] });
   for (const m of t.matchAll(new RegExp(`\\brecover(?:s|y)?\\s*(?:with)?in\\s*${num}\\s*(s|ms|min)\\b`, "gi"))) {
     const f = m[2].toLowerCase() === "ms" ? 0.001 : m[2].toLowerCase() === "min" ? 60 : 1;
     out.push({ metric: "recovery_s", op: "<=", value: Number(m[1]) * f, text: m[0] });
   }
+  // "less than 1% errors", "99.9% availability": the number before the metric
+  for (const m of t.matchAll(new RegExp(`${op}\\s*${num}\\s*%\\s*(?:of\\s+requests\\s+)?(?:errors?|error rate|failed requests|failures)\\b`, "gi"))) out.push({ metric: "error_pct", op: opOf(m[1]), value: Number(m[2]), text: m[0] });
+  for (const m of t.matchAll(new RegExp(`(?:${op}\\s*)?${num}\\s*%\\s*(?:availability|uptime|success(?:\\s*rate)?)\\b`, "gi"))) if (!out.some((o) => o.metric === "availability_pct")) out.push({ metric: "availability_pct", op: m[1] ? opOf(m[1]) : ">=", value: Number(m[2]), text: m[0] });
   for (const m of t.matchAll(/\b(?:no|zero)\s+(?:5\d\d|errors|crash(?:es)?)\b/gi)) out.push({ metric: "error_pct", op: "<=", value: 0, text: m[0] });
   return out;
 }
@@ -106,7 +121,7 @@ export function evaluateSlos(slos: Slo[], results: Record<string, number | undef
 }
 
 /** "Implemented by: checkout(), workload/app.py" style lines (bold or not, any case). */
-function listLine(line: string, label: RegExp): string[] | undefined {
+export function listLine(line: string, label: RegExp): string[] | undefined {
   const m = line.replace(/\*\*/g, "").match(new RegExp(`^\\s*[-*]?\\s*(?:${label.source})\\s*:\\s*(.+)$`, "i"));
   return m ? m[1].split(/,\s*|;\s*/).map((x) => x.replace(/`/g, "").trim()).filter(Boolean) : undefined;
 }
