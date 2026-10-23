@@ -1,26 +1,50 @@
 {
-  "name": "breadth",
+  "name": "@theorjiugovictor/breadth",
   "version": "0.1.0",
-  "private": true,
-  "description": "Turn any codebase or system into an n8n-style canvas",
+  "description": "The understanding layer for AI-written systems: maps what code and infrastructure do, and shows every change as a change in behaviour",
   "type": "module",
   "bin": {
     "breadth": "./dist/breadth.mjs"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
   "scripts": {
     "build": "node scripts/build.mjs"
   },
   "dependencies": {
+    "tree-sitter-wasms": "0.1.13",
+    "web-tree-sitter": "0.25.10"
+  },
+  "devDependencies": {
     "@anthropic-ai/sdk": "^0.133.0",
     "@breadth/collectors": "*",
     "@breadth/insights": "*",
     "@breadth/schema": "*",
-    "ignore": "^7.0.12",
-    "tree-sitter-wasms": "0.1.13",
-    "web-tree-sitter": "0.25.10"
+    "ignore": "^7.0.12"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/theorjiugovictor/noodles.git",
+    "directory": "cli"
+  },
+  "homepage": "https://github.com/theorjiugovictor/noodles#readme",
+  "keywords": [
+    "code-map",
+    "architecture",
+    "pull-request",
+    "code-review",
+    "terraform",
+    "iam",
+    "mcp",
+    "comprehension"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "license": "MIT"
 }

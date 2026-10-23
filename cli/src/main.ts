@@ -18,7 +18,9 @@ import { applyPlans, diffRefs, loadGraph, parsePlanArgs, renderMarkdown, renderT
 import { behaviourUnits, computeDebt, LEDGER_FILE, loadLedger, markReviewed, saveLedger, unitsInDiff, type Unit } from "./ledger.js";
 import { checkIntent } from "./intent.js";
 
-const VERSION = "0.1.0";
+declare const __BREADTH_VERSION__: string | undefined;
+/** Set from cli/package.json when bundled; "dev" when run from source. */
+const VERSION = typeof __BREADTH_VERSION__ === "string" ? __BREADTH_VERSION__ : "dev";
 
 const HELP = `breadth ${VERSION}: turn any codebase or system into an n8n-style canvas
 

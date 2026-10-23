@@ -1,6 +1,6 @@
 // Bundle the CLI into one ESM file and copy the built UI next to it.
 import { build } from "esbuild";
-import { cpSync, existsSync, rmSync } from "node:fs";
+import { cpSync, existsSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -18,6 +18,7 @@ await build({
   target: "node20",
   // tree-sitter loads .wasm files relative to its package: keep it external.
   external: ["web-tree-sitter", "tree-sitter-wasms"],
+  define: { __BREADTH_VERSION__: JSON.stringify(JSON.parse(readFileSync(join(cli, "package.json"), "utf8")).version) },
   banner: {
     js: "#!/usr/bin/env node\nimport { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);",
   },

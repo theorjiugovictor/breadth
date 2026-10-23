@@ -23,6 +23,12 @@ breadth keeps people in the loop. It maps what a system actually does (calls, da
 Requires Node 20 or newer.
 
 ```sh
+npm install -g @theorjiugovictor/breadth   # or run it once: npx @theorjiugovictor/breadth scan .
+```
+
+The npm package is published by the [release workflow](.github/workflows/release.yml) when a version tag is pushed. Until the first release, or to hack on it, build from source:
+
+```sh
 git clone https://github.com/theorjiugovictor/noodles breadth
 cd breadth
 npm install
@@ -30,9 +36,14 @@ npm run build          # builds the UI and bundles the CLI into cli/dist/breadth
 npm link -w cli        # puts `breadth` on your PATH (optional)
 ```
 
-Without `npm link`, run `node /path/to/breadth/cli/dist/breadth.mjs` instead of `breadth`.
+Without `npm link`, run `node /path/to/breadth/cli/dist/breadth.mjs` instead of `breadth`. (The unscoped npm name `breadth` belongs to someone else, so `npx breadth` is not this tool.)
 
-> breadth is not on npm yet, and the npm name `breadth` belongs to someone else, so do not use `npx breadth`.
+### Releasing
+
+1. `npm version 0.2.0 -w cli --no-git-tag-version`, commit, push.
+2. `git tag v0.2.0 && git push origin v0.2.0`.
+
+The release workflow checks that the tag matches `cli/package.json`, runs the tests, publishes `@theorjiugovictor/breadth` to npm (when the `NPM_TOKEN` repository secret is set) and creates a GitHub release with the tarball. It also moves the major tag (`v0`) to a commit that includes the built CLI. Workflows that use `theorjiugovictor/noodles@v0` then start in seconds instead of building breadth on every run. `@main` keeps working and builds from source.
 
 ## Quick start
 

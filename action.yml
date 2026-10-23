@@ -59,7 +59,11 @@ runs:
       shell: bash
       working-directory: ${{ github.action_path }}
       run: |
-        if [ ! -f cli/dist/breadth.mjs ]; then
+        if [ -f cli/dist/breadth.mjs ]; then
+          # a release tag (v0, v1): the CLI is prebuilt, only its two runtime packages are needed
+          node -e 'const p=require("./cli/package.json").dependencies; console.log(Object.entries(p).map(([k,v])=>k+"@"+v).join(" "))' \
+            | xargs npm install --prefix cli/dist --no-save --no-package-lock --no-audit --no-fund --loglevel=error
+        else
           npm ci --no-audit --no-fund --loglevel=error
           npm run build -w cli >/dev/null
         fi
