@@ -7,7 +7,7 @@ branding:
 
 inputs:
   mode:
-    description: "diff (default): comment with what the change does. review: record the pull request's changes as reviewed in .breadth/ledger.json and push the ledger to the branch (run it when a review is approved)."
+    description: "diff (default): comment with what the change does. review: record the pull request's changes as reviewed in .breadth/ledger.json and push the ledger to the branch (run it when a review is approved). publish: scan this repository under its name (for workspaces) and push the graph to `publish-branch`."
     default: "diff"
   path:
     description: "Folder to scan, relative to the repository root."
@@ -42,8 +42,20 @@ inputs:
   fail-on:
     description: "Fail the check when the change has a behaviour change of this severity or higher (high, medium or low). Empty never fails."
     default: ""
+  workspace:
+    description: "breadth.workspace.json (path in this repository) listing the other repositories of the system. The comment then names the code in them that depends on each change."
+    default: ""
+  workspace-name:
+    description: "This repository's name in the workspace. Default: found from the workspace file (path, git URL or the repository's name)."
+    default: ""
+  workspace-token:
+    description: "Token that can read the workspace's other repositories (for `git` members of private repositories). The default token reads only this one."
+    default: ""
+  publish-branch:
+    description: "mode: publish: the branch the graph is pushed to, as flowgraph.json (one commit, replaced each time). A workspace reads it as https://raw.githubusercontent.com/<owner>/<repo>/<branch>/flowgraph.json."
+    default: "breadth-graph"
   github-token:
-    description: "Token used to comment."
+    description: "Token used to comment (and to push the ledger or the published graph)."
     default: ${{ github.token }}
 
 outputs:
@@ -51,8 +63,8 @@ outputs:
     description: "Path of the markdown summary."
     value: ${{ steps.map.outputs.markdown }}
   graph:
-    description: "Path of the diff graph (open with `breadth serve`)."
-    value: ${{ steps.map.outputs.graph }}
+    description: "Path of the diff graph, or of the published graph in publish mode (open with `breadth serve`)."
+    value: ${{ steps.map.outputs.graph || steps.publish.outputs.graph }}
 
 runs:
   using: composite
@@ -76,7 +88,7 @@ runs:
 
     - name: Map the change
       id: map
-      if: inputs.mode != 'review'
+      if: inputs.mode == 'diff' || inputs.mode == ''
       shell: bash
       env:
         INPUT_PATH: ${{ inputs.path }}
@@ -89,8 +101,17 @@ runs:
         INPUT_LLM_MODEL: ${{ inputs['llm-model'] }}
         INPUT_LIVE: ${{ inputs.live }}
         INPUT_LIVE_SINCE: ${{ inputs['live-since'] }}
+        INPUT_WORKSPACE: ${{ inputs.workspace }}
+        INPUT_WORKSPACE_NAME: ${{ inputs['workspace-name'] }}
+        WORKSPACE_TOKEN: ${{ inputs['workspace-token'] }}
         BASE_SHA: ${{ github.event.pull_request.base.sha }}
       run: |
+        if [ -n "$WORKSPACE_TOKEN" ]; then
+          # git members of the workspace: clone other private repositories with this token
+          # (for this step only, through git's environment, not the runner's global config)
+          export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0="url.https://x-access-token:${WORKSPACE_TOKEN}@github.com/.insteadOf" GIT_CONFIG_VALUE_0="https://github.com/"
+          export BREADTH_GRAPH_TOKEN="${BREADTH_GRAPH_TOKEN:-$WORKSPACE_TOKEN}"
+        fi
         base="$INPUT_BASE"
         if [ -z "$base" ] && [ -n "$BASE_SHA" ]; then
           # The base as the event saw it, not the branch now: if the base moved on (or the PR was
@@ -125,7 +146,8 @@ runs:
         graph="$RUNNER_TEMP/breadth-diff.flowgraph.json"
         set +e
         node "$GITHUB_ACTION_PATH/cli/dist/breadth.mjs" diff "$INPUT_PATH" ${base:+--base "$base"} \
-          --markdown "$md" -o "$graph" ${INPUT_FAIL_ON:+--fail-on "$INPUT_FAIL_ON"} "${plans[@]}" "${intent[@]}" --pr-text-file "$prtext" ${INPUT_LIVE:+--live "$INPUT_LIVE" --since "$INPUT_LIVE_SINCE"}
+          --markdown "$md" -o "$graph" ${INPUT_FAIL_ON:+--fail-on "$INPUT_FAIL_ON"} "${plans[@]}" "${intent[@]}" --pr-text-file "$prtext" ${INPUT_LIVE:+--live "$INPUT_LIVE" --since "$INPUT_LIVE_SINCE"} \
+          ${INPUT_WORKSPACE:+--workspace "$INPUT_WORKSPACE"} ${INPUT_WORKSPACE_NAME:+--as "$INPUT_WORKSPACE_NAME"}
         code=$?
         set -e
         if [ "$code" != 0 ] && [ "$code" != 2 ]; then exit "$code"; fi
@@ -135,7 +157,7 @@ runs:
         echo "failed=$([ "$code" = 2 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
 
     - name: Comment on the pull request
-      if: inputs.mode != 'review' && inputs.comment == 'true' && github.event.pull_request
+      if: (inputs.mode == 'diff' || inputs.mode == '') && inputs.comment == 'true' && github.event.pull_request
       # Pull requests from forks get a read-only token: the job summary still has the map.
       continue-on-error: true
       shell: bash
@@ -153,7 +175,7 @@ runs:
         fi
 
     - name: Keep the diff graph
-      if: inputs.mode != 'review'
+      if: inputs.mode == 'diff' || inputs.mode == ''
       uses: actions/upload-artifact@v4
       with:
         name: breadth-diff
@@ -191,3 +213,26 @@ runs:
       run: |
         echo "::error::breadth found behaviour changes at or above '${{ inputs['fail-on'] }}' severity (see the PR comment or job summary)."
         exit 1
+
+    - name: Publish the graph
+      id: publish
+      if: inputs.mode == 'publish'
+      shell: bash
+      env:
+        INPUT_PATH: ${{ inputs.path }}
+        NAME: ${{ inputs['workspace-name'] || github.event.repository.name }}
+        BRANCH: ${{ inputs['publish-branch'] }}
+        GH_TOKEN: ${{ inputs.github-token }}
+      run: |
+        out="$RUNNER_TEMP/breadth-publish"
+        rm -rf "$out" && mkdir -p "$out"
+        node "$GITHUB_ACTION_PATH/cli/dist/breadth.mjs" scan "$INPUT_PATH" --as "$NAME" -o "$out/flowgraph.json"
+        echo "graph=$out/flowgraph.json" >> "$GITHUB_OUTPUT"
+        # one commit on its own branch, replaced each time: nothing accumulates in the history
+        cd "$out"
+        git init -q
+        git checkout -q -b "$BRANCH"
+        git add flowgraph.json
+        git -c user.name="breadth" -c user.email="breadth@users.noreply.github.com" commit -qm "breadth graph of $GITHUB_REPOSITORY at ${GITHUB_SHA::7}"
+        git push -q -f "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$BRANCH"
+        echo "Published https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${BRANCH}/flowgraph.json" >> "$GITHUB_STEP_SUMMARY"

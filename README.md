@@ -172,6 +172,61 @@ The configuration alone does not say what an apply will *do* to existing resourc
 
 The comment then says `applying the plan replaces orders-db because engine changed: the data in it is lost unless restored from a backup`. On the command line this is `breadth diff --plan infra/prod=plan.json` (also `breadth scan --plan`). Leave out the `dir=` and breadth matches the plan to the root module it fits best. A `terraform show -json` plan saved in the repository next to the `.tf` files is picked up on its own.
 
+## Systems in several repositories
+
+A distributed system rarely lives in one repository. A **workspace** puts them back together: one graph, with the calls between repositories drawn, and pull requests that know who in the other repositories depends on what they change.
+
+`breadth.workspace.json` (anywhere; paths are relative to it):
+
+```json
+{
+  "repos": [
+    { "name": "orders",   "path": "../orders" },
+    { "name": "payments", "git": "https://github.com/acme/payments", "ref": "main" },
+    { "name": "web",      "graph": "https://raw.githubusercontent.com/acme/web/breadth-graph/flowgraph.json" },
+    { "name": "infra",    "path": "../infra" }
+  ]
+}
+```
+
+| Member | How it is read |
+| --- | --- |
+| `path` | scanned from disk |
+| `git` | shallow clone at `ref`, cached in `~/.cache/breadth` and fetched again each time, with git's own credentials |
+| `graph` | a graph the repository published (a file or URL; `BREADTH_GRAPH_TOKEN` is sent as a bearer token if set). Nothing is cloned |
+
+```sh
+breadth scan breadth.workspace.json -o system.json   # one canvas for the whole system
+breadth diff --workspace ../breadth.workspace.json   # in one repository: its change, among the others
+```
+
+Every path carries its repository's name (`orders/app/main.py`), so nothing clashes. Calls between repositories are matched like calls inside one: HTTP calls by service name (`http://orders:8080/refunds` reaches `POST /refunds` in `orders`), gRPC by service and method (a repository with only generated stubs is matched with the `.proto` another one keeps), topics and cloud resources by name, and a shared Terraform or Kubernetes repository with the code that runs on it.
+
+In a pull request, the changes are about that repository's code, and each one names what depends on it elsewhere:
+
+> 🔴 GetProduct was removed, but code that did not change still calls it · **used by `checkoutservice`, `frontend`**: prepOrderItems (`checkoutservice/main.go`), getProduct (`frontend/rpc.go`)
+
+**Publishing graphs from CI.** Scanning every repository on every pull request does not scale, and needs read access to all of them. Instead, each repository publishes its own graph when its main branch changes, and the others list it as a `graph` member:
+
+```yaml
+# in each repository: .github/workflows/breadth-publish.yml
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: theorjiugovictor/breadth@main
+        with:
+          mode: publish            # breadth scan --as <repository name>, pushed to the breadth-graph branch
+```
+
+and in the pull request workflow, `workspace: breadth.workspace.json` (plus `workspace-token` when `git` members are private repositories). `breadth scan . --as orders` does the same by hand.
+
 ## Comprehension debt
 
 Code that works but nobody has looked at is the debt breadth exists for, so it can measure it. A **behaviour unit** is a function, an endpoint or a significant infrastructure resource. Its fingerprint covers what it does: signature, calls, reads, writes, publishes, settings and exposure. Line numbers and formatting don't count. `breadth review` records the fingerprints someone reviewed in `.breadth/ledger.json`. Commit that file so the team shares it. When behaviour changes, its fingerprint changes and it counts as unreviewed again.

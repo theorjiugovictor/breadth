@@ -32,10 +32,13 @@ Usage:
   breadth scan <path> [--collector code,infra] [-o flowgraph.json] [--config file] [--exclude glob]... [--plan [dir=]plan.json]
   breadth diff [path] [--base ref] [--head ref] [-o diff.json] [--markdown pr.md] [--fail-on high] [--plan [dir=]plan.json] [--intent "what was asked"] [--live datadog --since 1h]   what a change does, in behaviour
   breadth diff before.json after.json
+  breadth scan breadth.workspace.json [-o flowgraph.json]   several repositories as one system (paths, git URLs, published graphs)
+  breadth scan <path> --as <name>    one repository as a workspace sees it (publish this for the others)
+  breadth diff [path] --workspace breadth.workspace.json [--as name]   a change in one repository, with the code in the others that depends on it
   breadth review [path] --changed | --from diff.json | --nodes ids | --all [--by name]   record what you reviewed (.breadth/ledger.json)
   breadth debt [path] [--record] [--json] [--fail-above 30]   comprehension debt: behaviour nobody has reviewed, per service
   breadth import-traces <otlp.json>... [--merge flowgraph.json] [-o out.json]
-  breadth pull <datadog|prometheus|tempo|jaeger>[,...] [path] [--merge flowgraph.json] [--since 1h]   traces and live traffic from your observability backend
+  breadth pull <datadog|prometheus|tempo|jaeger|honeycomb|loki>[,...] [path] [--merge flowgraph.json] [--since 1h]   traces and live traffic from your observability backend
   breadth evidence "<scenario>" [path] --service x --from 15m [--live datadog | --results p95_ms=180] [--run-id chaos-42]   judge an experiment window, record the run
   breadth receive [--port 4318] [--merge flowgraph.json]   OTLP/HTTP receiver: traces from running services, merged as they arrive
   breadth serve [flowgraph.json] [--port 4321] [--host 127.0.0.1] [--no-open]
