@@ -645,6 +645,8 @@ export function buildGraph(input: BuildInput): FlowGraph {
           id,
           name: `gRPC ${s.name}/${m.name}`,
           kind: "network_endpoint",
+          // the short name too: a repository without the .proto knows no package (grpc:CartService/GetCart)
+          aliases: s.full !== s.name ? [`grpc:${s.name}/${m.name}`] : undefined,
           layer: "network",
           parent: server ? ids.file(server.file) : undefined,
           description: `gRPC method ${s.full}/${m.name}${m.streaming ? ` (${m.streaming} streaming)` : ""}${server ? `, served by ${serviceOf(server.file)}` : ""}`,

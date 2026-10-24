@@ -167,6 +167,8 @@ export function grpcLinks(files: FileModel[], protos: ProtoService[]): GrpcLinks
   const clients: GrpcLinks["clients"] = [];
   for (const f of files) {
     const stubs = new Set<ProtoService>();
+    // where each stub is made: pb.NewCartServiceClient(conn).GetCart(ctx, req) calls on the same line
+    const madeAt = new Map<string, ProtoService>();
     for (const c of f.calls) {
       const last = c.parts[c.parts.length - 1];
       const name =
@@ -175,19 +177,27 @@ export function grpcLinks(files: FileModel[], protos: ProtoService[]): GrpcLinks
         (/^new(Blocking|Future)?Stub$/.test(last) ? c.parts[c.parts.length - 2]?.match(/^(\w+)Grpc$/)?.[1] : undefined) ?? // Java
         (c.isNew && f.lang !== "java" && f.lang !== "python" && c.parts.length > 1 ? last : undefined); // Node: new proto.X(addr, creds)
       const s = name ? (c.isNew && !/Stub$|Client$/.test(last) ? services.get(name) : service(name)) : undefined;
-      if (s) stubs.add(s);
+      if (!s) continue;
+      stubs.add(s);
+      madeAt.set(`${c.from}:${c.line}`, s);
     }
     if (!stubs.size) continue;
     for (const c of f.calls) {
       if (c.parts.length < 2 || c.isNew || /^(self|this)$/.test(c.parts[0])) continue;
       const last = c.parts[c.parts.length - 1];
+      let hit: { s: ProtoService; m: string } | undefined;
       for (const s of stubs) {
         const m = s.methods.find((x) => x.name === last || (f.lang !== "go" && f.lang !== "python" && lowerFirst(x.name) === last));
         if (m) {
-          clients.push({ endpoint: grpcId(s.full, m.name), file: f, site: c });
+          hit = { s, m: m.name };
           break;
         }
       }
+      // No .proto in this repository (it lives in a shared one): a method called right on a new
+      // stub is one of its rpcs.
+      const chained = c.parts[0] === "?" ? madeAt.get(`${c.from}:${c.line}`) : undefined;
+      if (!hit && chained && fromCode && /^[A-Za-z]\w*$/.test(last)) hit = { s: chained, m: method(chained, last, true)!.name };
+      if (hit) clients.push({ endpoint: grpcId(hit.s.full, hit.m), file: f, site: c });
     }
   }
   return { services, servers, clients };

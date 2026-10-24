@@ -20,6 +20,7 @@ import { runMcp } from "./mcp.js";
 import { applyPlans, diffRefs, loadGraph, parsePlanArgs, renderMarkdown, renderText, repoRoot, scan as scanForDiff, shortRef } from "./diff.js";
 import { behaviourUnits, computeDebt, LEDGER_FILE, loadLedger, markReviewed, saveLedger, unitsInDiff, type Unit } from "./ledger.js";
 import { checkIntent } from "./intent.js";
+import { loadWorkspace, scanWorkspace, stageOne } from "./workspace.js";
 
 declare const __BREADTH_VERSION__: string | undefined;
 /** Set from cli/package.json when bundled; "dev" when run from source. */
@@ -116,24 +117,43 @@ async function cmdScan(args: string[]) {
       "no-insights": { type: "boolean" },
       quiet: { type: "boolean", short: "q" },
       plan: { type: "string", multiple: true },
+      workspace: { type: "string", short: "w" },
+      as: { type: "string" },
     },
   });
   log.quiet = !!values.quiet;
-  const target = path.resolve(positionals[0] ?? ".");
+  let target = path.resolve(positionals[0] ?? ".");
   if (!existsSync(target)) throw new Error(`path not found: ${target}`);
+  // breadth scan breadth.workspace.json, or --workspace <file>: several repositories as one system
+  const wsFile = values.workspace ? path.resolve(values.workspace) : target.endsWith(".json") ? target : undefined;
+  const ws = wsFile ? loadWorkspace(wsFile) : undefined;
+  if (ws) target = ws.dir;
   const config = loadConfig(target, values.config);
   const names = values.collector?.split(",").map((s) => s.trim()).filter(Boolean) ?? config.collectors;
   const settings = { ...(config.settings ?? {}) } as Record<string, Record<string, unknown>>;
   if (values["no-external"]) settings.code = { ...(settings.code ?? {}), includeExternal: false };
 
   const start = Date.now();
-  process.stderr.write(`breadth: scanning ${target}\n`);
-  const graph = await runCollectors(target, names, {
-    exclude: [...(config.exclude ?? []), ...(values.exclude ?? [])],
-    include: config.include,
-    settings,
-    log,
-  });
+  const collectorOptions = { exclude: [...(config.exclude ?? []), ...(values.exclude ?? [])], include: config.include, settings, log };
+  let graph: FlowGraph;
+  // where the graph's paths are relative to: the staging folder links every repository by name
+  let readRoot = target;
+  if (ws) {
+    process.stderr.write(`breadth: scanning workspace ${path.relative(process.cwd(), ws.file) || ws.file}: ${ws.repos.map((r) => r.name).join(", ")}\n`);
+    const r = await scanWorkspace(ws, { ...collectorOptions, names });
+    for (const w of r.warnings) log.warn(w);
+    graph = r.graph;
+    readRoot = r.staged.root;
+  } else if (values.as) {
+    // one repository, scanned under its name: what a workspace that includes it will see (publish this)
+    process.stderr.write(`breadth: scanning ${target} as ${values.as}\n`);
+    const exclude = collectorOptions.exclude.map((x) => `${values.as}/${x.replace(/^\//, "")}`);
+    readRoot = stageOne(target, values.as);
+    graph = await runCollectors(readRoot, names, { ...collectorOptions, exclude });
+  } else {
+    process.stderr.write(`breadth: scanning ${target}\n`);
+    graph = await runCollectors(target, names, collectorOptions);
+  }
   for (const w of applyPlans(graph, parsePlanArgs(values.plan))) log.warn(w);
 
   if (values.llm) {
@@ -142,7 +162,7 @@ async function cmdScan(args: string[]) {
     else {
       const limit = config.llm?.limit ?? 50;
       process.stderr.write(`breadth: ${privacyNotice(provider, `source excerpts of up to ${limit} functions`)}\n`);
-      const n = await summarizeGraph(graph, provider, (file, a, b) => readLines(path.join(target, file), a, b), limit);
+      const n = await summarizeGraph(graph, provider, (file, a, b) => readLines(path.join(readRoot, file), a, b), limit);
       log.info(`llm: summarised ${n} nodes with ${provider.name}`);
     }
   }

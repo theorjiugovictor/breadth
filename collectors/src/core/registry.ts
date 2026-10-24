@@ -7,7 +7,7 @@ import { messagingCollector } from "../messaging/index.js";
 import { netflowCollector } from "../netflow/index.js";
 import { orgCollector } from "../org/index.js";
 import type { Collector, CollectorOptions } from "./types.js";
-import { linkCodeToInfra } from "../link.js";
+import { linkCodeToInfra, linkGrpcNames, linkHttpCalls } from "../link.js";
 import { linkResilience, resilienceCollector } from "../resilience/index.js";
 
 export const collectors: Collector[] = [
@@ -55,6 +55,8 @@ export async function runCollectors(target: string, names: string[] | undefined,
   dropPlaceholders(merged);
   const linked = linkCodeToInfra(merged);
   if (linked) options.log?.info(`linked ${linked} resource${linked === 1 ? "" : "s"} used in code to the infrastructure that defines ${linked === 1 ? "it" : "them"}`);
+  linkHttpCalls(merged);
+  linkGrpcNames(merged);
   const traced = linkResilience(merged);
   if (traced) options.log?.info(`linked ${traced} requirement / test / experiment reference${traced === 1 ? "" : "s"}`);
   assertValidGraph(merged, "merged graph");
