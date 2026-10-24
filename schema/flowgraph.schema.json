@@ -203,6 +203,21 @@
                 "items": {
                   "type": "string"
                 }
+              },
+              "usedBy": {
+                "type": "array",
+                "description": "Code in other repositories of the workspace that depends on what changed.",
+                "items": {
+                  "type": "object",
+                  "required": ["repo", "node", "name"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "repo": { "type": "string" },
+                    "node": { "type": "string" },
+                    "name": { "type": "string" },
+                    "file": { "type": "string" }
+                  }
+                }
               }
             }
           }

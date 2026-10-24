@@ -20,6 +20,7 @@ import { runMcp } from "./mcp.js";
 import { applyPlans, diffRefs, loadGraph, parsePlanArgs, renderMarkdown, renderText, repoRoot, scan as scanForDiff, shortRef } from "./diff.js";
 import { behaviourUnits, computeDebt, LEDGER_FILE, loadLedger, markReviewed, saveLedger, unitsInDiff, type Unit } from "./ledger.js";
 import { checkIntent } from "./intent.js";
+import { loadWorkspace, memberFor, scanWorkspace, stageOne, workspaceContext } from "./workspace.js";
 
 declare const __BREADTH_VERSION__: string | undefined;
 /** Set from cli/package.json when bundled; "dev" when run from source. */
@@ -31,10 +32,13 @@ Usage:
   breadth scan <path> [--collector code,infra] [-o flowgraph.json] [--config file] [--exclude glob]... [--plan [dir=]plan.json]
   breadth diff [path] [--base ref] [--head ref] [-o diff.json] [--markdown pr.md] [--fail-on high] [--plan [dir=]plan.json] [--intent "what was asked"] [--live datadog --since 1h]   what a change does, in behaviour
   breadth diff before.json after.json
+  breadth scan breadth.workspace.json [-o flowgraph.json]   several repositories as one system (paths, git URLs, published graphs)
+  breadth scan <path> --as <name>    one repository as a workspace sees it (publish this for the others)
+  breadth diff [path] --workspace breadth.workspace.json [--as name]   a change in one repository, with the code in the others that depends on it
   breadth review [path] --changed | --from diff.json | --nodes ids | --all [--by name]   record what you reviewed (.breadth/ledger.json)
   breadth debt [path] [--record] [--json] [--fail-above 30]   comprehension debt: behaviour nobody has reviewed, per service
   breadth import-traces <otlp.json>... [--merge flowgraph.json] [-o out.json]
-  breadth pull <datadog|prometheus|tempo|jaeger>[,...] [path] [--merge flowgraph.json] [--since 1h]   traces and live traffic from your observability backend
+  breadth pull <datadog|prometheus|tempo|jaeger|honeycomb|loki>[,...] [path] [--merge flowgraph.json] [--since 1h]   traces and live traffic from your observability backend
   breadth evidence "<scenario>" [path] --service x --from 15m [--live datadog | --results p95_ms=180] [--run-id chaos-42]   judge an experiment window, record the run
   breadth receive [--port 4318] [--merge flowgraph.json]   OTLP/HTTP receiver: traces from running services, merged as they arrive
   breadth serve [flowgraph.json] [--port 4321] [--host 127.0.0.1] [--no-open]
@@ -116,24 +120,43 @@ async function cmdScan(args: string[]) {
       "no-insights": { type: "boolean" },
       quiet: { type: "boolean", short: "q" },
       plan: { type: "string", multiple: true },
+      workspace: { type: "string", short: "w" },
+      as: { type: "string" },
     },
   });
   log.quiet = !!values.quiet;
-  const target = path.resolve(positionals[0] ?? ".");
+  let target = path.resolve(positionals[0] ?? ".");
   if (!existsSync(target)) throw new Error(`path not found: ${target}`);
+  // breadth scan breadth.workspace.json, or --workspace <file>: several repositories as one system
+  const wsFile = values.workspace ? path.resolve(values.workspace) : target.endsWith(".json") ? target : undefined;
+  const ws = wsFile ? loadWorkspace(wsFile) : undefined;
+  if (ws) target = ws.dir;
   const config = loadConfig(target, values.config);
   const names = values.collector?.split(",").map((s) => s.trim()).filter(Boolean) ?? config.collectors;
   const settings = { ...(config.settings ?? {}) } as Record<string, Record<string, unknown>>;
   if (values["no-external"]) settings.code = { ...(settings.code ?? {}), includeExternal: false };
 
   const start = Date.now();
-  process.stderr.write(`breadth: scanning ${target}\n`);
-  const graph = await runCollectors(target, names, {
-    exclude: [...(config.exclude ?? []), ...(values.exclude ?? [])],
-    include: config.include,
-    settings,
-    log,
-  });
+  const collectorOptions = { exclude: [...(config.exclude ?? []), ...(values.exclude ?? [])], include: config.include, settings, log };
+  let graph: FlowGraph;
+  // where the graph's paths are relative to: the staging folder links every repository by name
+  let readRoot = target;
+  if (ws) {
+    process.stderr.write(`breadth: scanning workspace ${path.relative(process.cwd(), ws.file) || ws.file}: ${ws.repos.map((r) => r.name).join(", ")}\n`);
+    const r = await scanWorkspace(ws, { ...collectorOptions, names });
+    for (const w of r.warnings) log.warn(w);
+    graph = r.graph;
+    readRoot = r.staged.root;
+  } else if (values.as) {
+    // one repository, scanned under its name: what a workspace that includes it will see (publish this)
+    process.stderr.write(`breadth: scanning ${target} as ${values.as}\n`);
+    const exclude = collectorOptions.exclude.map((x) => `${values.as}/${x.replace(/^\//, "")}`);
+    readRoot = stageOne(target, values.as);
+    graph = await runCollectors(readRoot, names, { ...collectorOptions, exclude });
+  } else {
+    process.stderr.write(`breadth: scanning ${target}\n`);
+    graph = await runCollectors(target, names, collectorOptions);
+  }
   for (const w of applyPlans(graph, parsePlanArgs(values.plan))) log.warn(w);
 
   if (values.llm) {
@@ -142,7 +165,7 @@ async function cmdScan(args: string[]) {
     else {
       const limit = config.llm?.limit ?? 50;
       process.stderr.write(`breadth: ${privacyNotice(provider, `source excerpts of up to ${limit} functions`)}\n`);
-      const n = await summarizeGraph(graph, provider, (file, a, b) => readLines(path.join(target, file), a, b), limit);
+      const n = await summarizeGraph(graph, provider, (file, a, b) => readLines(path.join(readRoot, file), a, b), limit);
       log.info(`llm: summarised ${n} nodes with ${provider.name}`);
     }
   }
@@ -613,6 +636,8 @@ async function cmdDiff(args: string[]) {
       since: { type: "string", default: "1h" },
       "spec-change": { type: "string" },
       "pr-text-file": { type: "string" },
+      workspace: { type: "string", short: "w" },
+      as: { type: "string" },
       ...LLM_FLAGS,
     },
   });
@@ -628,13 +653,25 @@ async function cmdDiff(args: string[]) {
   } else {
     const target = path.resolve(positionals[0] ?? ".");
     const config = loadConfig(target, values.config);
+    const collectorOptions = { exclude: [...(config.exclude ?? []), ...(values.exclude ?? [])], include: config.include, settings: config.settings, log: { info() {}, warn: (m: string) => log.warn(m) } };
+    const collectorNames = values.collector?.split(",").map((x) => x.trim()).filter(Boolean) ?? config.collectors;
+    // A repository of a workspace: the other repositories are scanned (or their published graphs
+    // read) once, and both versions of this one are seen among them.
+    let workspace: { name: string; context: FlowGraph } | undefined;
+    if (values.workspace) {
+      const ws = loadWorkspace(values.workspace);
+      const me = memberFor(ws, repoRoot(target), values.as);
+      process.stderr.write(`breadth: ${me.name} in workspace ${path.relative(process.cwd(), ws.file) || ws.file}; reading ${ws.repos.filter((r) => r.name !== me.name).map((r) => r.name).join(", ") || "no other repositories"}\n`);
+      workspace = { name: me.name, context: await workspaceContext(ws, me.name, { ...collectorOptions, names: collectorNames }) };
+    }
     process.stderr.write(`breadth: scanning ${values.base ?? "the merge base"} and ${values.head ?? "the working tree"}…\n`);
     ({ before, after, report } = await diffRefs({
+      workspace,
       target,
       base: values.base,
       head: values.head,
-      collectors: values.collector?.split(",").map((x) => x.trim()).filter(Boolean) ?? config.collectors,
-      collectorOptions: { exclude: [...(config.exclude ?? []), ...(values.exclude ?? [])], include: config.include, settings: config.settings, log: { info() {}, warn: (m) => log.warn(m) } },
+      collectors: collectorNames,
+      collectorOptions,
       plans,
     }));
   }

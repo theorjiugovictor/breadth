@@ -2,8 +2,9 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { BehaviorChange, FlowGraph, FlowNode } from "@breadth/schema";
-import { applyPlan, runCollectors, type CollectorOptions } from "@breadth/collectors";
+import { mergeGraphs, type BehaviorChange, type FlowGraph, type FlowNode } from "@breadth/schema";
+import { applyPlan, linkCodeToInfra, linkGrpcNames, linkHttpCalls, runCollectors, type CollectorOptions } from "@breadth/collectors";
+import { stageOne } from "./workspace.js";
 import { describeChanges, runInsights, type ChangeReport } from "@breadth/insights";
 import { liveText, type LiveInfo } from "./sources/apply.js";
 
@@ -62,6 +63,71 @@ export async function scan(target: string, collectors: string[] | undefined, opt
   return graph;
 }
 
+/** One repository scanned under its name and merged with the rest of its workspace. */
+async function scanInWorkspace(dir: string, ws: { name: string; context: FlowGraph }, collectors: string[] | undefined, options: CollectorOptions): Promise<FlowGraph> {
+  const exclude = (options.exclude ?? []).map((x) => `${ws.name}/${x.replace(/^\//, "")}`);
+  const own = await runCollectors(stageOne(dir, ws.name), collectors, { ...options, exclude });
+  const graph = mergeGraphs(structuredClone(ws.context), own);
+  linkHttpCalls(graph);
+  linkGrpcNames(graph);
+  linkCodeToInfra(graph);
+  graph.insights = runInsights(graph);
+  return graph;
+}
+
+/**
+ * A pull request in one repository of a workspace: its changes are about its own code (what
+ * another repository's call now points at follows from them, and is not listed), and each one
+ * names the code in other repositories that depends on what changed: who calls a removed
+ * endpoint, a function whose behaviour changed, or reads a topic it publishes.
+ */
+export function acrossRepos(report: ChangeReport, before: FlowGraph, after: FlowGraph, name: string): void {
+  const nodes = new Map<string, FlowNode>([...before.nodes.map((n) => [n.id, n] as const), ...after.nodes.map((n) => [n.id, n] as const)]);
+  const repoOf = (id: string): string | undefined => {
+    for (let n = nodes.get(id), i = 0; n && i < 12; n = n.parent ? nodes.get(n.parent) : undefined, i++) {
+      const f = n.source?.file;
+      if (f) return f.split("/")[0];
+    }
+    return undefined;
+  };
+  const elsewhere = (id: string) => {
+    const r = repoOf(id);
+    return r && r !== name ? r : undefined;
+  };
+  // drop changes (findings too) whose subject lives in another repository
+  report.changes = report.changes.filter((c) => !c.nodes.length || !elsewhere(c.nodes[0]));
+  const edges = [...before.edges, ...after.edges];
+  const into = new Map<string, typeof edges>();
+  for (const e of edges) into.set(e.to.node, [...(into.get(e.to.node) ?? []), e]);
+  // what reaches a node: direct callers and readers, and callers of the endpoints that route to it
+  const dependents = (id: string): string[] => {
+    const out = new Set<string>();
+    const direct = (x: string) => (into.get(x) ?? []).filter((e) => e.kind === "call" || e.kind === "event").map((e) => e.from.node);
+    for (const f of direct(id)) {
+      out.add(f);
+      if (nodes.get(f)?.kind === "network_endpoint") for (const g of direct(f)) out.add(g);
+    }
+    // a topic or queue this change touches: whoever consumes it
+    if (["queue", "datastore"].includes(nodes.get(id)?.kind ?? "")) for (const e of edges) if (e.from.node === id && (e.kind === "event" || e.kind === "read")) out.add(e.to.node);
+    return [...out];
+  };
+  for (const c of report.changes) {
+    const seen = new Set<string>();
+    const used: NonNullable<BehaviorChange["usedBy"]> = [];
+    for (const id of c.nodes) {
+      for (const d of dependents(id)) {
+        const repo = elsewhere(d);
+        const n = nodes.get(d);
+        // endpoints and topics connect repositories; the code on the other side is what depends
+        if (!repo || !n || seen.has(d) || n.kind === "network_endpoint" || n.kind === "queue") continue;
+        seen.add(d);
+        used.push({ repo, node: d, name: n.name, file: n.source?.file });
+      }
+    }
+    if (used.length) c.usedBy = used.slice(0, 10);
+  }
+}
+
 export function loadGraph(file: string): FlowGraph {
   return JSON.parse(readFileSync(file, "utf8")) as FlowGraph;
 }
@@ -105,22 +171,26 @@ export async function diffRefs(opts: {
   collectorOptions: CollectorOptions;
   /** Terraform plans for the head version. */
   plans?: PlanArg[];
+  /** A repository of a workspace: scanned under its name, with the other repositories around it. */
+  workspace?: { name: string; context: FlowGraph };
 }): Promise<{ before: FlowGraph; after: FlowGraph; report: ChangeReport }> {
   const root = repoRoot(opts.target);
   const sub = path.relative(root, path.resolve(opts.target));
   const base = opts.base ?? defaultBase(root);
   const cleanups: (() => void)[] = [];
   try {
+    const scanDir = (dir: string) => (opts.workspace ? scanInWorkspace(dir, opts.workspace, opts.collectors, opts.collectorOptions) : scan(dir, opts.collectors, opts.collectorOptions));
     const at = async (ref: string | undefined) => {
-      if (!ref) return scan(path.resolve(opts.target), opts.collectors, opts.collectorOptions);
+      if (!ref) return scanDir(path.resolve(opts.target));
       const c = checkoutRef(root, ref);
       cleanups.push(c.cleanup);
-      return scan(path.join(c.dir, sub), opts.collectors, opts.collectorOptions);
+      return scanDir(path.join(c.dir, sub));
     };
     const before = await at(base);
     const after = await at(opts.head);
     if (opts.plans?.length) for (const w of applyPlans(after, opts.plans)) opts.collectorOptions.log?.warn(w);
     const report = describeChanges(before, after, { base: shortRef(root, base), head: opts.head ? shortRef(root, opts.head) : "working tree" });
+    if (opts.workspace) acrossRepos(report, before, after, opts.workspace.name);
     return { before, after, report };
   } finally {
     for (const c of cleanups) c();
@@ -265,7 +335,7 @@ export function renderMarkdown(report: ChangeReport, before: FlowGraph, after: F
     const file = fileOf(x.nodes[0], before, after);
     const i = report.changes.indexOf(x);
     const flag =
-      (unrequested.has(i) ? ` · **not in the request**${unrequested.get(i) ? `: ${unrequested.get(i)}` : ""}` : "") + (outside.has(i) ? ` · **outside spec change \`${specName}\`**` : "");
+      (unrequested.has(i) ? ` · **not in the request**${unrequested.get(i) ? `: ${unrequested.get(i)}` : ""}` : "") + (outside.has(i) ? ` · **outside spec change \`${specName}\`**` : "") + usedByText(x);
     const traffic = opts.live && x.severity !== "low" ? trafficOf(after, x.nodes[0]) : undefined;
     const prod = traffic ? ` · 📈 ${traffic.text}${traffic.via ? ` <sub>via ${traffic.via}</sub>` : ""}` : "";
     return `- ${ICON[x.severity]} ${x.text}${file && !x.text.includes(file) ? ` <sub>\`${file}\`</sub>` : ""}${prod}${flag}`;
@@ -299,6 +369,13 @@ export function renderMarkdown(report: ChangeReport, before: FlowGraph, after: F
     `<sub>breadth compared ${report.base ?? "base"} → ${report.head ?? "head"} by scanning both versions. It maps structure and data flow; dynamic calls and runtime-only behaviour are not visible.${opts.link ? ` [Open the map](${opts.link})` : ""}</sub>`,
   );
   return out.filter((l, i, a) => !(l === "" && a[i - 1] === "")).join("\n") + "\n";
+}
+
+/** " · used by web: refundAll (web/api.js)" for code in other repositories of the workspace. */
+function usedByText(c: BehaviorChange): string {
+  if (!c.usedBy?.length) return "";
+  const repos = [...new Set(c.usedBy.map((u) => u.repo))];
+  return ` · **used by ${repos.map((r) => `\`${r}\``).join(", ")}**: ${c.usedBy.slice(0, 4).map((u) => `${u.name}${u.file ? ` (\`${u.file}\`)` : ""}`).join(", ")}${c.usedBy.length > 4 ? ` and ${c.usedBy.length - 4} more` : ""}`;
 }
 
 /** The pull request against the spec change it implements (repositories with specs only). */
@@ -352,7 +429,7 @@ export function renderText(report: ChangeReport): string {
   const outside = new Set(report.spec?.outOfScope ?? []);
   for (const c of report.spec?.changes ?? []) lines.push(`Spec change ${c.id}: ${c.title}${c.tasks?.total ? `, tasks ${c.tasks.done}/${c.tasks.total}` : ""}${c.requirements ? `, requirements implemented ${c.requirements.implemented}/${c.requirements.total}` : ""}`, "");
   if (report.spec?.noChange) lines.push("No spec change matches this pull request.", "");
-  lines.push(...report.changes.map((x, i) => `${mark[x.severity]} ${x.text}${extra.has(i) ? `   <- not in the request${extra.get(i) ? `: ${extra.get(i)}` : ""}` : ""}${outside.has(i) ? "   <- outside the spec change" : ""}`));
+  lines.push(...report.changes.map((x, i) => `${mark[x.severity]} ${x.text}${extra.has(i) ? `   <- not in the request${extra.get(i) ? `: ${extra.get(i)}` : ""}` : ""}${outside.has(i) ? "   <- outside the spec change" : ""}${x.usedBy?.length ? `   <- used by ${x.usedBy.map((u) => `${u.repo}: ${u.name}`).join(", ")}` : ""}`));
   if (report.intent?.missing?.length) lines.push("", "Asked for, not visible:", ...report.intent.missing.map((m) => `   ${m}`));
   return lines.join("\n") + "\n";
 }

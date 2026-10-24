@@ -1,7 +1,7 @@
 export * from "./core/types.js";
 export * from "./core/walk.js";
 export * from "./core/registry.js";
-export { linkCodeToInfra } from "./link.js";
+export { linkCodeToInfra, linkGrpcNames, linkHttpCalls } from "./link.js";
 export { codeCollector } from "./code/index.js";
 export { otelCollector, importOtlp, linkTracesToCode, parseOtlp, spansToGraph, type Span } from "./otel/index.js";
 export { decodeOtlpTraces } from "./otel/protobuf.js";

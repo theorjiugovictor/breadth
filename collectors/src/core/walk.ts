@@ -15,12 +15,17 @@ export interface WalkOptions {
   maxFileBytes?: number;
 }
 
-/** Recursively list files under root (relative, forward-slash paths), honouring .gitignore files. */
+/**
+ * Recursively list files under root (relative, forward-slash paths), honouring .gitignore files.
+ * Symbolic links are skipped, except links to folders at the top level: a workspace is a folder
+ * of links to its repositories (orders -> ../orders), scanned as one tree.
+ */
 export async function walkFiles(root: string, opts: WalkOptions = {}): Promise<string[]> {
   const base = ignore().add(DEFAULT_EXCLUDES).add(opts.exclude ?? []);
   const include = opts.include?.length ? ignore().add(opts.include) : undefined;
   const maxBytes = opts.maxFileBytes ?? 1_000_000;
   const out: string[] = [];
+  const seen = new Set<string>([await fs.realpath(root).catch(() => root)]);
 
   // Each directory level may add its own .gitignore; rules are relative to that directory.
   async function visit(dir: string, rules: { dir: string; ig: Ignore }[]) {
@@ -41,9 +46,19 @@ export async function walkFiles(root: string, opts: WalkOptions = {}): Promise<s
     }
     entries.sort((a, b) => a.name.localeCompare(b.name));
     for (const e of entries) {
-      if (e.isSymbolicLink()) continue;
+      let isDir = e.isDirectory();
+      if (e.isSymbolicLink()) {
+        if (dir) continue;
+        try {
+          const real = await fs.realpath(path.join(root, e.name));
+          if (!(await fs.stat(real)).isDirectory() || seen.has(real)) continue;
+          seen.add(real);
+          isDir = true;
+        } catch {
+          continue;
+        }
+      }
       const rel = normPath(dir ? `${dir}/${e.name}` : e.name);
-      const isDir = e.isDirectory();
       const test = isDir ? `${rel}/` : rel;
       if (base.ignores(test)) continue;
       if (rules.some((r) => r.ig.ignores(normPath(path.posix.relative(r.dir, rel)) + (isDir ? "/" : "")))) continue;
