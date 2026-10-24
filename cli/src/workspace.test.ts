@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { runCollectors } from "@breadth/collectors";
-import { loadWorkspace, scanWorkspace, stageOne } from "./workspace.js";
+import { loadWorkspace, memberFor, scanWorkspace, stageOne, workspaceContext } from "./workspace.js";
+import { diffRefs, renderMarkdown } from "./diff.js";
 
 const root = mkdtempSync(path.join(tmpdir(), "breadth-ws-"));
 const write = (rel: string, text: string) => {
@@ -40,7 +41,7 @@ describe("workspace", () => {
     expect(graph.nodes.find((n) => n.id === route)?.metadata?.service).toBe("orders");
     expect(graph.edges.some((e) => e.from.node === "code:fn:web/api.js#refundAll" && e.to.node === route)).toBe(true);
     expect(graph.edges.some((e) => e.from.node === "code:fn:billing/billing.py#settle" && e.to.node === route)).toBe(true);
-    expect(graph.sources?.filter((s) => s.collector === "workspace").map((s) => s.target.split(":")[0])).toEqual(["orders", "web", "billing"]);
+    expect(graph.sources?.filter((s) => s.collector === "workspace").map((s) => s.target?.split(":")[0])).toEqual(["orders", "web", "billing"]);
   });
 
   it("merges a graph published by another repository's CI and links its calls", async () => {
@@ -62,5 +63,25 @@ describe("workspace", () => {
     expect((await scanWorkspace(loadWorkspace(path.join(root, "ws3/breadth.workspace.json")), {})).warnings[0]).toMatch(/breadth scan --as web/);
     write("bad.json", JSON.stringify({ repos: [{ name: "a", path: "x", git: "y" }] }));
     expect(() => loadWorkspace(path.join(root, "bad.json"))).toThrow(/exactly one of path, git or graph/);
+  });
+
+  it("a pull request in one repository names the code in others that depends on it", async () => {
+    const orders = path.join(root, "orders");
+    const cfg = ["-c", "user.email=t@t", "-c", "user.name=t"];
+    git(orders, "init", "-q");
+    git(orders, ...cfg, "add", ".");
+    git(orders, ...cfg, "commit", "-qm", "base");
+    // the pull request: POST /refunds goes away
+    writeFileSync(path.join(orders, "app.py"), 'from fastapi import FastAPI\napp = FastAPI()\n\n@app.get("/health")\ndef health():\n    return {}\n');
+    const ws = loadWorkspace(path.join(root, "ws/breadth.workspace.json"));
+    expect(memberFor(ws, orders).name).toBe("orders");
+    const context = await workspaceContext(ws, "orders");
+    const { before, after, report } = await diffRefs({ target: orders, base: "HEAD", collectorOptions: {}, workspace: { name: "orders", context } });
+    const removed = report.changes.find((c) => c.kind === "endpoint-removed")!;
+    expect(removed.text).toBe("endpoint POST /refunds removed");
+    expect(removed.usedBy?.map((u) => `${u.repo}:${u.name}`).sort()).toEqual(["billing:settle", "web:refundAll"]);
+    // what web's call now points at follows from the change; it is not a change of its own
+    expect(report.changes.filter((c) => c.nodes[0]?.startsWith("code:fn:web/")).map((c) => c.text)).toEqual([]);
+    expect(renderMarkdown(report, before, after)).toContain("· **used by `billing`, `web`**");
   });
 });

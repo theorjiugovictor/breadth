@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { linkCodeToInfra, linkGrpcNames, linkHttpCalls, runCollectors, type CollectorOptions } from "@breadth/collectors";
@@ -195,4 +195,52 @@ export async function scanWorkspace(ws: Workspace, opts: CollectorOptions & { na
   }
   graph.sources = [...(graph.sources ?? []), ...ws.repos.map((r) => ({ collector: "workspace", target: `${r.name}: ${staged.origins[r.name]}`, collectedAt: new Date().toISOString() }))];
   return { graph, staged, warnings };
+}
+
+const normUrl = (u: string) =>
+  u
+    .trim()
+    .replace(/^git@([^:]+):/, "$1/")
+    .replace(/^[a-z+]+:\/\/(?:[^@/]+@)?/, "")
+    .replace(/\.git$/, "")
+    .replace(/\/+$/, "")
+    .toLowerCase();
+
+/**
+ * Which workspace member a checkout is: named with --as, or the member whose path is this
+ * folder, or whose git URL is this checkout's origin (or GITHUB_REPOSITORY in Actions).
+ */
+export function memberFor(ws: Workspace, dir: string, as?: string): WorkspaceMember {
+  if (as) {
+    const m = ws.repos.find((r) => r.name === as);
+    if (!m) throw new Error(`--as ${as}: no repository of that name in ${ws.file} (${ws.repos.map((r) => r.name).join(", ")})`);
+    return m;
+  }
+  const real = (p: string) => {
+    try {
+      return realpathSync(p);
+    } catch {
+      return path.resolve(p);
+    }
+  };
+  const here = real(dir);
+  const byPath = ws.repos.find((r) => r.path && real(path.resolve(ws.dir, r.path)) === here);
+  if (byPath) return byPath;
+  const urls: string[] = [];
+  try {
+    urls.push(normUrl(execFileSync("git", ["remote", "get-url", "origin"], { cwd: dir, stdio: ["ignore", "pipe", "ignore"] }).toString()));
+  } catch {
+    /* not a git checkout */
+  }
+  if (process.env.GITHUB_REPOSITORY) urls.push(`github.com/${process.env.GITHUB_REPOSITORY.toLowerCase()}`);
+  const byUrl = ws.repos.find((r) => r.git && urls.includes(normUrl(r.git))) ?? ws.repos.find((r) => urls.some((u) => u.endsWith(`/${r.name.toLowerCase()}`)));
+  if (byUrl) return byUrl;
+  throw new Error(`which repository of ${ws.file} is ${dir}? Name it with --as (${ws.repos.map((r) => r.name).join(", ")})`);
+}
+
+/** Everything in the workspace except one repository: the context a pull request in it is seen in. */
+export async function workspaceContext(ws: Workspace, except: string, opts: CollectorOptions & { names?: string[] } = {}): Promise<FlowGraph> {
+  const others = ws.repos.filter((r) => r.name !== except);
+  if (!others.length) return { version: SCHEMA_VERSION, nodes: [], edges: [] };
+  return (await scanWorkspace({ ...ws, repos: others }, opts)).graph;
 }

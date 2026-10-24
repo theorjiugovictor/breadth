@@ -20,7 +20,7 @@ import { runMcp } from "./mcp.js";
 import { applyPlans, diffRefs, loadGraph, parsePlanArgs, renderMarkdown, renderText, repoRoot, scan as scanForDiff, shortRef } from "./diff.js";
 import { behaviourUnits, computeDebt, LEDGER_FILE, loadLedger, markReviewed, saveLedger, unitsInDiff, type Unit } from "./ledger.js";
 import { checkIntent } from "./intent.js";
-import { loadWorkspace, scanWorkspace, stageOne } from "./workspace.js";
+import { loadWorkspace, memberFor, scanWorkspace, stageOne, workspaceContext } from "./workspace.js";
 
 declare const __BREADTH_VERSION__: string | undefined;
 /** Set from cli/package.json when bundled; "dev" when run from source. */
@@ -633,6 +633,8 @@ async function cmdDiff(args: string[]) {
       since: { type: "string", default: "1h" },
       "spec-change": { type: "string" },
       "pr-text-file": { type: "string" },
+      workspace: { type: "string", short: "w" },
+      as: { type: "string" },
       ...LLM_FLAGS,
     },
   });
@@ -648,13 +650,25 @@ async function cmdDiff(args: string[]) {
   } else {
     const target = path.resolve(positionals[0] ?? ".");
     const config = loadConfig(target, values.config);
+    const collectorOptions = { exclude: [...(config.exclude ?? []), ...(values.exclude ?? [])], include: config.include, settings: config.settings, log: { info() {}, warn: (m: string) => log.warn(m) } };
+    const collectorNames = values.collector?.split(",").map((x) => x.trim()).filter(Boolean) ?? config.collectors;
+    // A repository of a workspace: the other repositories are scanned (or their published graphs
+    // read) once, and both versions of this one are seen among them.
+    let workspace: { name: string; context: FlowGraph } | undefined;
+    if (values.workspace) {
+      const ws = loadWorkspace(values.workspace);
+      const me = memberFor(ws, repoRoot(target), values.as);
+      process.stderr.write(`breadth: ${me.name} in workspace ${path.relative(process.cwd(), ws.file) || ws.file}; reading ${ws.repos.filter((r) => r.name !== me.name).map((r) => r.name).join(", ") || "no other repositories"}\n`);
+      workspace = { name: me.name, context: await workspaceContext(ws, me.name, { ...collectorOptions, names: collectorNames }) };
+    }
     process.stderr.write(`breadth: scanning ${values.base ?? "the merge base"} and ${values.head ?? "the working tree"}…\n`);
     ({ before, after, report } = await diffRefs({
+      workspace,
       target,
       base: values.base,
       head: values.head,
-      collectors: values.collector?.split(",").map((x) => x.trim()).filter(Boolean) ?? config.collectors,
-      collectorOptions: { exclude: [...(config.exclude ?? []), ...(values.exclude ?? [])], include: config.include, settings: config.settings, log: { info() {}, warn: (m) => log.warn(m) } },
+      collectors: collectorNames,
+      collectorOptions,
       plans,
     }));
   }

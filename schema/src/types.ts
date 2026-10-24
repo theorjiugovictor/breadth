@@ -164,6 +164,8 @@ export interface BehaviorChange {
   /** Nodes to show; the first is the subject. */
   nodes: string[];
   edges?: string[];
+  /** Code in other repositories of the workspace that depends on what changed. */
+  usedBy?: { repo: string; node: string; name: string; file?: string }[];
 }
 
 export interface GraphDiffInfo {
